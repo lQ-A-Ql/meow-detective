@@ -60,6 +60,7 @@ describe('projection cache invalidation', () => {
       ['search'],
       ['analysis'],
       ['graph'],
+      ['capability', 'matrix'],
       ['linux-evidence-sets'],
       ['linux-evidence-set-summary'],
       ['linux-evidence-set-events'],
@@ -81,6 +82,7 @@ describe('projection cache invalidation', () => {
       ['search'],
       ['analysis'],
       ['graph'],
+      ['capability', 'matrix'],
       ['linux-evidence-sets'],
       ['linux-evidence-set-summary'],
       ['linux-evidence-set-events'],
@@ -131,7 +133,12 @@ describe('projection cache invalidation', () => {
 
     vi.advanceTimersByTime(300);
 
-    expect(invalidatedKeys(invalidateSpy)).toEqual([['artifacts'], ['timeline'], ['search']]);
+    expect(invalidatedKeys(invalidateSpy)).toEqual([
+      ['artifacts'],
+      ['timeline'],
+      ['capability', 'matrix'],
+      ['search'],
+    ]);
   });
 
   it('refreshes projections when a background job reaches a terminal state', () => {
@@ -142,11 +149,12 @@ describe('projection cache invalidation', () => {
     invalidateEventProjectionQueries(queryClient, 'job-cancelled');
 
     const keys = invalidatedKeys(invalidateSpy);
-    // 3 terminal events x (8 import projections + graph + 3 Linux evidence-set keys + 2 job diagnostics)
-    expect(keys).toHaveLength(42);
+    // 3 terminal events x (9 shared import projections + graph + 3 Linux evidence-set keys + 2 job diagnostics)
+    expect(keys).toHaveLength(45);
     expect(keys.filter((key) => Array.isArray(key) && key[0] === 'analysis')).toHaveLength(3);
     expect(keys.filter((key) => Array.isArray(key) && key[0] === 'jobs')).toHaveLength(6);
     expect(keys.filter((key) => Array.isArray(key) && key[0] === 'graph')).toHaveLength(3);
+    expect(keys.filter((key) => Array.isArray(key) && key[0] === 'capability')).toHaveLength(3);
     expect(keys.filter((key) => Array.isArray(key) && key[0] === 'linux-evidence-sets')).toHaveLength(3);
   });
 

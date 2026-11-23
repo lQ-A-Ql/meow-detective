@@ -228,7 +228,7 @@ describe('TextViewer', () => {
     fireEvent.pointerDown(root);
     fireEvent.keyDown(root, { key: 'a', ctrlKey: true });
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(content));
-    expect(screen.getByText('已复制全文（22 字符）')).toBeInTheDocument();
+    expect(await screen.findByText('已复制全文（22 字符）')).toBeInTheDocument();
 
     const input = screen.getByRole('textbox', { name: '搜索文本' });
     writeText.mockClear();
