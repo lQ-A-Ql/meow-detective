@@ -8,6 +8,12 @@ use transport::dto::{
 /// Implementations must be best-effort: event delivery failures should be
 /// logged by the adapter and must not interrupt forensic import work.
 pub trait ImportEventSink: Sync {
+    fn task_progress(&self, _progress: &transport::dto::TaskProgressDto) {}
+
+    fn analysis_progress(&self, _progress: &transport::dto::AnalysisExtractionProgressDto) {}
+
+    fn task_stage(&self, _stage: transport::dto::TaskStageKeyDto, _complete: bool) {}
+
     fn job_progress(&self, job_id: &str, progress: u32, detail: &str);
 
     fn partition_progress(

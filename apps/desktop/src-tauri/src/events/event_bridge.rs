@@ -95,6 +95,13 @@ pub fn emit_job_progress(app: &AppHandle, job_id: &str, progress: u32, detail: &
     }
 }
 
+pub fn emit_task_progress(app: &AppHandle, progress: &transport::dto::TaskProgressDto) {
+    let event = envelope(EventTopic::JobProgress, progress.clone());
+    if let Err(error) = emit_event(app, TOPIC_JOB_PROGRESS, &event) {
+        tracing::warn!(job_id = %progress.job_id, %error, "Failed to emit task progress");
+    }
+}
+
 pub fn emit_job_completed(app: &AppHandle, job_id: &str, message: &str) {
     let envelope = envelope(
         EventTopic::JobCompleted,

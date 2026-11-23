@@ -7,6 +7,7 @@ use persistence_sqlite::repositories::{
 use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 use transport::{dto::CancellationStateDto, CommandError};
 
+use super::observed::{execute_import_job_internal, finish_import_outcome};
 use crate::import_pipeline::{
     context::ImportJobContext,
     emit::ImportEventSink,
@@ -170,9 +171,8 @@ fn execute_and_record(
     result
 }
 
-// Pre-existing signature, not expanded by lifecycle work; narrow allow.
 #[allow(clippy::too_many_arguments)]
-fn execute_import_job_internal(
+pub(super) fn execute_observed_import_job(
     conn: &rusqlite::Connection,
     case_id: &domain::CaseId,
     case_root: &std::path::Path,
@@ -218,6 +218,10 @@ fn execute_import_job_internal(
     let result = (|| {
         reject_cancelled_after_register(&ctx, &ds)?;
         workspace = super::setup::prepare_resources(&mut ctx, &ds, initialize_view)?;
+        if ctx.import_config.kind == domain::DataSourceKind::NestedRange {
+            ctx.task_stage(transport::dto::TaskStageKeyDto::Validate, true);
+            ctx.task_stage(transport::dto::TaskStageKeyDto::Register, true);
+        }
         let publication = ctx.runtime.as_ref().map(|r| r.publication_lease());
         let _source_fence = publication
             .as_ref()
@@ -225,6 +229,7 @@ fn execute_import_job_internal(
         let stats = profile::measure_command(profiling.as_ref(), Phase::Catalog, || {
             phases::run_enumeration_phase(&mut ctx, &ds)
         })?;
+        ctx.task_stage(transport::dto::TaskStageKeyDto::Enumerate, true);
         profile::measure_command(profiling.as_ref(), Phase::CatalogProjection, || {
             super::fjall_projection::mirror_source_records(&ctx, &ds.id.0)
         })?;
@@ -234,38 +239,14 @@ fn execute_import_job_internal(
             transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Analysis,
             || phases::run_analyze_phase(&mut ctx, &ds),
         )?;
-        finalize(&mut ctx, &ds, &stats, &pipeline_msg)
-    })();
-
-    let result = (|| {
-        let ready_state = ready_state(ctx.content_kind);
-        let message =
-            profile::measure_command(profiling.as_ref(), Phase::OutcomePersistence, || {
-                super::runtime::persist_outcome(&ctx, &ds, ready_state, result)
-            })?;
-        let started = Instant::now();
-        let message = profile::measure_command(profiling.as_ref(), Phase::PostReady, || {
-            super::post_ready::finish(&mut ctx, &ds, &source_conn, message)
-        })?;
-        profile::emit_timed_phase_profile(
-            &ctx,
-            transport::dto::ImportPhaseDto::PostReady,
-            transport::dto::ImportPhaseStateDto::Completed,
-            99,
-            started.elapsed(),
-            "Post-ready analysis complete".into(),
-        )?;
-        ctx.job_repo
-            .update_outcome_counts(
-                ctx.job_id,
-                ctx.counts.warning_count,
-                ctx.counts.skipped_count,
-                ctx.counts.failed_count,
-                ctx.counts.is_partial(),
-            )
-            .map_err(CommandError::from_service_error)?;
+        let message = finalize(&mut ctx, &ds, &stats, &pipeline_msg)?;
+        if ctx.import_config.kind != domain::DataSourceKind::NestedRange {
+            ctx.task_stage(transport::dto::TaskStageKeyDto::Index, true);
+        }
         Ok(message)
     })();
+
+    let result = finish_import_outcome(&mut ctx, &ds, &source_conn, result);
     cleanup.start();
     result.map(|message| (message, counts))
 }
@@ -307,7 +288,9 @@ fn finalize(
     result
 }
 
-fn ready_state(kind: crate::import_pipeline::context::ImportContentKind) -> &'static str {
+pub(super) fn ready_state(
+    kind: crate::import_pipeline::context::ImportContentKind,
+) -> &'static str {
     match kind {
         crate::import_pipeline::context::ImportContentKind::Filesystem => "ready",
         crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => {

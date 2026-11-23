@@ -34,6 +34,11 @@ pub(crate) enum ImportContentKind {
 }
 
 impl<'a> ImportJobContext<'a> {
+    pub fn task_stage(&self, stage: transport::dto::TaskStageKeyDto, complete: bool) {
+        if let Some(sink) = self.event_sink() {
+            sink.task_stage(stage, complete);
+        }
+    }
     pub fn cancel_requested(&self) -> bool {
         self.options.cancel_token.load(Ordering::Relaxed)
     }

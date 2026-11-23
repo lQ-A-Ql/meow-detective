@@ -63,6 +63,7 @@ fn auto_extract_platform_artifacts(
         96,
         &format!("{platform_label} artifact analysis started automatically"),
     )?;
+    ctx.task_stage(transport::dto::TaskStageKeyDto::Analyze, false);
     let mut runtime = analysis_core::analysis_service::AnalysisSourceReadRuntime::default();
     if let Some(source) = &ctx.runtime {
         runtime = runtime.with_publication(source.publication_lease());

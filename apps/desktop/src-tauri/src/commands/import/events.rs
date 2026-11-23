@@ -20,6 +20,9 @@ impl<'a> TauriImportEventSink<'a> {
 }
 
 impl ImportEventSink for TauriImportEventSink<'_> {
+    fn task_progress(&self, progress: &transport::dto::TaskProgressDto) {
+        event_bridge::emit_task_progress(self.app, progress);
+    }
     fn job_progress(&self, job_id: &str, progress: u32, detail: &str) {
         event_bridge::emit_job_progress(self.app, job_id, progress, detail);
     }

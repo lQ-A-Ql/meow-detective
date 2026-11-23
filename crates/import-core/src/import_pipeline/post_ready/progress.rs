@@ -33,6 +33,9 @@ impl<'a> AnalysisAuditProgress<'a> {
     }
 
     pub(super) fn emit(&mut self, progress: AnalysisExtractionProgressDto) {
+        if let Some(sink) = self.event_sink {
+            sink.analysis_progress(&progress);
+        }
         let stage = progress.work.as_ref().map(|work| work.stage);
         let terminal = matches!(
             progress.phase,

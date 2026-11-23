@@ -26,12 +26,14 @@ pub(crate) use fjall_projection::{
     mark_catalog_projection_seeded, mirror_analysis_records_before_sqlite_commit,
     mirror_catalog_records_from_connection, mirror_partition_data_for_import,
 };
+mod observed;
 pub mod options;
 mod outcome;
 pub mod partition;
 mod phases;
 mod post_ready;
 pub(crate) mod profile;
+mod progress;
 mod runtime;
 mod setup;
 

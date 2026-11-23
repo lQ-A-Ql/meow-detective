@@ -7,6 +7,7 @@ use std::time::{Duration, Instant};
 
 mod heavy_queue;
 pub mod process_owner;
+pub mod progress;
 mod registry;
 mod update_guard;
 mod waiting;

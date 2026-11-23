@@ -35,6 +35,8 @@ pub mod import;
 pub mod import_benchmark;
 pub mod infrastructure_graph;
 pub mod jobs;
+pub mod task_progress;
+pub use task_progress::*;
 pub mod ledger;
 pub mod mcp_host;
 pub mod mount;
