@@ -3341,6 +3341,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "ico"
+version = "0.6.0"
+dependencies = [
+ "byteorder",
+ "png 0.18.1",
+]
+
+[[package]]
 name = "icu_collections"
 version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3480,6 +3488,7 @@ name = "image-inspection"
 version = "0.1.1"
 dependencies = [
  "gif",
+ "ico 0.6.0",
  "png 0.18.1",
  "thiserror 2.0.21",
  "tinybmp",
@@ -7177,7 +7186,7 @@ checksum = "08279169ff42f8fc45a1dbc9dcae888893ba95288142e5880c59b93a26d2cfc5"
 dependencies = [
  "base64 0.22.1",
  "brotli 8.0.4",
- "ico",
+ "ico 0.5.0",
  "json-patch 3.0.1",
  "plist",
  "png 0.17.16",

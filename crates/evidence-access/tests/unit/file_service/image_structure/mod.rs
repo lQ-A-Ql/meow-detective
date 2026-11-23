@@ -1,6 +1,7 @@
 #[path = "../image_metadata_fixture.rs"]
 mod fixture;
 mod gif_native;
+mod ico_native;
 mod tiff_native;
 
 use std::sync::atomic::AtomicBool;
@@ -39,16 +40,7 @@ fn bmp() -> Vec<u8> {
 }
 
 fn ico() -> Vec<u8> {
-    let mut bytes = vec![0u8; 26];
-    bytes[2..4].copy_from_slice(&1u16.to_le_bytes());
-    bytes[4..6].copy_from_slice(&1u16.to_le_bytes());
-    bytes[6] = 2;
-    bytes[7] = 3;
-    bytes[10..12].copy_from_slice(&1u16.to_le_bytes());
-    bytes[12..14].copy_from_slice(&32u16.to_le_bytes());
-    bytes[14..18].copy_from_slice(&4u32.to_le_bytes());
-    bytes[18..22].copy_from_slice(&22u32.to_le_bytes());
-    bytes
+    ico_native::encoded(&[(2, 3)])
 }
 
 fn jpeg_with_frame() -> Vec<u8> {
