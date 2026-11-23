@@ -1,0 +1,29 @@
+.ui-progress-indicator {
+  transition: transform 250ms linear;
+}
+
+.ui-progress[data-state='indeterminate'] .ui-progress-indicator {
+  width: 35%;
+  opacity: 0.55;
+  animation: task-progress-sweep 1.4s ease-in-out infinite;
+}
+
+@keyframes task-progress-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(286%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-progress-indicator {
+    transition: none;
+  }
+  .ui-progress[data-state='indeterminate'] .ui-progress-indicator {
+    width: 100%;
+    animation: none;
+    background-image: repeating-linear-gradient(135deg, transparent 0 4px, var(--forensics-border-light) 4px 8px);
+  }
+}

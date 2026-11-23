@@ -5,6 +5,8 @@ import { createImportEventStateStore } from '@/features/jobs/import-event-store'
 import { buildBottomDrawerModel } from '@/features/jobs/model/bottom-drawer-model';
 import { activeJobProgress } from '@/features/jobs/model/job-progress';
 import { JobStatusCard } from '@/features/jobs/components/JobStatusCard';
+import { importProgressMetrics } from '@/features/jobs/model/import-progress-metrics';
+import { Progress } from '@/app/components/ui/progress';
 import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
 
 afterEach(cleanup);
@@ -94,5 +96,35 @@ describe('task progress ownership', () => {
     expect(activeJobProgress({ ...job, status: 'completed' }, phase)).toBe(100);
     render(<JobStatusCard tone="running" job={job} phase={phase} />);
     expect(screen.getByRole('progressbar', { name: job.name })).toHaveAttribute('aria-valuenow', '40');
+  });
+
+  it('renders stage metrics and keeps diagnostic counters behind disclosure', () => {
+    render(
+      <JobStatusCard tone="running" job={job} phase={{ ...phase, metrics: { ...phase.metrics, elapsedMs: 5000 } }} />,
+    );
+    const progress = screen.getByRole('progressbar', { name: job.name });
+    expect(progress.getAttribute('aria-valuetext')).toContain('40%');
+    expect(screen.getByRole('status').textContent).not.toContain('rows=');
+    expect(screen.getByText('100 / 200')).toBeInTheDocument();
+    expect(screen.getByText('10 项/秒')).toBeInTheDocument();
+    expect(screen.getByText('5 秒')).toBeInTheDocument();
+    const details = screen.getByText(phase.detail).closest('details');
+    expect(details).not.toHaveAttribute('open');
+    expect(progress.closest('[aria-busy]')).toHaveAttribute('aria-busy', 'true');
+  });
+
+  it('distinguishes zero totals from unknown totals and omits unavailable rates', () => {
+    const empty = { ...phase.metrics, rowsProcessed: 0, rowsTotal: 0, rowsPerSec: undefined };
+    expect(importProgressMetrics(empty, i18n.t, 'zh-CN')).toEqual([{ label: '已处理条目', value: '0 / 0' }]);
+    expect(importProgressMetrics({ ...empty, rowsTotal: undefined }, i18n.t, 'zh-CN')).toEqual([]);
+  });
+
+  it('uses Radix semantics for a custom maximum and for unknown progress', () => {
+    const { rerender } = render(<Progress aria-label="Entries" value={2} max={4} />);
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuemax', '4');
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuetext', '50%');
+    rerender(<Progress aria-label="Entries" value={null} />);
+    expect(screen.getByRole('progressbar')).toHaveAttribute('data-state', 'indeterminate');
+    expect(screen.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
   });
 });

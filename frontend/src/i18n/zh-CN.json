@@ -1,4 +1,17 @@
 {
+  "taskProgress": {
+    "items": "已处理条目",
+    "data": "已处理数据",
+    "count": "{{processed}} / {{total}}",
+    "rate": "处理速度",
+    "itemsPerSecond": "{{amount}} 项/秒",
+    "bytesPerSecond": "{{amount}}/秒",
+    "stageElapsed": "阶段耗时",
+    "seconds": "{{amount}} 秒",
+    "value": "{{stage}}，{{percent}}%",
+    "cancelling": "正在取消",
+    "diagnostics": "诊断信息"
+  },
   "evidenceTask": {
     "scanned": "已扫描 {{processed}} 项",
     "entries": "{{processed}} / {{total}} 项",

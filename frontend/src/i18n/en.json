@@ -1,4 +1,17 @@
 {
+  "taskProgress": {
+    "items": "Items processed",
+    "data": "Data processed",
+    "count": "{{processed}} / {{total}}",
+    "rate": "Processing rate",
+    "itemsPerSecond": "{{amount}} items/s",
+    "bytesPerSecond": "{{amount}}/s",
+    "stageElapsed": "Stage elapsed",
+    "seconds": "{{amount}} s",
+    "value": "{{stage}}, {{percent}}%",
+    "cancelling": "Cancelling",
+    "diagnostics": "Diagnostics"
+  },
   "evidenceTask": {
     "scanned": "Scanned {{processed}} entries",
     "entries": "{{processed}} / {{total}} entries",

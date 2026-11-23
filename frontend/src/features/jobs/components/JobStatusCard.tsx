@@ -1,5 +1,8 @@
 import { useTranslation } from 'react-i18next';
 import { Progress } from '@/app/components/ui/progress';
+import { Disclosure } from '@/app/components/ui/disclosure';
+import { getImportPhaseLabel, getImportPhaseStateLabel } from '@/features/jobs/import-event-state';
+import { ImportProgressMetrics } from '@/features/jobs/components/ImportProgressMetrics';
 import { JobOutcomeBadges } from '@/features/jobs/components/JobOutcomeBadges';
 import { activeJobProgress } from '@/features/jobs/model/job-progress';
 import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
@@ -13,24 +16,46 @@ interface JobStatusCardProps {
 export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
   const { t } = useTranslation();
   const className = cardClass(tone);
+  const currentPhase = phase?.jobId === job.id ? phase : undefined;
+  const stage = currentPhase ? getImportPhaseLabel(currentPhase.phase) : job.name;
+  const active = tone === 'running' || tone === 'cancelling';
+  const stateLabel =
+    tone === 'cancelling'
+      ? t('taskProgress.cancelling')
+      : currentPhase
+        ? getImportPhaseStateLabel(currentPhase.state)
+        : '';
 
   return (
-    <div className={`${className} min-w-0 max-w-full overflow-hidden`}>
+    <div className={`${className} min-w-0 max-w-full overflow-hidden`} aria-busy={active}>
       <div className="flex min-w-0 items-center justify-between gap-3">
         <span
           className={`min-w-0 truncate ${tone === 'running' || tone === 'cancelling' ? 'font-light text-forensics-text' : 'font-light'}`}
         >
           {job.name}
         </span>
-        <span className="min-w-0 truncate text-right text-forensics-muted-light">{job.detail}</span>
+        {!currentPhase ? (
+          <span className="min-w-0 truncate text-right text-forensics-muted-light">{job.detail}</span>
+        ) : null}
       </div>
       <div className="mt-1 truncate opacity-80">
         {job.scope || (tone === 'failed' ? t('bottomDrawer.jobs.failedFallback') : '')}
       </div>
       <JobOutcomeBadges job={job} />
+      {currentPhase && active ? (
+        <>
+          <div className="mt-2 text-forensics-text-secondary" role="status">
+            {stage} · {stateLabel}
+          </div>
+          <ImportProgressMetrics metrics={currentPhase.metrics} />
+        </>
+      ) : null}
       {tone === 'running' && job.currentPartition ? <PartitionProgress job={job} /> : null}
       {tone === 'running' || tone === 'cancelling' ? (
-        <OverallProgress job={job} value={activeJobProgress(job, phase)} />
+        <OverallProgress job={job} stage={stage} value={activeJobProgress(job, currentPhase)} />
+      ) : null}
+      {currentPhase?.detail ? (
+        <Disclosure summary={t('taskProgress.diagnostics')}>{currentPhase.detail}</Disclosure>
       ) : null}
     </div>
   );
@@ -68,10 +93,17 @@ function PartitionProgress({ job }: { job: JobSnapshot }) {
   );
 }
 
-function OverallProgress({ job, value }: { job: JobSnapshot; value: number | null }) {
+function OverallProgress({ job, value, stage }: { job: JobSnapshot; value: number | null; stage: string }) {
+  const { t } = useTranslation();
   return (
     <div className="mt-2 flex items-center gap-2">
-      <Progress className="flex-1" value={value} indeterminate={value === null} aria-label={job.name} />
+      <Progress
+        className="flex-1"
+        value={value}
+        indeterminate={value === null}
+        aria-label={job.name}
+        aria-valuetext={value === null ? stage : t('taskProgress.value', { stage, percent: value })}
+      />
       {value === null ? null : <span className="font-mono text-[10px] text-forensics-muted-light">{value}%</span>}
     </div>
   );

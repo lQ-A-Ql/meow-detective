@@ -6,22 +6,28 @@ import { cn } from './utils';
 function Progress({
   className,
   value,
+  max = 100,
   indeterminate = false,
   ...props
 }: React.ComponentProps<typeof ProgressPrimitive.Root> & { indeterminate?: boolean }) {
-  const resolvedValue = indeterminate ? undefined : value;
+  const resolvedValue = indeterminate ? null : (value ?? null);
+  const fraction = Math.min(1, Math.max(0, (resolvedValue ?? 0) / max));
 
   return (
     <ProgressPrimitive.Root
       data-slot="progress"
       value={resolvedValue}
-      className={cn('bg-forensics-border-light relative h-1 w-full overflow-hidden rounded-full', className)}
+      max={max}
+      className={cn(
+        'ui-progress bg-forensics-border-light relative h-1 w-full overflow-hidden rounded-full',
+        className,
+      )}
       {...props}
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className={cn('bg-forensics-ink h-full w-full flex-1', indeterminate && 'motion-safe:animate-pulse')}
-        style={indeterminate ? undefined : { transform: `translateX(-${100 - (value || 0)}%)` }}
+        className="ui-progress-indicator bg-forensics-ink h-full w-full origin-left"
+        style={resolvedValue === null ? undefined : { transform: `scaleX(${fraction})` }}
       />
     </ProgressPrimitive.Root>
   );

@@ -34,7 +34,15 @@ export function BottomDrawerView({
       style={model.drawerOpen ? { height: `${height}px` } : undefined}
     >
       {!model.drawerOpen && activeJob ? (
-        <Progress className="h-0.5" value={progress} indeterminate={progress === null} aria-label={activeJob.name} />
+        <Progress
+          className="h-0.5"
+          value={progress}
+          indeterminate={progress === null}
+          aria-label={activeJob.name}
+          aria-valuetext={
+            progress === null ? model.headline : t('taskProgress.value', { stage: model.headline, percent: progress })
+          }
+        />
       ) : null}
       <div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 font-mono text-[11px] text-forensics-muted">
         <div className="flex min-w-0 items-center gap-3 overflow-hidden">

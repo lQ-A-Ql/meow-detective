@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Progress } from '@/app/components/ui/progress';
+import { Disclosure } from '@/app/components/ui/disclosure';
+import { ImportProgressMetrics } from '@/features/jobs/components/ImportProgressMetrics';
 import {
   getCacheStateLabel,
   getEvidenceHashCaveatText,
@@ -42,11 +44,6 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
                 ? `${t('bottomDrawer.labels.cancellation')} · ${getCacheStateLabel(importSignals.latestCancellation.state)}`
                 : t('bottomDrawer.importSignals.waiting')}
           </div>
-          <div className="mt-1 text-forensics-muted">
-            {importSignals.latestCancellation?.detail ||
-              importSignals.latestPhase?.detail ||
-              t('bottomDrawer.importSignals.noStatus')}
-          </div>
         </div>
         {importSignals.latestPhase ? (
           <div className="text-right">
@@ -67,12 +64,19 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
             value={progress}
             indeterminate={progress === null}
             aria-label={getImportPhaseLabel(phase.phase)}
+            aria-valuetext={
+              progress === null
+                ? getImportPhaseLabel(phase.phase)
+                : t('taskProgress.value', { stage: getImportPhaseLabel(phase.phase), percent: progress })
+            }
           />
-          <span className="font-mono text-[10px] text-forensics-text-tertiary">
-            {phase.metrics.rowsProcessed}
-            {phase.metrics.rowsTotal ? `/${phase.metrics.rowsTotal}` : ''}
-          </span>
         </div>
+      ) : null}
+      {phase ? <ImportProgressMetrics metrics={phase.metrics} /> : null}
+      {phase?.detail || importSignals.latestCancellation?.detail ? (
+        <Disclosure summary={t('taskProgress.diagnostics')}>
+          {importSignals.latestCancellation?.detail || phase?.detail}
+        </Disclosure>
       ) : null}
       <div className="mt-3 flex flex-wrap gap-1.5">
         {importSignals.latestCancellation ? (
