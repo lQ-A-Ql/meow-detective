@@ -570,6 +570,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "az"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b7e4c2464d97fe331d41de9d5db0def0a96f4d823b8b32a2efd503578988973"
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1961,6 +1967,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ef6b89e5b37196644d8796de5268852ff179b44e96276cf4290264843743bb7"
 
 [[package]]
+name = "embedded-graphics"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e8da660bb0c829b34a56a965490597f82a55e767b91f9543be80ce8ccb416fe"
+dependencies = [
+ "az",
+ "byteorder",
+ "embedded-graphics-core",
+ "float-cmp",
+ "micromath",
+]
+
+[[package]]
+name = "embedded-graphics-core"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "95743bef3ff70fcba3930246c4e6872882bbea0dcc6da2ca860112e0cd4bd09f"
+dependencies = [
+ "az",
+ "byteorder",
+]
+
+[[package]]
 name = "embedded-io"
 version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2097,7 +2126,7 @@ dependencies = [
  "hex",
  "image-android",
  "image-e01",
- "image-steg",
+ "image-inspection",
  "infrastructure",
  "kamadak-exif",
  "libc",
@@ -2314,6 +2343,15 @@ dependencies = [
  "crc32fast",
  "miniz_oxide 0.8.9",
  "zlib-rs",
+]
+
+[[package]]
+name = "float-cmp"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "98de4bbd547a563b716d8dfa9aad1cb19bfab00f4fa09a6a4ed21dbcf44ce9c4"
+dependencies = [
+ "num-traits",
 ]
 
 [[package]]
@@ -3431,11 +3469,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "image-steg"
+name = "image-inspection"
 version = "0.1.1"
 dependencies = [
  "png 0.18.1",
  "thiserror 2.0.21",
+ "tinybmp",
 ]
 
 [[package]]
@@ -4225,6 +4264,12 @@ dependencies = [
  "volume-bitlocker",
  "zeroize",
 ]
+
+[[package]]
+name = "micromath"
+version = "2.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b8215034f6bc076597465737e237afa33ca92c0f16c76647268a6953a4b7fcf"
 
 [[package]]
 name = "mimalloc"
@@ -7470,6 +7515,13 @@ dependencies = [
  "domain",
  "serde_json",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "tinybmp"
+version = "0.7.0"
+dependencies = [
+ "embedded-graphics",
 ]
 
 [[package]]

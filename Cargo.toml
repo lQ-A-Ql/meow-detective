@@ -18,7 +18,7 @@ members = [
   "crates/fs-exfat",
   "crates/image-e01",
   "crates/image-android",
-  "crates/image-steg",
+  "crates/image-inspection",
   "crates/search",
   "crates/timeline",
   "crates/artifacts-core",
@@ -62,6 +62,7 @@ exclude = [
   "vendor/bbolt-rs",
   "vendor/fjall-3.1.13",
   "vendor/rust-fs-btrfs",
+  "vendor/tinybmp-0.7.0",
 ]
 
 [workspace.package]
@@ -124,7 +125,7 @@ volume-bitlocker = { path = "crates/volume-bitlocker" }
 memory-windows = { path = "crates/memory-windows" }
 image-e01 = { path = "crates/image-e01" }
 image-android = { path = "crates/image-android" }
-image-steg = { path = "crates/image-steg" }
+image-inspection = { path = "crates/image-inspection" }
 search = { path = "crates/search" }
 timeline = { path = "crates/timeline" }
 artifacts-core = { path = "crates/artifacts-core" }
@@ -143,6 +144,7 @@ evtx = { path = "crates/evtx-patched", default-features = false, features = ["mu
 flate2 = "1"
 kamadak-exif = "0.6.1"
 png = "0.18"
+tinybmp = "=0.7.0"
 crc32fast = "1.5"
 crc32c = "0.6"
 tar = { version = "0.4", default-features = false }
@@ -233,6 +235,7 @@ import-core = { path = "crates/import-core" }
 source-reconstruction = { path = "crates/source-reconstruction" }
 
 [patch.crates-io]
+tinybmp = { path = "vendor/tinybmp-0.7.0" }
 fjall = { path = "vendor/fjall-3.1.13" }
 bbolt-rs = { path = "vendor/bbolt-rs" }
 rust-fs-btrfs = { path = "vendor/rust-fs-btrfs" }

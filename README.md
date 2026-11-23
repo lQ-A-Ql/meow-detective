@@ -470,6 +470,7 @@ cargo build --release
 | [winbindex](https://github.com/m417z/winbindex) | GPL-3.0 | ntoskrnl 各 build 元数据索引，作为内嵌内核符号注册表的采集入口（配合微软公共符号服务器 PDB），见 `crates/memory-windows/symbols/README.md`；仅消费其公开索引数据，未复用其源码 |
 | [fjall](https://github.com/fjall-rs/fjall) | MIT OR Apache-2.0 | `crates/persistence-fjall` 的 LSM 键值存储基础；仓库在 `vendor/fjall-3.1.13` 保留上游许可证并加入 worker 线程 join 补丁（修复 Windows 下数据库销毁后的目录发布竞争），修改说明与上游归档 SHA-256 见 `vendor/fjall-3.1.13/LOCAL-PATCH.md` |
 | [sysinfo](https://github.com/GuillaumeGomez/sysinfo) | MIT | 来源任务的进程身份与退出检查；源码和程序分发需附带 `crates/source-kernel/THIRD-PARTY-NOTICES` 中的版权与许可证文本 |
+| [tinybmp](https://docs.rs/tinybmp/0.7.0/tinybmp/) | MIT OR Apache-2.0（选择 MIT） | `image-inspection` 的共用 BMP 读取基础；元数据与像素分析复用同一解析器，补丁来源见 `vendor/tinybmp-0.7.0/LOCAL-PATCH.md`，分发声明见 `crates/image-inspection/THIRD-PARTY-NOTICES` |
 | [bbolt-rs](https://github.com/ambaxter/bbolt-rs) | MIT | `crates/containers-bolt` 的 Bolt 页解码基础；仓库在 `vendor/bbolt-rs` 保留上游许可证（含 etcd-io/bbolt 与 CJP10/object-pool 的 MIT 声明），按平台 cfg 收敛 Unix-only API 并以 `fnv 1.0.7` 替换 `fnv_rs`，见 `vendor/bbolt-rs/PLATFORM.md` |
 | [rust-fs-btrfs](https://github.com/antimatter-studios/rust-fs-btrfs) | MIT | `crates/fs-btrfs` 的 Btrfs 解析核心；仓库在 `vendor/rust-fs-btrfs` 保留上游许可证并增加只读 committed-trees 入口，支持边界见 `docs/lv-mapping-and-mdraid-development.md` |
 | [systemd](https://github.com/systemd/systemd) | LGPL-2.1+（引用的 `lookup3.c` 为公有领域、`siphash24.c` 为 CC0） | `crates/artifacts-linux/src/journal/hash.rs` 按 journal 磁盘格式移植 Jenkins lookup3 与 SipHash-2-4 字段哈希；仅算法移植，仓库未包含 systemd 源码 |

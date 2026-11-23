@@ -4,7 +4,7 @@
 //! file name. The analyser receives the complete (bounded) file bytes and never
 //! writes evidence.
 
-use image_steg::{
+use image_inspection::{
     analyze, StegAssessment, StegBand, StegFormat, StegLimits, StegMethod, StegMethodReport,
     StegPlaneReport, StegReport, StegSeverity, StegStatus, StegWarning,
 };
@@ -138,7 +138,7 @@ fn plane_dto(plane: &StegPlaneReport) -> ImageStegPlaneDto {
     }
 }
 
-fn block_dto(block: &image_steg::StegBlockReport) -> ImageStegBlockDto {
+fn block_dto(block: &image_inspection::StegBlockReport) -> ImageStegBlockDto {
     ImageStegBlockDto {
         x: block.x,
         y: block.y,

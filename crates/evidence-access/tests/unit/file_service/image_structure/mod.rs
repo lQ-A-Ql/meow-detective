@@ -45,13 +45,14 @@ fn gif() -> Vec<u8> {
 }
 
 fn bmp() -> Vec<u8> {
-    let mut bytes = vec![0u8; 66];
+    let mut bytes = vec![0u8; 78];
     bytes[..2].copy_from_slice(b"BM");
-    bytes[2..6].copy_from_slice(&66u32.to_le_bytes());
+    bytes[2..6].copy_from_slice(&78u32.to_le_bytes());
     bytes[10..14].copy_from_slice(&54u32.to_le_bytes());
     bytes[14..18].copy_from_slice(&40u32.to_le_bytes());
     bytes[18..22].copy_from_slice(&2i32.to_le_bytes());
     bytes[22..26].copy_from_slice(&3i32.to_le_bytes());
+    bytes[26..28].copy_from_slice(&1u16.to_le_bytes());
     bytes[28..30].copy_from_slice(&24u16.to_le_bytes());
     bytes
 }
@@ -276,7 +277,7 @@ fn bmp_size_mismatch_is_a_structure_finding() {
     assert_eq!(report.dimensions, Some((2, 3)));
     let structure = report.structure.expect("structure report");
     assert_eq!(structure.declared_end, Some(60));
-    assert_eq!(structure.trailing_bytes, Some(6));
+    assert_eq!(structure.trailing_bytes, Some(18));
     assert!(structure
         .findings
         .iter()

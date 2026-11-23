@@ -4,6 +4,23 @@ This document records non-trivial dependency license and sourcing decisions for 
 
 ## License decisions
 
+### tinybmp — shared BMP decoding
+
+- **Date**: 2026-11-23
+- **Owner**: Image Inspection Maintenance
+- **Version**: `0.7.0`, pinned registry source with a reviewed local patch.
+- **License**: MIT OR Apache-2.0; distribution selects MIT, already permitted
+  by `deny.toml`. Upstream copyright and both license files remain in
+  `vendor/tinybmp-0.7.0`; the application notice is
+  `crates/image-inspection/THIRD-PARTY-NOTICES`.
+- **Use**: One native header parser serves bounded metadata inspection and
+  RGB/index-domain row analysis. Raw indices, original row order and padding
+  remain available through the upstream API.
+- **Patch**: Expose metadata-only header access, validate color planes,
+  palette size and pixel-data offset, and share checked layout-length
+  calculation with `RawBmp`. Exact source provenance and modifications are in
+  `vendor/tinybmp-0.7.0/LOCAL-PATCH.md`.
+
 ### sysinfo — process execution ownership
 
 - **Date**: 2026-11-22
