@@ -510,10 +510,8 @@ describe('useEmulationWorkspaceModel', () => {
       volumeReflinkEnabled: true,
       targetInodeReflink: true,
       logClean: false,
-      recommendedMethod: 'linuxAppliance',
+      recommendedMethod: 'none',
       blockers: ['sharedExtents'],
-      alternatives: ['retryAppliance'],
-      applianceAvailable: false,
     });
   }
 
@@ -525,10 +523,8 @@ describe('useEmulationWorkspaceModel', () => {
     passwordSet: false,
     alreadyConfigured: false,
     status: 'unavailable',
-    method: 'linuxAppliance',
+    method: 'none',
     reason: 'sharedExtents',
-    alternatives: ['retryAppliance'],
-    payloadStaged: true,
   };
 
   async function selectLinuxBypass(hook: { result: { current: EmulationWorkspaceModel } }) {
@@ -579,7 +575,7 @@ describe('useEmulationWorkspaceModel', () => {
     expect(hook.result.current.linuxBypassOutcome).toBeUndefined();
   });
 
-  it('launches the prepared session with the rescue payload without a second bypass call', async () => {
+  it('releases the prepared session from an unavailable bypass outcome', async () => {
     useLinuxBypassSelectionFixture();
     mocks.applyLinuxBypass.mockResolvedValue(unavailableResult);
     const hook = renderHook(() => useEmulationWorkspaceModel(), { wrapper: createWrapper() });
@@ -590,11 +586,11 @@ describe('useEmulationWorkspaceModel', () => {
     });
     expect(mocks.applyLinuxBypass).toHaveBeenCalledTimes(1);
 
-    await act(async () => hook.result.current.retryBypassWithAppliance());
+    await act(async () => hook.result.current.releasePreparedBypassSession());
 
     expect(mocks.applyLinuxBypass).toHaveBeenCalledTimes(1);
-    expect(mocks.launch).toHaveBeenCalledWith('emulation-1');
-    expect(mocks.release).not.toHaveBeenCalled();
+    expect(mocks.release).toHaveBeenCalledWith('emulation-1');
+    expect(mocks.launch).not.toHaveBeenCalled();
     expect(hook.result.current.linuxBypassOutcome).toBeUndefined();
   });
 

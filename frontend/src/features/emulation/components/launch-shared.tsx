@@ -36,7 +36,7 @@ export function LaunchPanelShell({
         <SourceSelectField model={model} />
         <SourceInfoList model={model} />
         {model.sourceLayoutHint ? <FieldHint>{model.sourceLayoutHint}</FieldHint> : null}
-        <RecoveryIsoField model={model} hint={recoveryHint} />
+        {model.recoveryMediaAvailable ? <RecoveryIsoField model={model} hint={recoveryHint} /> : null}
         <BootRouteRow model={model} />
         {inspection}
       </section>
@@ -106,7 +106,7 @@ export function BootRouteRow({ model }: LaunchPanelProps) {
           {t(`emulationPage.bootRoutes.${model.bootRoute}`)}
         </Badge>
       </div>
-      {model.preflight && model.preflight.recommendedBootRoute !== model.bootRoute ? (
+      {model.recoveryMediaAvailable && model.preflight && model.preflight.recommendedBootRoute !== model.bootRoute ? (
         <div className="mt-2 text-[10px] text-forensics-warning-text">
           {t('emulationPage.launch.recommendedRoute', {
             route: t(`emulationPage.bootRoutes.${model.preflight.recommendedBootRoute}`),

@@ -58,12 +58,7 @@ export interface EmulationSessionView extends EmulationSessionStatus {
 export interface LinuxBypassOutcomeView {
   result: EmulationLinuxBypassResult;
   inspection?: EmulationLinuxBypassInspection;
-  sessionId: string;
-  partitionIndex: number;
-  username: string;
 }
-
-export type LinuxBypassResumeMode = 'retryAppliance' | 'launchWithoutBypass';
 
 export interface EmulationWorkspaceModel {
   caseLoaded: boolean;
@@ -78,6 +73,7 @@ export interface EmulationWorkspaceModel {
   preflightLoading: boolean;
   sourceLayoutHint?: string;
   recoveryIsoPath: string;
+  recoveryMediaAvailable: boolean;
   bootRoute: 'recoveryMedia' | 'directSystem';
   pickRecoveryIso: () => Promise<void>;
   clearRecoveryIso: () => void;
@@ -109,11 +105,8 @@ export interface EmulationWorkspaceModel {
   linuxUsername?: string;
   selectLinuxUsername: (username?: string) => void;
   linuxBypassOutcome?: LinuxBypassOutcomeView;
-  resumingBypass: boolean;
-  retryBypassWithAppliance: () => Promise<void>;
+  bypassOutcomeBusy: boolean;
   launchWithoutBypass: () => Promise<void>;
-  dismissBypassOutcome: () => void;
-  chooseExternalRescueIso: () => Promise<void>;
   releasePreparedBypassSession: () => Promise<void>;
   sessions: EmulationSessionView[];
   metrics: {
@@ -277,6 +270,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   );
   const selectedSource = sourceOptions.find((source) => source.id === selectedSourceId);
   const isLinuxSource = selectedSource?.platform === 'LINUX';
+  const selectedRecoveryIsoPath = isLinuxSource ? '' : recoveryIsoPath;
   const preflightReady =
     Boolean(selectedSourceId) &&
     preflightQuery.isSuccess &&
@@ -289,7 +283,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       !linuxAccountsQuery.error &&
       Boolean(linuxUsername) &&
       linuxAccountsQuery.data?.some((account) => account.username === linuxUsername));
-  const sourceBootPolicy = derivedBootPolicy(preflightQuery.data, Boolean(recoveryIsoPath));
+  const sourceBootPolicy = derivedBootPolicy(preflightQuery.data, Boolean(selectedRecoveryIsoPath));
   const startMutation = useMutation({
     mutationFn: async (allowDirectBoot: boolean) => {
       if (!selectedSourceId) {
@@ -306,7 +300,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       }
       const prepared = await prepareEmulation({
         dataSourceId: selectedSourceId,
-        recoveryIsoPath: recoveryIsoPath || undefined,
+        recoveryIsoPath: selectedRecoveryIsoPath || undefined,
         allowDirectBoot,
         options,
       });
@@ -331,35 +325,19 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
           }
         }
         if (bypassIsLinux && bypassPartition !== undefined && linuxUsername) {
-          let inspection: EmulationLinuxBypassInspection | undefined;
-          try {
-            inspection = await inspectEmulationLinuxBypass({
-              sessionId: prepared.sessionId,
-              partitionIndex: bypassPartition,
-            });
-          } catch {
-            inspection = undefined;
-          }
-          let bypassResult: EmulationLinuxBypassResult;
-          try {
-            bypassResult = await applyEmulationLinuxBypass({
-              sessionId: prepared.sessionId,
-              partitionIndex: bypassPartition,
-              username: linuxUsername,
-            });
-          } catch (error) {
-            if (shouldReleaseOnBypassError(error)) {
-              await releaseEmulation(prepared.sessionId).catch(() => undefined);
-            }
-            throw error;
-          }
+          const inspection = await inspectEmulationLinuxBypass({
+            sessionId: prepared.sessionId,
+            partitionIndex: bypassPartition,
+          });
+          const bypassResult = await applyEmulationLinuxBypass({
+            sessionId: prepared.sessionId,
+            partitionIndex: bypassPartition,
+            username: linuxUsername,
+          });
           if (bypassResult.status === 'unavailable') {
             setLinuxBypassOutcome({
               result: bypassResult,
               inspection,
-              sessionId: prepared.sessionId,
-              partitionIndex: bypassPartition,
-              username: linuxUsername,
             });
             return;
           }
@@ -383,7 +361,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
       } catch (error) {
         // Only overlay poisoning, fatal transport failures and session-state
         // errors may release the prepared session; every other failure keeps it
-        // alive so the investigator can pick an alternative exit.
+        // alive so the investigator can choose another client action.
         if (shouldReleaseOnBypassError(error)) {
           await releaseEmulation(prepared.sessionId).catch(() => undefined);
         }
@@ -396,21 +374,15 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     mutationFn: (sessionId: string) => releaseEmulation(sessionId),
     onSuccess: invalidateSessions,
   });
-  const resumeBypassMutation = useMutation({
-    mutationFn: async (mode: LinuxBypassResumeMode) => {
+  const launchPreparedMutation = useMutation({
+    mutationFn: async () => {
       const outcome = linuxBypassOutcome;
       if (!outcome) {
         throw new Error(t('emulationPage.errors.bypassOutcomeMissing'));
       }
-      // Both resume exits launch the prepared session as-is: the rescue-ISO
-      // path only boots with the payload CD attached; the investigator runs
-      // BYPASS.SH manually, so no second bypass call is made and no success
-      // is claimed.
-      if (mode === 'launchWithoutBypass' || mode === 'retryAppliance') {
-        setLinuxBypassOutcome(undefined);
-        return await launchEmulation(outcome.sessionId);
-      }
-      throw new Error(t('emulationPage.errors.bypassOutcomeMissing'));
+      const launched = await launchEmulation(outcome.result.sessionId);
+      setLinuxBypassOutcome(undefined);
+      return launched;
     },
     onSuccess: invalidateSessions,
   });
@@ -440,14 +412,15 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     sessionsQuery.error ??
     preflightQuery.error ??
     startMutation.error ??
-    resumeBypassMutation.error ??
+    launchPreparedMutation.error ??
     releaseMutation.error;
 
   const pickRecoveryIso = useCallback(async () => {
+    if (isLinuxSource) return;
     const selected = await openPlatformDialog({
       directory: false,
       multiple: false,
-      filters: [{ name: isLinuxSource ? 'Linux Live ISO' : 'WinPE ISO', extensions: ['iso'] }],
+      filters: [{ name: 'WinPE ISO', extensions: ['iso'] }],
     });
     const path = singleDialogPath(selected);
     if (path) setRecoveryIsoPath(path);
@@ -475,13 +448,13 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     setRepairFilesystems((current) => !current);
   }, []);
   const start = useCallback(async () => {
-    const allowDirectBoot = recoveryIsoPath.length === 0;
+    const allowDirectBoot = selectedRecoveryIsoPath.length === 0;
     if (allowDirectBoot) {
       setDirectBootConfirmationOpen(true);
       return;
     }
     await startMutation.mutateAsync(allowDirectBoot);
-  }, [recoveryIsoPath, startMutation]);
+  }, [selectedRecoveryIsoPath, startMutation]);
   const cancelDirectBoot = useCallback(() => setDirectBootConfirmationOpen(false), []);
   const confirmDirectBoot = useCallback(async () => {
     setDirectBootConfirmationOpen(false);
@@ -496,24 +469,15 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const refresh = useCallback(async () => {
     await Promise.all([dataSourcesQuery.refetch(), sessionsQuery.refetch()]);
   }, [dataSourcesQuery, sessionsQuery]);
-  const retryBypassWithAppliance = useCallback(async () => {
-    await resumeBypassMutation.mutateAsync('retryAppliance');
-  }, [resumeBypassMutation]);
   const launchWithoutBypass = useCallback(async () => {
-    await resumeBypassMutation.mutateAsync('launchWithoutBypass');
-  }, [resumeBypassMutation]);
-  const dismissBypassOutcome = useCallback(() => setLinuxBypassOutcome(undefined), []);
-  const chooseExternalRescueIso = useCallback(async () => {
-    await pickRecoveryIso();
-    setLinuxBypassOutcome(undefined);
-  }, [pickRecoveryIso]);
+    await launchPreparedMutation.mutateAsync();
+  }, [launchPreparedMutation]);
   const releasePreparedBypassSession = useCallback(async () => {
     const outcome = linuxBypassOutcome;
     if (!outcome) return;
+    await releaseMutation.mutateAsync(outcome.result.sessionId);
     setLinuxBypassOutcome(undefined);
-    await releaseEmulation(outcome.sessionId).catch(() => undefined);
-    invalidateSessions();
-  }, [linuxBypassOutcome, invalidateSessions]);
+  }, [linuxBypassOutcome, releaseMutation]);
 
   return {
     caseLoaded: currentCase.isSuccess,
@@ -527,8 +491,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     preflight: preflightQuery.data,
     preflightLoading: preflightQuery.isFetching,
     sourceLayoutHint: sourceBootPolicy.hintKey ? t(sourceBootPolicy.hintKey) : undefined,
-    recoveryIsoPath,
-    bootRoute: recoveryIsoPath ? 'recoveryMedia' : 'directSystem',
+    recoveryIsoPath: selectedRecoveryIsoPath,
+    recoveryMediaAvailable: !isLinuxSource,
+    bootRoute: selectedRecoveryIsoPath ? 'recoveryMedia' : 'directSystem',
     pickRecoveryIso,
     clearRecoveryIso,
     options,
@@ -561,11 +526,8 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     linuxUsername,
     selectLinuxUsername: setLinuxUsername,
     linuxBypassOutcome,
-    resumingBypass: resumeBypassMutation.isPending,
-    retryBypassWithAppliance,
+    bypassOutcomeBusy: launchPreparedMutation.isPending || releaseMutation.isPending,
     launchWithoutBypass,
-    dismissBypassOutcome,
-    chooseExternalRescueIso,
     releasePreparedBypassSession,
     sessions,
     metrics: {

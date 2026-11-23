@@ -1,18 +1,14 @@
 //! Read-only planning for the host-side Linux shadow bypass.
 //!
 //! `plan_linux_bypass` never writes the overlay and never calls
-//! `CowDisk::invalidate`. It classifies the partition into one of three
-//! outcomes: a host in-place edit (possibly after an ext4 journal repair), an
-//! appliance-mediated edit, or an explicitly unavailable layout with
-//! suggested alternatives. The apply stage consumes the returned plan.
+//! `CowDisk::invalidate`. It classifies the partition into a host in-place edit
+//! (possibly after an ext4 journal repair) or an explicitly unavailable layout.
+//! The apply stage consumes the returned plan.
 
 use std::sync::Arc;
 
 use evidence_emulation::CowDisk;
-use transport::dto::{
-    EmulationLinuxBypassAlternativeDto, EmulationLinuxBypassBlockerDto,
-    EmulationLinuxBypassMethodDto,
-};
+use transport::dto::{EmulationLinuxBypassBlockerDto, EmulationLinuxBypassMethodDto};
 
 use super::common::{
     current_unix_day, is_interactive_shell, read_login_defs, read_passwd, read_shadow,
@@ -42,18 +38,9 @@ pub enum LinuxBypassPlan {
         edited: String,
         password_hash: String,
     },
-    /// The host cannot edit in place, but the Linux appliance helper can.
-    Appliance {
-        partition: u32,
-        edited: String,
-        password_hash: String,
-        blocker: EmulationLinuxBypassBlockerDto,
-    },
-    /// No bypass channel can serve this layout; report the blocker and
-    /// alternatives to the UI without raising an `Unsupported` error.
+    /// The client cannot safely edit this layout; report the blocker.
     Unavailable {
         blocker: EmulationLinuxBypassBlockerDto,
-        alternatives: Vec<EmulationLinuxBypassAlternativeDto>,
     },
 }
 
@@ -128,10 +115,7 @@ pub fn plan_linux_bypass(
 }
 
 fn unavailable(blocker: EmulationLinuxBypassBlockerDto) -> LinuxBypassPlan {
-    LinuxBypassPlan::Unavailable {
-        blocker,
-        alternatives: blocker_alternatives(blocker),
-    }
+    LinuxBypassPlan::Unavailable { blocker }
 }
 
 /// Pure account/passwd probe shared by the planner and unit tests.
@@ -162,8 +146,7 @@ pub(crate) fn probe_account(
 }
 
 /// Expired accounts on a non-resizable filesystem remain a hard read-only error
-/// rather than a UI blocker; the appliance path cannot revive an expired entry
-/// safely either.
+/// rather than a UI blocker.
 fn reject_expired_non_resizable(
     partition: &LinuxPartition,
     shadow: &str,
@@ -255,23 +238,13 @@ fn plan_xfs(
                 password_hash: password_hash.to_string(),
             })
         }
-        XfsVerdict::Appliance(blocker) => Ok(LinuxBypassPlan::Appliance {
-            partition: partition_index,
-            edited,
-            password_hash: password_hash.to_string(),
-            blocker,
-        }),
-        XfsVerdict::Unavailable(blocker) => Ok(LinuxBypassPlan::Unavailable {
-            blocker,
-            alternatives: blocker_alternatives(blocker),
-        }),
+        XfsVerdict::Unavailable(blocker) => Ok(unavailable(blocker)),
     }
 }
 
 #[derive(Debug)]
 pub(crate) enum XfsVerdict {
     HostInPlace,
-    Appliance(EmulationLinuxBypassBlockerDto),
     Unavailable(EmulationLinuxBypassBlockerDto),
 }
 
@@ -285,12 +258,7 @@ pub(crate) fn assess_xfs(fs: &fs_xfs::XfsReader, edited: &[u8]) -> XfsVerdict {
         .blocker
         .map(xfs_blocker_to_dto)
         .unwrap_or(EmulationLinuxBypassBlockerDto::UnsupportedLayout);
-    match blocker {
-        EmulationLinuxBypassBlockerDto::SharedExtents
-        | EmulationLinuxBypassBlockerDto::DirtyLog
-        | EmulationLinuxBypassBlockerDto::UnsupportedLayout => XfsVerdict::Appliance(blocker),
-        other => XfsVerdict::Unavailable(other),
-    }
+    XfsVerdict::Unavailable(blocker)
 }
 
 /// Whether the ext4 jbd2 journal still advertises transactions for replay.
@@ -311,47 +279,10 @@ fn map_journal_error(error: fs_ext4::journal::JournalError) -> EmulationBypassEr
     }
 }
 
-/// Suggested fallbacks for a blocker; mirrored by the result and inspection DTOs.
-pub(crate) fn blocker_alternatives(
-    blocker: EmulationLinuxBypassBlockerDto,
-) -> Vec<EmulationLinuxBypassAlternativeDto> {
-    use EmulationLinuxBypassAlternativeDto::*;
-    match blocker {
-        EmulationLinuxBypassBlockerDto::SharedExtents
-        | EmulationLinuxBypassBlockerDto::DirtyLog => appliance_alternatives(),
-        EmulationLinuxBypassBlockerDto::AccountNotFound
-        | EmulationLinuxBypassBlockerDto::HashSchemeUnknown => vec![LaunchWithoutBypass],
-        EmulationLinuxBypassBlockerDto::EncryptedVolume
-        | EmulationLinuxBypassBlockerDto::UnsupportedLayout
-        | EmulationLinuxBypassBlockerDto::ApplianceUnavailable => {
-            vec![LaunchWithoutBypass, ExternalRescueIso]
-        }
-    }
-}
-
-pub(crate) fn appliance_alternatives() -> Vec<EmulationLinuxBypassAlternativeDto> {
-    use EmulationLinuxBypassAlternativeDto::*;
-    vec![RetryAppliance, LaunchWithoutBypass, ExternalRescueIso]
-}
-
-/// Recommended channel from a supported flag plus the mapped blocker set.
-pub(crate) fn recommended_method(
-    supported: bool,
-    blockers: &[EmulationLinuxBypassBlockerDto],
-) -> EmulationLinuxBypassMethodDto {
+/// Client method corresponding to the read-only assessment.
+pub(crate) fn recommended_method(supported: bool) -> EmulationLinuxBypassMethodDto {
     if supported {
         return EmulationLinuxBypassMethodDto::HostInPlace;
     }
-    if blockers.iter().any(|blocker| {
-        matches!(
-            blocker,
-            EmulationLinuxBypassBlockerDto::SharedExtents
-                | EmulationLinuxBypassBlockerDto::DirtyLog
-                | EmulationLinuxBypassBlockerDto::UnsupportedLayout
-        )
-    }) {
-        EmulationLinuxBypassMethodDto::LinuxAppliance
-    } else {
-        EmulationLinuxBypassMethodDto::None
-    }
+    EmulationLinuxBypassMethodDto::None
 }

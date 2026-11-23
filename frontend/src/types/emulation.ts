@@ -145,18 +145,10 @@ export interface EmulationFsRepairResult {
 
 export type EmulationLinuxBypassStatus = 'applied' | 'unavailable';
 
-export type EmulationLinuxBypassMethod = 'hostInPlace' | 'linuxAppliance' | 'none';
+export type EmulationLinuxBypassMethod = 'hostInPlace' | 'none';
 
 export type EmulationLinuxBypassBlocker =
-  | 'sharedExtents'
-  | 'dirtyLog'
-  | 'encryptedVolume'
-  | 'unsupportedLayout'
-  | 'applianceUnavailable'
-  | 'accountNotFound'
-  | 'hashSchemeUnknown';
-
-export type EmulationLinuxBypassAlternative = 'launchWithoutBypass' | 'externalRescueIso' | 'retryAppliance';
+  'sharedExtents' | 'dirtyLog' | 'encryptedVolume' | 'unsupportedLayout' | 'accountNotFound' | 'hashSchemeUnknown';
 
 export interface EmulationLinuxBypassResult {
   sessionId: string;
@@ -168,8 +160,6 @@ export interface EmulationLinuxBypassResult {
   status: EmulationLinuxBypassStatus;
   method: EmulationLinuxBypassMethod;
   reason?: EmulationLinuxBypassBlocker | null;
-  alternatives: EmulationLinuxBypassAlternative[];
-  payloadStaged: boolean;
 }
 
 export interface EmulationLinuxBypassInspectRequest {
@@ -187,6 +177,4 @@ export interface EmulationLinuxBypassInspection {
   logClean: boolean;
   recommendedMethod: EmulationLinuxBypassMethod;
   blockers: EmulationLinuxBypassBlocker[];
-  alternatives: EmulationLinuxBypassAlternative[];
-  applianceAvailable: boolean;
 }

@@ -92,8 +92,6 @@ describe('emulation API', () => {
       logClean: true,
       recommendedMethod: 'hostInPlace',
       blockers: [],
-      alternatives: ['launchWithoutBypass'],
-      applianceAvailable: false,
     } as never);
 
     const result = await inspectEmulationLinuxBypass({ sessionId: 'emulation-1', partitionIndex: 2 });
@@ -102,7 +100,7 @@ describe('emulation API', () => {
       request: { sessionId: 'emulation-1', partitionIndex: 2 },
     });
     expect(result.recommendedMethod).toBe('hostInPlace');
-    expect(result.applianceAvailable).toBe(false);
+    expect(result.blockers).toEqual([]);
   });
 
   it('repairs filesystem journals through the prepared session', async () => {

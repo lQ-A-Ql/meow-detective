@@ -233,11 +233,9 @@ function FsRepairRow({ model }: LinuxLaunchPanelProps) {
 }
 
 export function LinuxLaunchPanel({ model }: LinuxLaunchPanelProps) {
-  const { t } = useTranslation();
   return (
     <LaunchPanelShell
       model={model}
-      recoveryHint={t('emulationPage.launch.liveIsoHint')}
       inspection={<LinuxPreflightList model={model} />}
       maintenance={
         <>

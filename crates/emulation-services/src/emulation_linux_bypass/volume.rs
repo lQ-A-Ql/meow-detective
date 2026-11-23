@@ -336,9 +336,8 @@ fn open_filesystem(
 }
 
 /// Map a classifiable `XfsRewriteBlocker` payload to the UI-facing blocker
-/// DTO. Layout-level failures that the appliance could also serve collapse into
-/// `UnsupportedLayout`; only `DirtyLog` and `SharedExtents` keep their own
-/// variant.
+/// DTO. Layout-level failures collapse into `UnsupportedLayout`; only
+/// `DirtyLog` and `SharedExtents` keep their own variant.
 pub(crate) fn xfs_blocker_to_dto(
     blocker: fs_xfs::XfsRewriteBlocker,
 ) -> EmulationLinuxBypassBlockerDto {

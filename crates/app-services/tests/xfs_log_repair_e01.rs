@@ -269,20 +269,14 @@ fn xfs_log_repair_and_materialization() {
         .expect("run the XFS shadow bypass plan");
 
     eprintln!(
-        "apply result: status={:?} method={:?} password_set={} already_configured={} reason={:?} alternatives={:?} payload_staged={}",
-        bypass.status,
-        bypass.method,
-        bypass.password_set,
-        bypass.already_configured,
-        bypass.reason,
-        bypass.alternatives,
-        bypass.payload_staged
+        "apply result: status={:?} method={:?} password_set={} already_configured={} reason={:?}",
+        bypass.status, bypass.method, bypass.password_set, bypass.already_configured, bypass.reason
     );
 
     match bypass.status {
         EmulationLinuxBypassStatusDto::Unavailable => {
             // The host in-place channel was refused (SharedExtents / DirtyLog /
-            // UnsupportedLayout / ApplianceUnavailable / ...). Nothing was
+            // UnsupportedLayout). Nothing was
             // written; prove the evidence still matches the baseline and fail
             // explicitly instead of reporting success.
             let after_samples = sample_regions(&disk, &regions);
@@ -295,9 +289,7 @@ fn xfs_log_repair_and_materialization() {
                 .reason
                 .map(|reason| format!("{reason:?}"))
                 .unwrap_or_else(|| "<none>".to_string());
-            panic!(
-                "未完成自动绕密：{reason}；需要用户自备 Linux rescue ISO 手动执行 resources/emulation/linux-rescue/BYPASS.SH（见该目录 README）"
-            );
+            panic!("客户端无法安全完成自动绕密：{reason}；请释放会话并保持账户不变启动原系统");
         }
         EmulationLinuxBypassStatusDto::Applied => {
             assert_eq!(

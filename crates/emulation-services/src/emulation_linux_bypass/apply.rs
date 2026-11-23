@@ -1,7 +1,7 @@
 //! Apply stage for the Linux shadow bypass.
 //!
 //! Consumes the read-only [`LinuxBypassPlan`]: host in-place plans are written
-//! through the COW overlay and verified; appliance/unavailable verdicts return
+//! through the COW overlay and verified; unavailable verdicts return
 //! a structured result DTO without touching the disk. Only the host in-place
 //! path may write or `invalidate`, and only after a failed write.
 
@@ -13,13 +13,12 @@ use transport::dto::{
 };
 
 use super::common::{current_unix_day, read_shadow, SHADOW_PATH};
-use super::plan::{appliance_alternatives, plan_linux_bypass, HostInPlacePlan, LinuxBypassPlan};
+use super::plan::{plan_linux_bypass, HostInPlacePlan, LinuxBypassPlan};
 use super::rewrite::{apply_rewrite_plan, validate_rewrite_plan, verify_patch_bytes, VolumePatch};
 use super::volume::open_linux_partition;
 use crate::emulation_bypass::{BypassCaseContext, EmulationBypassError};
 
-/// Plan → apply → verify for one account. The public signature is unchanged;
-/// the old single-function flow is now driven by the plan verdict.
+/// Plan, apply and verify the account update through the session overlay.
 pub fn apply_linux_bypass(
     disk: &Arc<CowDisk>,
     case_context: &BypassCaseContext<'_>,
@@ -42,23 +41,7 @@ pub fn apply_linux_bypass(
             edited,
             &password_hash,
         ),
-        LinuxBypassPlan::Appliance { blocker, .. } => Ok(EmulationLinuxBypassResultDto {
-            session_id: String::new(),
-            data_source_id: case_context.data_source_id.0.clone(),
-            partition_index,
-            username: username.to_string(),
-            password_set: false,
-            already_configured: false,
-            status: EmulationLinuxBypassStatusDto::Unavailable,
-            method: EmulationLinuxBypassMethodDto::LinuxAppliance,
-            reason: Some(blocker),
-            alternatives: appliance_alternatives(),
-            payload_staged: false,
-        }),
-        LinuxBypassPlan::Unavailable {
-            blocker,
-            alternatives,
-        } => Ok(EmulationLinuxBypassResultDto {
+        LinuxBypassPlan::Unavailable { blocker } => Ok(EmulationLinuxBypassResultDto {
             session_id: String::new(),
             data_source_id: case_context.data_source_id.0.clone(),
             partition_index,
@@ -68,8 +51,6 @@ pub fn apply_linux_bypass(
             status: EmulationLinuxBypassStatusDto::Unavailable,
             method: EmulationLinuxBypassMethodDto::None,
             reason: Some(blocker),
-            alternatives,
-            payload_staged: false,
         }),
     }
 }
@@ -171,8 +152,6 @@ fn result_dto(
         status: EmulationLinuxBypassStatusDto::Applied,
         method,
         reason: None,
-        alternatives: Vec::new(),
-        payload_staged: false,
     }
 }
 

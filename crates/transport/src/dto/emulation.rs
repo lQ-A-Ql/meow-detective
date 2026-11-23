@@ -279,10 +279,10 @@ pub struct EmulationLinuxBypassRequestDto {
 #[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum EmulationLinuxBypassStatusDto {
-    /// The password was cleared (or was already configured) in the overlay.
+    /// The password was configured (or was already configured) in the overlay.
     #[default]
     Applied,
-    /// The bypass could not be applied on this layout; see `reason`/`alternatives`.
+    /// The bypass could not be applied on this layout; see `reason`.
     Unavailable,
 }
 
@@ -293,10 +293,6 @@ pub enum EmulationLinuxBypassMethodDto {
     /// Direct in-place edit on the mounted COW volume (XFS/ext4).
     #[default]
     HostInPlace,
-    /// External-rescue path: a self-authored payload CD is staged for a
-    /// user-supplied rescue ISO. The enum name is retained for wire
-    /// compatibility; no Linux appliance image is bundled or downloaded.
-    LinuxAppliance,
     /// No bypass channel available.
     None,
 }
@@ -316,27 +312,10 @@ pub enum EmulationLinuxBypassBlockerDto {
     /// The filesystem layout cannot be edited in place (local forks, BMBT,
     /// NREXT64, sparse/unwritten extents, ...).
     UnsupportedLayout,
-    /// No usable self-supplied rescue ISO is configured for the external
-    /// rescue path.
-    ApplianceUnavailable,
     /// The requested account was not found in /etc/shadow.
     AccountNotFound,
     /// The shadow hash scheme is not recognized by the offline editor.
     HashSchemeUnknown,
-}
-
-/// Suggested fallback when the preferred method is unavailable.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-pub enum EmulationLinuxBypassAlternativeDto {
-    /// Boot the guest without an account bypass and log in normally.
-    LaunchWithoutBypass,
-    /// Attach an external rescue ISO for manual shadow editing.
-    ExternalRescueIso,
-    /// Retry the external-rescue path after attaching or reselecting a
-    /// user-supplied rescue ISO. The enum name is retained for wire
-    /// compatibility.
-    RetryAppliance,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -352,13 +331,6 @@ pub struct EmulationLinuxBypassResultDto {
     pub method: EmulationLinuxBypassMethodDto,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<EmulationLinuxBypassBlockerDto>,
-    #[serde(default)]
-    pub alternatives: Vec<EmulationLinuxBypassAlternativeDto>,
-    /// Whether the external-rescue payload CD was staged for this session.
-    /// The frontend renders the corresponding instruction; the backend never
-    /// returns user-facing prose.
-    #[serde(default)]
-    pub payload_staged: bool,
 }
 
 /// Read-only pre-flight inspection request; no overlay writes.
@@ -386,8 +358,6 @@ pub struct EmulationLinuxBypassInspectionDto {
     pub log_clean: bool,
     pub recommended_method: EmulationLinuxBypassMethodDto,
     pub blockers: Vec<EmulationLinuxBypassBlockerDto>,
-    pub alternatives: Vec<EmulationLinuxBypassAlternativeDto>,
-    pub appliance_available: bool,
 }
 
 /// Which loader the EFI fallback path was populated from.

@@ -2,13 +2,12 @@
 //!
 //! Gathers volume reflink capability, target-inode reflink flag, log state,
 //! blockers and a recommended method without opening a session overlay,
-//! writing evidence, or invalidating the disk. The desktop layer overrides
-//! `appliance_available` and fills `session_id`.
+//! writing evidence, or invalidating the disk. The desktop layer fills `session_id`.
 
 use transport::dto::{EmulationLinuxBypassBlockerDto, EmulationLinuxBypassInspectionDto};
 
 use super::common::SHADOW_PATH;
-use super::plan::{blocker_alternatives, ext4_journal_requires_repair, recommended_method};
+use super::plan::{ext4_journal_requires_repair, recommended_method};
 use super::volume::{
     load_partition_record, open_linux_partition, record_encrypted, record_filesystem_kind,
     xfs_blocker_to_dto, FilesystemKind, LinuxFilesystem, LinuxPartition,
@@ -62,11 +61,7 @@ pub fn inspect_linux_bypass(
         None => blockers.push(EmulationLinuxBypassBlockerDto::UnsupportedLayout),
     }
 
-    let recommended = recommended_method(supported, &blockers);
-    let alternatives = blockers
-        .first()
-        .map(|blocker| blocker_alternatives(*blocker))
-        .unwrap_or_default();
+    let recommended = recommended_method(supported);
 
     Ok(EmulationLinuxBypassInspectionDto {
         session_id: String::new(),
@@ -78,8 +73,6 @@ pub fn inspect_linux_bypass(
         log_clean,
         recommended_method: recommended,
         blockers,
-        alternatives,
-        appliance_available: false,
     })
 }
 

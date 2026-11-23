@@ -16,7 +16,6 @@ mod backend_status;
 mod guest;
 mod guest_phase;
 mod linux_bypass_ops;
-mod linux_rescue;
 mod materials;
 mod network;
 mod prepare;
@@ -129,11 +128,6 @@ struct EmulationEntry {
     backend: Option<EmulationBackendHandle>,
     vmware: Option<VmwareControl>,
     boot_started_at: Option<Instant>,
-    /// VMX rebuild inputs captured at prepare time; used to attach the Linux
-    /// rescue payload CD as `ide1:1` during a `DescriptorReady` re-stage.
-    /// VMX rebuild inputs captured at prepare time; used to attach the Linux
-    /// rescue payload CD as `ide1:1` during a `DescriptorReady` re-stage.
-    vmx_blueprint: Option<linux_rescue::VmxBlueprint>,
     /// Serializes the long mutating operations (launch, host-side edits,
     /// release) of this session. The global `entries` lock is only ever
     /// taken briefly — to clone this Arc or to update status — and never

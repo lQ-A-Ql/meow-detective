@@ -41,81 +41,6 @@ const MAINTENANCE_README: &str = "Meow~Detective maintenance media\r\n\
 All writes land on the copy-on-write overlay; the evidence image is never\r\n\
 modified.\r\n";
 
-/// Manual delivered on the Linux rescue CD (no in-guest tool exists for
-/// Linux; the CD carries the TARGETS.JSON map and this guide instead).
-pub(super) const LINUX_RESCUE_README: &str = "Meow~Detective Linux rescue media\r\n\
-\r\n\
-This CD accompanies a user-selected Linux live/rescue ISO. It contains\r\n\
-TARGETS.JSON: the host-side preflight map of the Linux installations\r\n\
-(distro, partitions, boot-risk notes) for the disk attached to this VM.\r\n\
-\r\n\
-Suggested workflow inside the live system:\r\n\
-1. Identify the disk: lsblk -f  (the evidence disk appears read-only to\r\n\
-   the host; guest writes land on the copy-on-write overlay only).\r\n\
-2. Inspect mounts from TARGETS.JSON, then mount the root volume, e.g.\r\n\
-      mount -o ro /dev/sda3 /mnt        # read-only inspection\r\n\
-3. Filesystem check and repair (do this BEFORE booting the installed\r\n\
-   system when TARGETS.JSON reports xfs-log-dirty or xfs-log-unverified):\r\n\
-   - Preferred: let Meow~Detective complete the host-side XFS repair\r\n\
-     before launch. It writes only to the copy-on-write overlay.\r\n\
-   - Live fallback: activate LVM first with  vgchange -ay, then mount the\r\n\
-     XFS root read-write and cleanly unmount it so the kernel can replay\r\n\
-     the journal (for example, mount -o rw /dev/sda3 /mnt; umount /mnt).\r\n\
-   - xfs_repair -n /dev/sda3 is diagnostic only; it does not replay a log.\r\n\
-     Use xfs_repair -L /dev/mapper/<vg>-<lv> only as a last resort after\r\n\
-     confirming the volume cannot be mounted; -L discards the log contents.\r\n\
-   - ext4:  e2fsck -f /dev/sda3\r\n\
-   All of this writes to the overlay only; the evidence image is untouched.\r\n\
-4. Account recovery:\r\n\
-   - preferred: select the account in Meow~Detective before launch. The\r\n\
-     host sets its overlay-only password to 123456 with a target-compatible\r\n\
-     crypt hash. The original evidence remains unchanged.\r\n\
-   - manual fallback: chroot /mnt and run passwd <account>. Do not clear\r\n\
-     the shadow hash field; PAM commonly rejects empty passwords.\r\n\
-5. Boot repairs: chroot /mnt and rebuild grub.cfg or the initramfs when\r\n\
-   TARGETS.JSON reports no-kernel/no-fstab style risks.\r\n\
-\r\n\
-All writes land on the copy-on-write overlay; the evidence image is never\r\n\
-modified.\r\n";
-
-/// Structured TARGETS.JSON content for the Linux rescue CD. The Windows PE
-/// tool consumes its own flat preflight shape; this envelope is the
-/// Linux-side generalization and has no in-guest consumer yet — it is
-/// documentation for the investigator.
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct LinuxRescueTargets<'a> {
-    schema_version: u32,
-    platform: &'static str,
-    data_source_id: &'a str,
-    installs: &'a [transport::dto::EmulationInstallDto],
-    recommended_actions: &'static [&'static str],
-}
-
-const LINUX_RESCUE_ACTIONS: &[&str] = &[
-    "boot-live-iso",
-    "inspect-targets-json",
-    "xfs-repair-dirty-log",
-    "host-set-password-123456",
-    "chroot-passwd-fallback",
-    "chroot-repair",
-];
-
-pub(super) fn linux_rescue_targets_json(
-    data_source_id: &str,
-    installs: &[transport::dto::EmulationInstallDto],
-) -> Result<Vec<u8>, EmulationRegistryError> {
-    let targets = LinuxRescueTargets {
-        schema_version: 1,
-        platform: "linux",
-        data_source_id,
-        installs,
-        recommended_actions: LINUX_RESCUE_ACTIONS,
-    };
-    serde_json::to_vec_pretty(&targets)
-        .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))
-}
-
 pub(super) struct MaintenancePayload {
     pub tool: Option<Vec<u8>>,
     pub targets_json: Vec<u8>,
@@ -152,29 +77,6 @@ pub(super) fn build_maintenance_payload(
         },
         tool,
         targets_json,
-    }))
-}
-
-/// Linux rescue media: no in-guest tool, just the TARGETS.JSON map and the
-/// rescue README. Built whenever the user supplies a live/rescue ISO.
-pub(super) fn build_linux_rescue_payload(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
-) -> Result<Option<MaintenancePayload>, EmulationRegistryError> {
-    let preflight = app_services::mount_service::emulation_preflight(
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
-    )
-    .map_err(EmulationRegistryError::Source)?;
-    let targets_json = linux_rescue_targets_json(&data_source_id.0, &preflight.installs)?;
-    Ok(Some(MaintenancePayload {
-        tool: None,
-        targets_json,
-        readme: LINUX_RESCUE_README,
     }))
 }
 

@@ -11,6 +11,12 @@ impl EmulationRegistry {
         options: VmOptions,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
         self.reject_duplicate(case_root, data_source_id)?;
+        let guest = guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
+        if guest.is_linux && recovery_iso.is_some() {
+            return Err(EmulationRegistryError::RecoveryMedia(
+                "Recovery media is unavailable for Linux emulation".to_string(),
+            ));
+        }
         let recovery_media = open_recovery_media(recovery_iso)?;
         let parent = prepare_parent_with_timing(
             case_conn,
@@ -18,7 +24,6 @@ impl EmulationRegistry {
             data_source_id,
             recovery_media.is_some(),
         )?;
-        let guest = guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
         let session_id = format!("emulation-{}", uuid::Uuid::new_v4());
         let workspace = SessionWorkspace::create(case_root, &session_id)
             .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
@@ -79,13 +84,11 @@ impl EmulationRegistry {
             return Err(error);
         }
         self.publish_descriptor_ready(
-            &session_id,
-            data_source_id,
-            parent.identity.logical_length(),
-            &guest,
-            firmware,
-            options,
-            recovery_media.as_ref(),
+            ProvenanceIds {
+                session_id: &session_id,
+                case_id: &case_id.0,
+                data_source_id: &data_source_id.0,
+            },
             workspace,
             disk,
             backend,
@@ -93,49 +96,31 @@ impl EmulationRegistry {
         )
     }
 
-    /// Captures the VMX inputs and publishes the session in `DescriptorReady`.
-    /// The blueprint lets a later re-stage attach the Linux rescue payload CD
-    /// without re-probing the source.
-    #[allow(clippy::too_many_arguments)]
+    /// Publishes the prepared session in `DescriptorReady`.
     fn publish_descriptor_ready(
         &self,
-        session_id: &str,
-        data_source_id: &DataSourceId,
-        logical_length: u64,
-        guest: &guest::GuestProfile,
-        firmware: VmwareFirmware,
-        options: VmOptions,
-        recovery_media: Option<&RecoveryMedia>,
+        ids: ProvenanceIds<'_>,
         workspace: SessionWorkspace,
         disk: Arc<CowDisk>,
         backend: EmulationBackendHandle,
         maintenance_media: bool,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
-        let vmx_blueprint = linux_rescue::VmxBlueprint::new(
-            firmware,
-            guest.guest_os.clone(),
-            guest.disk_adapter,
-            guest.network_pci_slot,
-            options,
-            recovery_media.map(|media| media.vmware_path().to_string()),
-        );
         let status = descriptor_ready_status(
-            session_id,
-            data_source_id,
-            logical_length,
+            ids.session_id,
+            &DataSourceId(ids.data_source_id.to_owned()),
+            disk.len(),
             maintenance_media,
         );
         self.insert_entry(
-            session_id.to_string(),
+            ids.session_id.to_owned(),
             EmulationEntry {
-                case_id: data_source_id.0.clone(),
+                case_id: ids.case_id.to_owned(),
                 status: status.clone(),
                 workspace,
                 disk,
                 backend: Some(backend),
                 vmware: None,
                 boot_started_at: None,
-                vmx_blueprint: Some(vmx_blueprint),
                 op_lock: Arc::new(Mutex::new(())),
             },
         )?;

@@ -215,11 +215,10 @@ fn osdata_cleanup_round_trip_uses_camel_case() {
 #[test]
 fn linux_bypass_dtos_round_trip_in_camel_case() {
     use super::{
-        EmulationLinuxAccountDto, EmulationLinuxBypassAlternativeDto,
-        EmulationLinuxBypassBlockerDto, EmulationLinuxBypassInspectRequestDto,
-        EmulationLinuxBypassInspectionDto, EmulationLinuxBypassMethodDto,
-        EmulationLinuxBypassRequestDto, EmulationLinuxBypassResultDto,
-        EmulationLinuxBypassStatusDto,
+        EmulationLinuxAccountDto, EmulationLinuxBypassBlockerDto,
+        EmulationLinuxBypassInspectRequestDto, EmulationLinuxBypassInspectionDto,
+        EmulationLinuxBypassMethodDto, EmulationLinuxBypassRequestDto,
+        EmulationLinuxBypassResultDto, EmulationLinuxBypassStatusDto,
     };
 
     let account = EmulationLinuxAccountDto {
@@ -255,10 +254,6 @@ fn linux_bypass_dtos_round_trip_in_camel_case() {
         "hostInPlace"
     );
     assert_eq!(
-        serde_json::to_value(EmulationLinuxBypassMethodDto::LinuxAppliance).unwrap(),
-        "linuxAppliance"
-    );
-    assert_eq!(
         serde_json::to_value(EmulationLinuxBypassMethodDto::None).unwrap(),
         "none"
     );
@@ -279,28 +274,12 @@ fn linux_bypass_dtos_round_trip_in_camel_case() {
         "unsupportedLayout"
     );
     assert_eq!(
-        serde_json::to_value(EmulationLinuxBypassBlockerDto::ApplianceUnavailable).unwrap(),
-        "applianceUnavailable"
-    );
-    assert_eq!(
         serde_json::to_value(EmulationLinuxBypassBlockerDto::AccountNotFound).unwrap(),
         "accountNotFound"
     );
     assert_eq!(
         serde_json::to_value(EmulationLinuxBypassBlockerDto::HashSchemeUnknown).unwrap(),
         "hashSchemeUnknown"
-    );
-    assert_eq!(
-        serde_json::to_value(EmulationLinuxBypassAlternativeDto::LaunchWithoutBypass).unwrap(),
-        "launchWithoutBypass"
-    );
-    assert_eq!(
-        serde_json::to_value(EmulationLinuxBypassAlternativeDto::ExternalRescueIso).unwrap(),
-        "externalRescueIso"
-    );
-    assert_eq!(
-        serde_json::to_value(EmulationLinuxBypassAlternativeDto::RetryAppliance).unwrap(),
-        "retryAppliance"
     );
 
     let result = EmulationLinuxBypassResultDto {
@@ -313,36 +292,25 @@ fn linux_bypass_dtos_round_trip_in_camel_case() {
         status: EmulationLinuxBypassStatusDto::Applied,
         method: EmulationLinuxBypassMethodDto::HostInPlace,
         reason: None,
-        alternatives: Vec::new(),
-        payload_staged: false,
     };
     let value = serde_json::to_value(&result).unwrap();
     assert_eq!(value["passwordSet"], true);
     assert_eq!(value["status"], "applied");
     assert_eq!(value["method"], "hostInPlace");
     assert!(value.get("reason").is_none());
-    assert_eq!(value["payloadStaged"], false);
     let restored: EmulationLinuxBypassResultDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, result);
 
     let blocked = EmulationLinuxBypassResultDto {
         status: EmulationLinuxBypassStatusDto::Unavailable,
-        method: EmulationLinuxBypassMethodDto::LinuxAppliance,
+        method: EmulationLinuxBypassMethodDto::None,
         reason: Some(EmulationLinuxBypassBlockerDto::SharedExtents),
-        alternatives: vec![
-            EmulationLinuxBypassAlternativeDto::LaunchWithoutBypass,
-            EmulationLinuxBypassAlternativeDto::ExternalRescueIso,
-        ],
-        payload_staged: true,
         ..result
     };
     let value = serde_json::to_value(&blocked).unwrap();
     assert_eq!(value["status"], "unavailable");
-    assert_eq!(value["method"], "linuxAppliance");
+    assert_eq!(value["method"], "none");
     assert_eq!(value["reason"], "sharedExtents");
-    assert_eq!(value["alternatives"][0], "launchWithoutBypass");
-    assert_eq!(value["alternatives"][1], "externalRescueIso");
-    assert_eq!(value["payloadStaged"], true);
     let restored: EmulationLinuxBypassResultDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, blocked);
 
@@ -362,21 +330,17 @@ fn linux_bypass_dtos_round_trip_in_camel_case() {
         partition_index: 5,
         filesystem: "XFS".to_string(),
         volume_reflink_enabled: true,
-        target_inode_reflink: Some(false),
+        target_inode_reflink: Some(true),
         log_clean: true,
-        recommended_method: EmulationLinuxBypassMethodDto::HostInPlace,
+        recommended_method: EmulationLinuxBypassMethodDto::None,
         blockers: vec![EmulationLinuxBypassBlockerDto::SharedExtents],
-        alternatives: vec![EmulationLinuxBypassAlternativeDto::RetryAppliance],
-        appliance_available: false,
     };
     let value = serde_json::to_value(&inspection).unwrap();
     assert_eq!(value["volumeReflinkEnabled"], true);
-    assert_eq!(value["targetInodeReflink"], false);
+    assert_eq!(value["targetInodeReflink"], true);
     assert_eq!(value["logClean"], true);
-    assert_eq!(value["recommendedMethod"], "hostInPlace");
+    assert_eq!(value["recommendedMethod"], "none");
     assert_eq!(value["blockers"][0], "sharedExtents");
-    assert_eq!(value["alternatives"][0], "retryAppliance");
-    assert_eq!(value["applianceAvailable"], false);
     let restored: EmulationLinuxBypassInspectionDto = serde_json::from_value(value).unwrap();
     assert_eq!(restored, inspection);
 

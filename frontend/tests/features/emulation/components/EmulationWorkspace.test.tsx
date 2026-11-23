@@ -32,6 +32,7 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     preflight: undefined,
     preflightLoading: false,
     recoveryIsoPath: '',
+    recoveryMediaAvailable: true,
     bootRoute: 'directSystem',
     pickRecoveryIso: vi.fn().mockResolvedValue(undefined),
     clearRecoveryIso: vi.fn(),
@@ -63,11 +64,8 @@ function createModel(overrides: Partial<EmulationWorkspaceModel> = {}): Emulatio
     linuxUsername: undefined,
     selectLinuxUsername: vi.fn(),
     linuxBypassOutcome: undefined,
-    resumingBypass: false,
-    retryBypassWithAppliance: vi.fn().mockResolvedValue(undefined),
+    bypassOutcomeBusy: false,
     launchWithoutBypass: vi.fn().mockResolvedValue(undefined),
-    dismissBypassOutcome: vi.fn(),
-    chooseExternalRescueIso: vi.fn().mockResolvedValue(undefined),
     releasePreparedBypassSession: vi.fn().mockResolvedValue(undefined),
     sessions: [],
     metrics: { sourceCount: 1, activeCount: 0, runningCount: 0, failedCount: 0 },
@@ -294,7 +292,7 @@ describe('EmulationWorkspace', () => {
     expect(screen.queryByText('可绕密')).not.toBeInTheDocument();
   });
 
-  it('shows the live ISO hint for linux sources only', () => {
+  it('hides recovery ISO selection for linux sources', () => {
     const { rerender } = render(
       <EmulationWorkspace
         model={createModel({
@@ -305,13 +303,14 @@ describe('EmulationWorkspace', () => {
             platform: 'LINUX',
             partitionCount: 3,
           },
+          recoveryMediaAvailable: false,
         })}
       />,
     );
-    expect(screen.getByText(/SystemRescue/)).toBeInTheDocument();
+    expect(screen.queryByLabelText('启动/救援 ISO')).not.toBeInTheDocument();
 
     rerender(<EmulationWorkspace model={createModel()} />);
-    expect(screen.queryByText(/SystemRescue/)).not.toBeInTheDocument();
+    expect(screen.getByLabelText('启动/救援 ISO')).toBeInTheDocument();
   });
 
   it('renders the Linux panel for linux sources without the Windows bypass selects', () => {
@@ -387,6 +386,74 @@ describe('EmulationWorkspace', () => {
 
     expect(screen.getByText(/root 的密码为 123456/)).toBeInTheDocument();
     expect(screen.getByText(/SSH 或 root 登录策略仍可能限制密码登录/)).toBeInTheDocument();
+  });
+
+  it('keeps unavailable Linux account changes inside the client workflow', () => {
+    const launchWithoutBypass = vi.fn().mockResolvedValue(undefined);
+    const releasePreparedBypassSession = vi.fn().mockResolvedValue(undefined);
+    render(
+      <EmulationWorkspace
+        model={createModel({
+          selectedSource: {
+            id: 'source-1',
+            name: 'CentOS 镜像',
+            kind: 'E01',
+            platform: 'LINUX',
+            partitionCount: 3,
+          },
+          preflight: {
+            dataSourceId: 'source-1',
+            installs: [
+              {
+                partitionIndex: 5,
+                platform: 'linux',
+                osdataPresent: false,
+                samPresent: false,
+                utilmanBypassAvailable: false,
+              },
+            ],
+            recommendedBootRoute: 'directSystem',
+          },
+          bypassPartition: 5,
+          bypassIsLinux: true,
+          recoveryMediaAvailable: false,
+          linuxBypassOutcome: {
+            result: {
+              sessionId: 'emulation-1',
+              dataSourceId: 'source-1',
+              partitionIndex: 5,
+              username: 'root',
+              passwordSet: false,
+              alreadyConfigured: false,
+              status: 'unavailable',
+              method: 'none',
+              reason: 'sharedExtents',
+            },
+            inspection: {
+              sessionId: 'emulation-1',
+              dataSourceId: 'source-1',
+              partitionIndex: 5,
+              filesystem: 'xfs',
+              volumeReflinkEnabled: true,
+              targetInodeReflink: true,
+              logClean: true,
+              recommendedMethod: 'none',
+              blockers: ['sharedExtents'],
+            },
+          },
+          launchWithoutBypass,
+          releasePreparedBypassSession,
+        })}
+      />,
+    );
+
+    expect(screen.getByText('账户修改不可用')).toBeInTheDocument();
+    expect(screen.getByText(/目标文件为 XFS 共享 extent/)).toBeInTheDocument();
+    expect(screen.queryByText(/救援 ISO|BYPASS\.SH/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '无绕密启动' }));
+    fireEvent.click(screen.getByRole('button', { name: '释放会话' }));
+    expect(launchWithoutBypass).toHaveBeenCalledOnce();
+    expect(releasePreparedBypassSession).toHaveBeenCalledOnce();
   });
 
   it('renders the Windows panel with SAM bypass selects for windows sources', () => {

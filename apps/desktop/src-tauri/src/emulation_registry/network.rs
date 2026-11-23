@@ -26,14 +26,10 @@ pub(super) fn build_maintenance_for_guest(
     case_id: &CaseId,
     source_id: &DataSourceId,
 ) -> Result<Option<super::materials::MaintenancePayload>, EmulationRegistryError> {
-    if !requested {
+    if !requested || linux {
         return Ok(None);
     }
-    if linux {
-        super::materials::build_linux_rescue_payload(conn, root, case_id, source_id)
-    } else {
-        super::materials::build_maintenance_payload(conn, root, case_id, source_id, derived_ntfs)
-    }
+    super::materials::build_maintenance_payload(conn, root, case_id, source_id, derived_ntfs)
 }
 
 pub(super) fn prepare_linux_network_if_needed(

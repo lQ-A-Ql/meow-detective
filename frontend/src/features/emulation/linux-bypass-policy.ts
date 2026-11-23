@@ -8,7 +8,7 @@ const SESSION_STATE_PATTERN = /(SESSION_(NOT_FOUND|EXPIRED|RELEASED|BUSY|STATE_M
 /**
  * Only overlay poisoning, fatal transport failures and session-state errors may
  * release the prepared session after a Linux bypass call. Every other failure
- * keeps the session alive so the investigator can pick an alternative exit.
+ * keeps the session alive so the investigator can choose another client action.
  */
 export function shouldReleaseOnBypassError(error: unknown): boolean {
   if (!isApiErrorDto(error)) {

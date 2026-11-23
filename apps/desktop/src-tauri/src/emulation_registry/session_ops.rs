@@ -132,10 +132,6 @@ impl EmulationRegistry {
         Ok(result)
     }
 
-    /// Read-only pre-flight inspection: assesses the bypass options without
-    /// writing the overlay or invalidating the disk. `appliance_available` is
-    /// overridden here with the real host-side probe (a configured, readable
-    /// investigator-supplied rescue ISO).
     /// Install the UEFI fallback boot path (`\EFI\BOOT\BOOTX64.EFI`) into the
     /// session overlay. Pure disk edit: no case database access is needed.
     pub fn install_efi_fallback(

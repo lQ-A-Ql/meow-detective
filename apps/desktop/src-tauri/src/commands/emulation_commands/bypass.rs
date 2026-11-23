@@ -162,11 +162,6 @@ pub async fn apply_emulation_linux_bypass(
                 "status": format!("{:?}", result.status),
                 "method": format!("{:?}", result.method),
                 "reason": result.reason.map(|reason| format!("{:?}", reason)),
-                "alternatives": result
-                    .alternatives
-                    .iter()
-                    .map(|alternative| format!("{:?}", alternative))
-                    .collect::<Vec<_>>(),
             }),
         );
         Ok(result)

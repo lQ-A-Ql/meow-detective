@@ -4,9 +4,8 @@
 //! in-place rewrite exclusively through the session COW. ext4 and XFS roots
 //! are supported directly or through persisted LVM mappings. Planning is read
 //! only: [`plan_linux_bypass`] classifies the partition into a host in-place
-//! edit, an appliance-mediated edit, or an explicitly unavailable layout;
-//! [`apply_linux_bypass`] consumes that verdict and only writes on the host
-//! in-place path.
+//! edit or an explicitly unavailable layout; [`apply_linux_bypass`] consumes
+//! that verdict and only writes on the host in-place path.
 
 mod apply;
 mod common;

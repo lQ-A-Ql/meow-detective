@@ -4,9 +4,7 @@ use super::common::{
     replacement_password_hash, shadow_expiry_day, SHA512_PASSWORD_HASH, SHADOW_PATH,
     SM3_PASSWORD_HASH, YESCRYPT_PASSWORD_HASH,
 };
-use super::plan::{
-    assess_xfs, blocker_alternatives, probe_account, recommended_method, XfsVerdict,
-};
+use super::plan::{assess_xfs, probe_account, recommended_method, XfsVerdict};
 use super::rewrite::{
     apply_rewrite_plan, plan_ext4_rewrite, validate_rewrite_plan, verify_patch_bytes, VolumePatch,
 };
@@ -17,10 +15,7 @@ use evidence_core::{EvidenceReader, ReaderInfo};
 use evidence_emulation::{CowDisk, CowDiskConfig, ParentIdentity};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::sync::Arc;
-use transport::dto::{
-    EmulationLinuxBypassAlternativeDto, EmulationLinuxBypassBlockerDto,
-    EmulationLinuxBypassMethodDto,
-};
+use transport::dto::{EmulationLinuxBypassBlockerDto, EmulationLinuxBypassMethodDto};
 
 fn open_overlay_fs(disk: &Arc<CowDisk>) -> fs_ext4::Ext4Reader {
     let reader = crate::emulation_cow_reader::CowDiskReader::new(Arc::clone(disk));
@@ -331,7 +326,7 @@ fn lvm_mapping_splits_runs_at_extent_boundaries() {
 
 // ---------------------------------------------------------------------------
 // Read-only plan classification: AccountNotFound, HashSchemeUnknown, XFS
-// shared-inode/dirty-log → Appliance, already-configured, inspection helpers,
+// shared-inode/dirty-log refusals, already-configured, inspection helpers,
 // and the B-path byte-for-byte verification.
 // ---------------------------------------------------------------------------
 
@@ -518,33 +513,25 @@ fn probe_account_rejects_a_non_interactive_shell() {
 }
 
 #[test]
-fn unknown_hash_scheme_uses_hash_scheme_unknown_without_bypass_alternative() {
+fn unknown_hash_scheme_returns_the_typed_blocker() {
     assert!(replacement_password_hash("root:!:1:0:99999:7:::\n", "root", None).is_err());
-    assert_eq!(
-        blocker_alternatives(EmulationLinuxBypassBlockerDto::HashSchemeUnknown),
-        vec![EmulationLinuxBypassAlternativeDto::LaunchWithoutBypass]
-    );
-    assert_eq!(
-        blocker_alternatives(EmulationLinuxBypassBlockerDto::AccountNotFound),
-        vec![EmulationLinuxBypassAlternativeDto::LaunchWithoutBypass]
-    );
 }
 
 #[test]
-fn shared_xfs_inode_classifies_as_appliance_shared_extents() {
+fn shared_xfs_inode_is_unavailable_for_in_place_changes() {
     let fs = open_xfs(xfs_fixture(true, false));
     match assess_xfs(&fs, b"etc/shadow") {
-        XfsVerdict::Appliance(EmulationLinuxBypassBlockerDto::SharedExtents) => {}
-        other => panic!("expected Appliance(SharedExtents), got {other:?}"),
+        XfsVerdict::Unavailable(EmulationLinuxBypassBlockerDto::SharedExtents) => {}
+        other => panic!("expected Unavailable(SharedExtents), got {other:?}"),
     }
 }
 
 #[test]
-fn dirty_xfs_log_classifies_as_appliance_dirty_log() {
+fn dirty_xfs_log_is_unavailable_for_in_place_changes() {
     let fs = open_xfs(xfs_fixture(false, true));
     match assess_xfs(&fs, b"etc/shadow") {
-        XfsVerdict::Appliance(EmulationLinuxBypassBlockerDto::DirtyLog) => {}
-        other => panic!("expected Appliance(DirtyLog), got {other:?}"),
+        XfsVerdict::Unavailable(EmulationLinuxBypassBlockerDto::DirtyLog) => {}
+        other => panic!("expected Unavailable(DirtyLog), got {other:?}"),
     }
 }
 
@@ -558,39 +545,14 @@ fn plain_xfs_volume_is_host_inplace_eligible() {
 }
 
 #[test]
-fn recommended_method_follows_support_and_blocker_family() {
+fn recommended_method_requires_supported_in_place_changes() {
     assert_eq!(
-        recommended_method(true, &[]),
+        recommended_method(true),
         EmulationLinuxBypassMethodDto::HostInPlace
     );
     assert_eq!(
-        recommended_method(false, &[EmulationLinuxBypassBlockerDto::SharedExtents]),
-        EmulationLinuxBypassMethodDto::LinuxAppliance
-    );
-    assert_eq!(
-        recommended_method(false, &[EmulationLinuxBypassBlockerDto::DirtyLog]),
-        EmulationLinuxBypassMethodDto::LinuxAppliance
-    );
-    assert_eq!(
-        recommended_method(false, &[EmulationLinuxBypassBlockerDto::EncryptedVolume]),
+        recommended_method(false),
         EmulationLinuxBypassMethodDto::None
-    );
-}
-
-#[test]
-fn blocker_alternatives_cover_appliance_and_unavailable_families() {
-    use EmulationLinuxBypassAlternativeDto::*;
-    assert_eq!(
-        blocker_alternatives(EmulationLinuxBypassBlockerDto::SharedExtents),
-        vec![RetryAppliance, LaunchWithoutBypass, ExternalRescueIso]
-    );
-    assert_eq!(
-        blocker_alternatives(EmulationLinuxBypassBlockerDto::DirtyLog),
-        vec![RetryAppliance, LaunchWithoutBypass, ExternalRescueIso]
-    );
-    assert_eq!(
-        blocker_alternatives(EmulationLinuxBypassBlockerDto::EncryptedVolume),
-        vec![LaunchWithoutBypass, ExternalRescueIso]
     );
 }
 
@@ -610,6 +572,6 @@ fn shadow_contents_match_rejects_a_mismatched_readback() {
 
 // ---------------------------------------------------------------------------
 // Read-only plan classification: AccountNotFound, HashSchemeUnknown, XFS
-// shared-inode/dirty-log → Appliance, already-configured, inspection helpers,
+// shared-inode/dirty-log refusals, already-configured, inspection helpers,
 // and the B-path byte-for-byte verification.
 // ---------------------------------------------------------------------------
