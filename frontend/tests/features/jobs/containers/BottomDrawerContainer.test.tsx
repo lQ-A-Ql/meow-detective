@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BottomDrawerContainer as BottomDrawer } from '@/features/jobs/containers/BottomDrawerContainer';
+import { JobStatusCard } from '@/features/jobs/components/JobStatusCard';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -149,6 +150,30 @@ describe('BottomDrawer jobs panel', () => {
     render(<BottomDrawer />);
 
     expect(screen.getByTitle('Enumerating').className).toContain('truncate');
+    expect(screen.getByRole('progressbar', { name: 'Import data source' })).toHaveAttribute('aria-valuenow', '41');
+  });
+
+  it('shows indeterminate progress while a running job finishes', () => {
+    render(
+      <JobStatusCard
+        tone="running"
+        job={{
+          id: 'import',
+          name: 'Import data source',
+          scope: 'Case ingest',
+          progress: 99,
+          status: 'running',
+          detail: 'Publishing',
+          warningCount: 0,
+          skippedCount: 0,
+          failedCount: 0,
+          partial: false,
+        }}
+      />,
+    );
+
+    expect(screen.getByRole('progressbar', { name: 'Import data source' })).not.toHaveAttribute('aria-valuenow');
+    expect(screen.queryByText('99%')).toBeNull();
   });
 
   it('shows typed import signals for partial freshness, cache state, cancellation, and report readiness', () => {

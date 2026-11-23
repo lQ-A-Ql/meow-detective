@@ -1,5 +1,7 @@
 import { useTranslation } from 'react-i18next';
+import { Progress } from '@/app/components/ui/progress';
 import { JobOutcomeBadges } from '@/features/jobs/components/JobOutcomeBadges';
+import { activeJobProgress } from '@/features/jobs/model/job-progress';
 import type { JobSnapshot } from '@/types/models';
 
 interface JobStatusCardProps {
@@ -26,7 +28,7 @@ export function JobStatusCard({ job, tone }: JobStatusCardProps) {
       </div>
       <JobOutcomeBadges job={job} />
       {tone === 'running' && job.currentPartition ? <PartitionProgress job={job} /> : null}
-      {tone === 'running' ? <OverallProgress job={job} /> : null}
+      {tone === 'running' || tone === 'cancelling' ? <OverallProgress job={job} /> : null}
     </div>
   );
 }
@@ -46,15 +48,7 @@ function PartitionProgress({ job }: { job: JobSnapshot }) {
         </span>
       </div>
       <div className="mt-1.5 flex items-center gap-2">
-        <div className="h-1.5 flex-1 overflow-hidden bg-transparent">
-          <div
-            className="h-full transition-colors duration-300"
-            style={{
-              width: `${progress}%`,
-              backgroundColor: progress >= 100 ? 'var(--forensics-success)' : 'var(--forensics-700)',
-            }}
-          />
-        </div>
+        <Progress className="h-1.5 flex-1" value={progress} aria-label={job.currentPartition} />
         <span className="w-8 text-right font-mono text-[10px] text-forensics-text-tertiary">{progress}%</span>
       </div>
       <div className="mt-1 break-words text-[11px] font-light text-forensics-text-secondary">
@@ -65,12 +59,11 @@ function PartitionProgress({ job }: { job: JobSnapshot }) {
 }
 
 function OverallProgress({ job }: { job: JobSnapshot }) {
+  const value = activeJobProgress(job);
   return (
     <div className="mt-2 flex items-center gap-2">
-      <div className="h-1 flex-1 overflow-hidden border border-forensics-border bg-forensics-200">
-        <div className="h-full bg-forensics-text" style={{ width: `${job.progress}%` }} />
-      </div>
-      <span className="font-mono text-[10px] text-forensics-muted-light">{job.progress}%</span>
+      <Progress className="flex-1" value={value} indeterminate={value === null} aria-label={job.name} />
+      {value === null ? null : <span className="font-mono text-[10px] text-forensics-muted-light">{value}%</span>}
     </div>
   );
 }

@@ -3,11 +3,13 @@ import { Tooltip } from '@/app/components/ui/tooltip';
 import { ChevronDown, ChevronUp, Terminal } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
+import { Progress } from '@/app/components/ui/progress';
 import type { useResizableHeight } from '@/hooks/use-resizable-height';
 import { BottomDrawerIssues } from '@/features/jobs/components/BottomDrawerIssues';
 import { BottomDrawerJobs } from '@/features/jobs/components/BottomDrawerJobs';
 import { BottomDrawerTrace } from '@/features/jobs/components/BottomDrawerTrace';
 import type { BottomDrawerModel } from '@/features/jobs/model/bottom-drawer-model';
+import { activeJobProgress } from '@/features/jobs/model/job-progress';
 
 export interface BottomDrawerProps {
   model: BottomDrawerModel;
@@ -21,14 +23,19 @@ export function BottomDrawerView({
 }: BottomDrawerProps & { resize: ReturnType<typeof useResizableHeight> }) {
   const { t } = useTranslation();
   const { height, isResizing, onResizeStart } = resize;
+  const activeJob = model.runningJobs[0] ?? model.cancellingJobs[0];
+  const progress = activeJob ? activeJobProgress(activeJob) : null;
 
   return (
     <div
       className={`z-10 min-w-0 shrink-0 overflow-hidden bg-forensics-base transition-[height] duration-150 ${
-        model.drawerOpen ? 'flex flex-col' : 'h-8 overflow-hidden'
+        model.drawerOpen ? 'flex flex-col' : activeJob ? 'h-11' : 'h-8'
       }`}
       style={model.drawerOpen ? { height: `${height}px` } : undefined}
     >
+      {!model.drawerOpen && activeJob ? (
+        <Progress className="h-0.5" value={progress} indeterminate={progress === null} aria-label={activeJob.name} />
+      ) : null}
       <div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 font-mono text-[11px] text-forensics-muted">
         <div className="flex min-w-0 items-center gap-3 overflow-hidden">
           <div className="flex min-w-0 flex-1 items-center gap-2">
