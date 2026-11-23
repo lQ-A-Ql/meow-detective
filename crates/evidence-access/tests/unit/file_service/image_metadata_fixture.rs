@@ -87,28 +87,20 @@ pub(super) fn jpeg(exif: &[u8]) -> Vec<u8> {
 }
 
 pub(super) fn png(exif: Option<&[u8]>) -> Vec<u8> {
-    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
-    let mut ihdr = [0; 13];
-    ihdr[3] = 2;
-    ihdr[7] = 3;
-    ihdr[8] = 8;
-    ihdr[9] = 2;
-    png_chunk(&mut bytes, b"IHDR", &ihdr);
-    if let Some(exif) = exif {
-        png_chunk(&mut bytes, b"eXIf", exif);
+    use image_inspection::png_codec::{chunk, BitDepth, ColorType, Encoder};
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = Encoder::new(&mut bytes, 2, 3);
+        encoder.set_color(ColorType::Rgb);
+        encoder.set_depth(BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        if let Some(exif) = exif {
+            writer.write_chunk(chunk::eXIf, exif).unwrap();
+        }
+        writer.write_image_data(&[0u8; 18]).unwrap();
+        writer.finish().unwrap();
     }
-    png_chunk(&mut bytes, b"IEND", &[]);
     bytes
-}
-
-pub(super) fn png_chunk(bytes: &mut Vec<u8>, kind: &[u8; 4], payload: &[u8]) {
-    bytes.extend_from_slice(&(payload.len() as u32).to_be_bytes());
-    bytes.extend_from_slice(kind);
-    bytes.extend_from_slice(payload);
-    let mut hash = crc32fast::Hasher::new();
-    hash.update(kind);
-    hash.update(payload);
-    bytes.extend_from_slice(&hash.finalize().to_be_bytes());
 }
 
 pub(super) fn webp(exif: &[u8]) -> Vec<u8> {

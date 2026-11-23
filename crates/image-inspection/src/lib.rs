@@ -12,6 +12,8 @@ mod stats;
 mod types;
 mod warnings;
 
+/// Shared PNG codec and structural decoder.
+pub use png as png_codec;
 /// Shared BMP parser used by metadata inspection and pixel analysis.
 pub use tinybmp as bmp;
 

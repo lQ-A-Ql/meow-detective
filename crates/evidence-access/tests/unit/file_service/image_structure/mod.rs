@@ -6,29 +6,12 @@ use std::sync::atomic::AtomicBool;
 use crate::file_service::FileServiceError;
 
 use super::{
-    analyze_image, ImageAnalysisStatus, ImageAnalyzeOptions, ImageByteSource, ImageFormat,
-    ImageStructureError,
+    analyze_image, ImageAnalysisStatus, ImageAnalyzeOptions, ImageFormat, ImageStructureError,
+    SeekableSource,
 };
 
-struct MemorySource(Vec<u8>);
-
-impl ImageByteSource for MemorySource {
-    fn size(&self) -> u64 {
-        self.0.len() as u64
-    }
-
-    fn read_at(&mut self, offset: u64, length: usize) -> Result<Vec<u8>, FileServiceError> {
-        let start = offset as usize;
-        if start >= self.0.len() {
-            return Ok(Vec::new());
-        }
-        let end = (start + length).min(self.0.len());
-        Ok(self.0[start..end].to_vec())
-    }
-}
-
 fn analyze(bytes: Vec<u8>, options: ImageAnalyzeOptions) -> super::ImageAnalysisReport {
-    let mut source = MemorySource(bytes);
+    let mut source = SeekableSource::new(std::io::Cursor::new(bytes)).unwrap();
     analyze_image(&mut source, &options, &AtomicBool::new(false)).expect("analysis reads")
 }
 
@@ -83,16 +66,18 @@ fn jpeg_with_frame() -> Vec<u8> {
 }
 
 fn png_with_two_exif(tiff: &[u8]) -> Vec<u8> {
-    let mut bytes = b"\x89PNG\r\n\x1a\n".to_vec();
-    let mut ihdr = [0; 13];
-    ihdr[3] = 2;
-    ihdr[7] = 3;
-    ihdr[8] = 8;
-    ihdr[9] = 2;
-    fixture::png_chunk(&mut bytes, b"IHDR", &ihdr);
-    fixture::png_chunk(&mut bytes, b"eXIf", tiff);
-    fixture::png_chunk(&mut bytes, b"eXIf", tiff);
-    fixture::png_chunk(&mut bytes, b"IEND", &[]);
+    use image_inspection::png_codec::{chunk, BitDepth, ColorType, Encoder};
+    let mut bytes = Vec::new();
+    {
+        let mut encoder = Encoder::new(&mut bytes, 2, 3);
+        encoder.set_color(ColorType::Rgb);
+        encoder.set_depth(BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_chunk(chunk::eXIf, tiff).unwrap();
+        writer.write_chunk(chunk::eXIf, tiff).unwrap();
+        writer.write_image_data(&[0u8; 18]).unwrap();
+        writer.finish().unwrap();
+    }
     bytes
 }
 
@@ -284,36 +269,85 @@ fn bmp_size_mismatch_is_a_structure_finding() {
         .any(|finding| finding.code == "image.bmp.size-mismatch"));
 }
 
-struct FailingSource;
-
-impl ImageByteSource for FailingSource {
-    fn size(&self) -> u64 {
-        16
-    }
-
-    fn read_at(&mut self, _offset: u64, _length: usize) -> Result<Vec<u8>, FileServiceError> {
-        Err(FileServiceError::Security("denied".to_string()))
-    }
-}
-
 #[test]
 fn source_errors_and_cancellation_propagate() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("source.png");
+    std::fs::write(&path, fixture::png(None)).unwrap();
+    let mut source = SeekableSource::new(std::fs::File::open(&path).unwrap()).unwrap();
+    std::fs::OpenOptions::new()
+        .write(true)
+        .open(&path)
+        .unwrap()
+        .set_len(0)
+        .unwrap();
     let error = analyze_image(
-        &mut FailingSource,
+        &mut source,
         &ImageAnalyzeOptions::viewer(),
         &AtomicBool::new(false),
     )
     .expect_err("read errors propagate");
     assert!(matches!(
         error,
-        ImageStructureError::Read(FileServiceError::Security(_))
+        ImageStructureError::Read(FileServiceError::Io(_))
     ));
 
-    let mut source = MemorySource(fixture::png(None));
+    let mut source = SeekableSource::new(std::io::Cursor::new(fixture::png(None))).unwrap();
     let cancelled = analyze_image(
         &mut source,
         &ImageAnalyzeOptions::viewer(),
         &AtomicBool::new(true),
     );
     assert!(matches!(cancelled, Err(ImageStructureError::Cancelled)));
+}
+
+#[test]
+fn native_png_ranges_remain_exact_across_input_buffer_boundaries() {
+    let mut tiff = fixture::tiff(true);
+    tiff.resize(70_000, 0);
+    let bytes = fixture::png(Some(&tiff));
+    let report = viewer(bytes.clone());
+    assert_eq!(report.status, ImageAnalysisStatus::Present);
+    let structure = report.structure.unwrap();
+    assert_eq!(structure.declared_end, Some(bytes.len() as u64));
+    assert_eq!(structure.trailing_bytes, Some(0));
+    assert_eq!(structure.segments.first().unwrap().offset, 8);
+    for pair in structure.segments.windows(2) {
+        assert_eq!(pair[0].offset + pair[0].length, pair[1].offset);
+    }
+    let last = structure.segments.last().unwrap();
+    assert_eq!(last.kind, "png.IEND");
+    assert_eq!(last.offset + last.length, bytes.len() as u64);
+}
+
+#[test]
+fn native_png_scan_budget_cannot_publish_a_complete_structure() {
+    let mut tiff = fixture::tiff(true);
+    tiff.resize(70_000, 0);
+    let report = analyze(
+        fixture::png(Some(&tiff)),
+        ImageAnalyzeOptions {
+            scan_limit: 64,
+            ..ImageAnalyzeOptions::viewer()
+        },
+    );
+    assert_eq!(report.status, ImageAnalysisStatus::Oversized);
+    assert_eq!(report.structure.unwrap().declared_end, None);
+    assert!(report.bytes_read <= 80);
+}
+
+#[test]
+fn native_png_structural_decoder_rejects_a_damaged_idat_checksum() {
+    let mut bytes = fixture::png(None);
+    let parsed = viewer(bytes.clone());
+    let structure = parsed.structure.unwrap();
+    let idat = structure
+        .segments
+        .iter()
+        .find(|segment| segment.kind == "png.IDAT")
+        .unwrap();
+    bytes[idat.offset as usize + 8] ^= 1;
+    let damaged = viewer(bytes);
+    assert_eq!(damaged.status, ImageAnalysisStatus::Corrupt);
+    assert_eq!(damaged.structure.unwrap().declared_end, None);
 }
