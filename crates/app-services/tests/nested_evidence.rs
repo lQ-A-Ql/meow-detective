@@ -49,25 +49,18 @@ fn nested_pipeline_reuses_registered_id_and_exposes_child_catalog_and_bytes() {
     let case = setup();
     case.active
         .with_conn(|conn| {
-            let result = nested_evidence_service::materialize_fixed_vhd(
-                conn,
-                &case.active.case_root,
-                &case.active.meta.id,
-                "parent",
-                "child",
-            )
-            .unwrap();
-            let repeated = nested_evidence_service::materialize_fixed_vhd(
-                conn,
-                &case.active.case_root,
-                &case.active.meta.id,
-                "parent",
-                "child",
-            )
-            .unwrap();
+            let revision = parent_revision(conn, &case);
+            let prepared = materialize(conn, &case, &revision).unwrap();
+            assert!(prepared
+                .probe
+                .as_ref()
+                .is_some_and(|probe| !probe.partitions.is_empty()));
+            let result = prepared.result;
+            let prepared_probe = prepared.probe;
+            let repeated = materialize(conn, &case, &revision).unwrap();
             assert_eq!(
                 result.derived_data_source_id,
-                repeated.derived_data_source_id
+                repeated.result.derived_data_source_id
             );
             assert_eq!(result.lineage.parent_file_id.as_deref(), Some("child"));
             let source = DataSourceRepo::new(conn)
@@ -82,6 +75,7 @@ fn nested_pipeline_reuses_registered_id_and_exposes_child_catalog_and_bytes() {
             )
             .unwrap();
             config.existing_data_source_id = Some(source.id.clone());
+            config.prepared_probe = prepared_probe;
             execute_import_job(
                 conn,
                 &case.active.meta.id,
@@ -171,12 +165,14 @@ fn mid_copy_cancel_leaves_no_derived_source_and_retry_succeeds() {
     case.active
         .with_conn(|conn| {
             let cancel = AtomicBool::new(false);
-            let result = nested_evidence_service::materialize_fixed_vhd_with_cancel(
+            let revision = parent_revision(conn, &case);
+            let result = nested_evidence_service::materialize_fixed_vhd_with_cancel_prepared(
                 conn,
                 &case.active.case_root,
                 &case.active.meta.id,
                 "parent",
                 "child",
+                &revision,
                 &cancel,
                 &|_, _| cancel.store(true, Ordering::Release),
             );
@@ -196,14 +192,7 @@ fn mid_copy_cancel_leaves_no_derived_source_and_retry_succeeds() {
                     .count(),
                 0
             );
-            assert!(nested_evidence_service::materialize_fixed_vhd(
-                conn,
-                &case.active.case_root,
-                &case.active.meta.id,
-                "parent",
-                "child"
-            )
-            .is_ok());
+            assert!(materialize(conn, &case, &revision).is_ok());
             Ok(())
         })
         .unwrap();
@@ -213,31 +202,78 @@ fn changed_materialized_bytes_are_rejected_on_retry() {
     let case = setup();
     case.active
         .with_conn(|conn| {
-            let result = nested_evidence_service::materialize_fixed_vhd(
-                conn,
-                &case.active.case_root,
-                &case.active.meta.id,
-                "parent",
-                "child",
-            )
-            .unwrap();
+            let revision = parent_revision(conn, &case);
+            let result = materialize(conn, &case, &revision).unwrap();
             let path = case
                 .active
                 .case_root
                 .join("derived/nested-evidence")
-                .join(format!("{}.vhd", result.derived_data_source_id));
+                .join(format!("{}.vhd", result.result.derived_data_source_id));
             let mut bytes = std::fs::read(&path).unwrap();
             bytes[0] ^= 1;
             std::fs::write(path, bytes).unwrap();
-            assert!(nested_evidence_service::materialize_fixed_vhd(
-                conn,
-                &case.active.case_root,
-                &case.active.meta.id,
-                "parent",
-                "child"
-            )
-            .is_err());
+            assert!(materialize(conn, &case, &revision).is_err());
             Ok(())
         })
         .unwrap();
+}
+
+#[test]
+fn changed_parent_revision_rejects_reuse() {
+    let case = setup();
+    case.active
+        .with_conn(|conn| {
+            let revision = parent_revision(conn, &case);
+            materialize(conn, &case, &revision).unwrap();
+            let path = case.temp.path().join("nested-parent/child.vhd");
+            let file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+            file.set_modified(
+                std::time::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000),
+            )
+            .unwrap();
+            assert_ne!(parent_revision(conn, &case), revision);
+            assert!(matches!(
+                materialize(conn, &case, &revision),
+                Err(nested_evidence_service::NestedEvidenceError::Materialization(
+                    nested_evidence_service::MaterializeError::Source(message)
+                )) if message == "parent evidence changed before nested evidence reuse"
+            ));
+            Ok(())
+        })
+        .unwrap();
+}
+
+fn materialize(
+    conn: &rusqlite::Connection,
+    case: &fixture::EvidenceCase,
+    revision: &str,
+) -> Result<
+    nested_evidence_service::NestedEvidenceMaterialized,
+    nested_evidence_service::NestedEvidenceError,
+> {
+    nested_evidence_service::materialize_fixed_vhd_with_cancel_prepared(
+        conn,
+        &case.active.case_root,
+        &case.active.meta.id,
+        "parent",
+        "child",
+        revision,
+        &AtomicBool::new(false),
+        &|_, _| {},
+    )
+}
+
+fn parent_revision(conn: &rusqlite::Connection, case: &fixture::EvidenceCase) -> String {
+    app_services::digest_service::identity::snapshot(
+        conn,
+        &case.active.case_root,
+        &case.active.meta.id,
+        &app_services::digest_service::DigestTarget {
+            data_source_id: Some("parent"),
+            file_id: Some("ds:parent:child"),
+            partition_index: None,
+        },
+    )
+    .unwrap()
+    .revision
 }

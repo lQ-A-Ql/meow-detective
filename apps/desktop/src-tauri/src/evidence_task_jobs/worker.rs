@@ -213,16 +213,20 @@ fn execute_nested(
     progress: &(dyn Fn(u64, u64) + Sync),
     request: &transport::commands::MaterializeNestedEvidenceRequest,
 ) -> Result<EvidenceTaskResultDto, CommandError> {
-    let mut result = app_services::nested_evidence_service::materialize_fixed_vhd_with_cancel(
-        conn,
-        &ctx.root,
-        &ctx.case,
-        &request.parent_data_source_id,
-        &request.file_entry_id,
-        cancel,
-        progress,
-    )
-    .map_err(CommandError::from_typed_service_error)?;
+    let prepared =
+        app_services::nested_evidence_service::materialize_fixed_vhd_with_cancel_prepared(
+            conn,
+            &ctx.root,
+            &ctx.case,
+            &request.parent_data_source_id,
+            &request.file_entry_id,
+            &ctx.plan.task.source_revision,
+            cancel,
+            progress,
+        )
+        .map_err(CommandError::from_typed_service_error)?;
+    let mut result = prepared.result;
+    let prepared_probe = prepared.probe;
     let source = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
         .find_by_case(&ctx.case)
         .map_err(CommandError::from_service_error)?
@@ -248,6 +252,7 @@ fn execute_nested(
     )
     .map_err(CommandError::from_typed_service_error)?;
     config.existing_data_source_id = Some(source.id);
+    config.prepared_probe = prepared_probe;
     let sink = crate::commands::import::events::TauriImportEventSink::new(&ctx.app);
     app_services::import_pipeline::execute_import_job(
         conn,

@@ -1,6 +1,14 @@
-use crate::datasource_service::{detect_image_filesystem, ImageFilesystemKind};
+use crate::datasource_service::{
+    detect_image_filesystem, ImageFilesystemKind, ImageFilesystemProbe,
+};
 use std::path::Path;
-pub(super) fn detect(path: &Path) -> Result<&'static str, persistence_sqlite::DbError> {
+
+pub(super) struct DetectedPlatform {
+    pub platform: &'static str,
+    pub probe: ImageFilesystemProbe,
+}
+
+pub(super) fn detect(path: &Path) -> Result<DetectedPlatform, persistence_sqlite::DbError> {
     let mut reader = evidence_core::RawImageReader::open(path)
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let probe = detect_image_filesystem(&mut reader)
@@ -22,9 +30,10 @@ pub(super) fn detect(path: &Path) -> Result<&'static str, persistence_sqlite::Db
             ImageFilesystemKind::Ntfs | ImageFilesystemKind::BitLocker
         )
     });
-    Ok(if linux && !windows {
+    let platform = if linux && !windows {
         "linux"
     } else {
         "windows"
-    })
+    };
+    Ok(DetectedPlatform { platform, probe })
 }

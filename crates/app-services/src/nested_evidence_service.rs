@@ -12,7 +12,12 @@ const MAX_NESTED_LINEAGE_ROWS: usize = 4_096;
 mod materialize;
 mod platform;
 mod reuse;
-pub use materialize::{materialize_fixed_vhd, materialize_fixed_vhd_with_cancel, MaterializeError};
+pub use materialize::{materialize_fixed_vhd_with_cancel_prepared, MaterializeError};
+
+pub struct NestedEvidenceMaterialized {
+    pub result: transport::dto::NestedEvidenceMaterializedDto,
+    pub probe: Option<evidence_access::datasource_service::ImageFilesystemProbe>,
+}
 
 #[derive(Debug, Error)]
 pub enum NestedEvidenceError {

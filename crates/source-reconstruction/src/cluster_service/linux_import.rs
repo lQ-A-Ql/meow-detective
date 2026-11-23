@@ -147,6 +147,7 @@ impl LinuxEvidenceSetImportPlan {
                         &self.members,
                         &member.source_path,
                     ),
+                    prepared_probe: None,
                 })
             })
             .collect()

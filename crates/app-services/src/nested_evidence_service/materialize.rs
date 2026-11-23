@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use transport::dto::{NestedEvidenceLineageDto, NestedEvidenceMaterializedDto};
 
-use super::NestedEvidenceError;
+use super::{NestedEvidenceError, NestedEvidenceMaterialized};
 
 const CHUNK_BYTES: u32 = 8 * 1024 * 1024;
 const MAX_VHD_BYTES: u64 = 512 * 1024 * 1024 * 1024;
@@ -46,39 +46,23 @@ pub enum MaterializeError {
 /// from the catalog entry. The resulting file is an explicit derived source
 /// under the case root and remains pending until the normal import pipeline
 /// indexes it.
-pub fn materialize_fixed_vhd(
+pub fn materialize_fixed_vhd_with_cancel_prepared(
     case_conn: &Connection,
     case_root: &Path,
     case_id: &CaseId,
     parent_data_source_id: &str,
     file_entry_id: &str,
-) -> Result<NestedEvidenceMaterializedDto, NestedEvidenceError> {
-    materialize_fixed_vhd_with_cancel(
-        case_conn,
-        case_root,
-        case_id,
-        parent_data_source_id,
-        file_entry_id,
-        &std::sync::atomic::AtomicBool::new(false),
-        &|_, _| {},
-    )
-}
-
-pub fn materialize_fixed_vhd_with_cancel(
-    case_conn: &Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    parent_data_source_id: &str,
-    file_entry_id: &str,
+    expected_revision: &str,
     cancel: &std::sync::atomic::AtomicBool,
     progress: &(dyn Fn(u64, u64) + Sync),
-) -> Result<NestedEvidenceMaterializedDto, NestedEvidenceError> {
+) -> Result<NestedEvidenceMaterialized, NestedEvidenceError> {
     materialize_inner(
         case_conn,
         case_root,
         case_id,
         parent_data_source_id,
         file_entry_id,
+        expected_revision,
         cancel,
         progress,
     )
@@ -95,9 +79,10 @@ fn materialize_inner(
     case_id: &CaseId,
     parent_id: &str,
     file_id: &str,
+    expected_revision: &str,
     cancel: &std::sync::atomic::AtomicBool,
     progress: &(dyn Fn(u64, u64) + Sync),
-) -> Result<NestedEvidenceMaterializedDto, MaterializeError> {
+) -> Result<NestedEvidenceMaterialized, MaterializeError> {
     if cancel.load(std::sync::atomic::Ordering::Acquire) {
         return Err(MaterializeError::Cancelled);
     }
@@ -121,10 +106,7 @@ fn materialize_inner(
         file_id: Some(&global_id),
         partition_index: None,
     };
-    let revision =
-        crate::digest_service::identity::snapshot(case_conn, case_root, case_id, &target)
-            .map_err(|error| MaterializeError::Source(error.to_string()))?
-            .revision;
+    let revision = expected_revision;
     let derived_id = DataSourceId(format!(
         "nested-{}",
         &hex::encode(Sha256::digest(format!("{parent_id}:{file_id}:{revision}")))[..32]
@@ -138,9 +120,19 @@ fn materialize_inner(
         cancel,
         progress,
     )? {
-        return Ok(materialized_result(
-            parent, entry.id.0, entry.path, derived_id, size,
-        ));
+        let current =
+            crate::digest_service::identity::snapshot(case_conn, case_root, case_id, &target)
+                .map_err(|error| MaterializeError::Source(error.to_string()))?
+                .revision;
+        if current != revision {
+            return Err(MaterializeError::Source(
+                "parent evidence changed before nested evidence reuse".into(),
+            ));
+        }
+        return Ok(NestedEvidenceMaterialized {
+            result: materialized_result(parent, entry.id.0, entry.path, derived_id, size),
+            probe: None,
+        });
     }
     let (output_path, temp_path) = prepare_output_paths(case_root, &derived_id)?;
     let write_result = copy_entry(
@@ -171,6 +163,7 @@ fn materialize_inner(
             MaterializeError::Source("parent evidence changed during materialization".into())
         });
     }
+    let detected = super::platform::detect(&output_path)?;
     let registration = register_materialized_vhd(
         case_conn,
         case_id,
@@ -178,6 +171,7 @@ fn materialize_inner(
         &entry,
         &derived_id,
         &output_path,
+        detected.platform,
         &hash,
     );
     if let Err(error) = registration {
@@ -185,9 +179,10 @@ fn materialize_inner(
         return Err(MaterializeError::Database(error));
     }
     persist_lineage(case_root, &parent, &entry, &derived_id, size)?;
-    Ok(materialized_result(
-        parent, entry.id.0, entry.path, derived_id, size,
-    ))
+    Ok(NestedEvidenceMaterialized {
+        result: materialized_result(parent, entry.id.0, entry.path, derived_id, size),
+        probe: Some(detected.probe),
+    })
 }
 
 fn persist_lineage(
@@ -294,6 +289,7 @@ fn register_materialized_vhd(
     entry: &domain::FileEntry,
     derived_id: &DataSourceId,
     output_path: &Path,
+    platform: &'static str,
     hash: &str,
 ) -> Result<(), persistence_sqlite::DbError> {
     let derived = DataSource {
@@ -327,11 +323,7 @@ fn register_materialized_vhd(
     DataSourceRepo::new(&transaction).insert_with_storage(
         case_id,
         &derived,
-        &DataSourceStorage::source_db(
-            &derived_id.0,
-            Some(super::platform::detect(output_path)?),
-            Some("nested_vhd".into()),
-        ),
+        &DataSourceStorage::source_db(&derived_id.0, Some(platform), Some("nested_vhd".into())),
     )?;
     NestedEvidenceRepo::new(&transaction).upsert(&lineage)?;
     transaction

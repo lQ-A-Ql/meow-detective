@@ -96,6 +96,9 @@ pub(super) fn load_resume_candidates(
 fn probe_image(
     ctx: &ImportJobContext<'_>,
 ) -> Result<datasource_service::ImageFilesystemProbe, CommandError> {
+    if let Some(probe) = &ctx.import_config.prepared_probe {
+        return Ok(probe.clone());
+    }
     if let Some(runtime) = &ctx.runtime {
         let mut reader = runtime
             .open_reader_with_cancel(ctx.options.cancel_token)

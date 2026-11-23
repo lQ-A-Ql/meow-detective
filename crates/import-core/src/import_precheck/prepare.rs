@@ -18,6 +18,7 @@ pub struct ImportSourceConfig {
     pub import_set: Option<ImportSetMemberConfig>,
     pub lvm_extra_sources: Vec<datasource_service::LvmDiscoverySource>,
     pub existing_data_source_id: Option<domain::DataSourceId>,
+    pub prepared_probe: Option<datasource_service::ImageFilesystemProbe>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -113,6 +114,7 @@ pub fn prepare_import_source_config_from_path_with_kind(
         import_set: None,
         lvm_extra_sources: Vec::new(),
         existing_data_source_id: None,
+        prepared_probe: None,
     })
 }
 
