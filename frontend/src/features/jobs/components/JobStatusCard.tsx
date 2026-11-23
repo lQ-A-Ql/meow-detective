@@ -2,14 +2,15 @@ import { useTranslation } from 'react-i18next';
 import { Progress } from '@/app/components/ui/progress';
 import { JobOutcomeBadges } from '@/features/jobs/components/JobOutcomeBadges';
 import { activeJobProgress } from '@/features/jobs/model/job-progress';
-import type { JobSnapshot } from '@/types/models';
+import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
 
 interface JobStatusCardProps {
   job: JobSnapshot;
+  phase?: ImportPhaseProgress;
   tone: 'running' | 'completed' | 'failed' | 'warning' | 'cancelling' | 'cancelled';
 }
 
-export function JobStatusCard({ job, tone }: JobStatusCardProps) {
+export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
   const { t } = useTranslation();
   const className = cardClass(tone);
 
@@ -28,14 +29,16 @@ export function JobStatusCard({ job, tone }: JobStatusCardProps) {
       </div>
       <JobOutcomeBadges job={job} />
       {tone === 'running' && job.currentPartition ? <PartitionProgress job={job} /> : null}
-      {tone === 'running' || tone === 'cancelling' ? <OverallProgress job={job} /> : null}
+      {tone === 'running' || tone === 'cancelling' ? (
+        <OverallProgress job={job} value={activeJobProgress(job, phase)} />
+      ) : null}
     </div>
   );
 }
 
 function PartitionProgress({ job }: { job: JobSnapshot }) {
   const { t } = useTranslation();
-  const progress = job.partitionProgress ?? 0;
+  const progress = job.partitionProgress ?? null;
   return (
     <div className="mt-2 bg-transparent px-2 py-2">
       <div className="flex items-center justify-between gap-3 text-[10px] uppercase tracking-wider text-forensics-muted">
@@ -48,8 +51,15 @@ function PartitionProgress({ job }: { job: JobSnapshot }) {
         </span>
       </div>
       <div className="mt-1.5 flex items-center gap-2">
-        <Progress className="h-1.5 flex-1" value={progress} aria-label={job.currentPartition} />
-        <span className="w-8 text-right font-mono text-[10px] text-forensics-text-tertiary">{progress}%</span>
+        <Progress
+          className="h-1.5 flex-1"
+          value={progress}
+          indeterminate={progress === null}
+          aria-label={job.currentPartition}
+        />
+        {progress === null ? null : (
+          <span className="w-8 text-right font-mono text-[10px] text-forensics-text-tertiary">{progress}%</span>
+        )}
       </div>
       <div className="mt-1 break-words text-[11px] font-light text-forensics-text-secondary">
         {job.currentPartition}
@@ -58,8 +68,7 @@ function PartitionProgress({ job }: { job: JobSnapshot }) {
   );
 }
 
-function OverallProgress({ job }: { job: JobSnapshot }) {
-  const value = activeJobProgress(job);
+function OverallProgress({ job, value }: { job: JobSnapshot; value: number | null }) {
   return (
     <div className="mt-2 flex items-center gap-2">
       <Progress className="flex-1" value={value} indeterminate={value === null} aria-label={job.name} />

@@ -35,7 +35,7 @@ export function BottomDrawerJobs({ model, analysisProgress }: BottomDrawerJobsPr
         {analysisProgress}
         <ImportStatusPanel importSignals={model.importSignals} evidenceHashStatus={model.evidenceHashStatus} />
         {model.runningJobs.map((job) => (
-          <JobStatusCard key={job.id} job={job} tone="running" />
+          <JobStatusCard key={job.id} job={job} tone="running" phase={model.importSignals.latestPhase} />
         ))}
         {model.completedJobs.map((job) => (
           <JobStatusCard key={job.id} job={job} tone="completed" />

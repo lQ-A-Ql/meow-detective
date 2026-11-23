@@ -1,4 +1,5 @@
 import { useTranslation } from 'react-i18next';
+import { Progress } from '@/app/components/ui/progress';
 import {
   getCacheStateLabel,
   getEvidenceHashCaveatText,
@@ -10,11 +11,14 @@ import {
 } from '@/features/jobs/import-event-state';
 import type { BottomDrawerModel } from '@/features/jobs/model/bottom-drawer-model';
 import { StatusChip } from '@/features/jobs/components/StatusChip';
+import { importPhaseProgress } from '@/features/jobs/model/job-progress';
 
 type ImportStatusPanelProps = Pick<BottomDrawerModel, 'importSignals' | 'evidenceHashStatus'>;
 
 export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportStatusPanelProps) {
   const { t } = useTranslation();
+  const phase = importSignals.latestPhase;
+  const progress = phase ? importPhaseProgress(phase) : null;
   const visible = Boolean(
     importSignals.latestPhase ||
     importSignals.latestCancellation ||
@@ -46,19 +50,24 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
         </div>
         {importSignals.latestPhase ? (
           <div className="text-right">
-            <div className="font-mono text-forensics-text">
-              {importSignals.latestPhase.percent}
-              {t('bottomDrawer.importSignals.percent')}
-            </div>
+            {progress === null ? null : (
+              <div className="font-mono text-forensics-text">
+                {progress}
+                {t('bottomDrawer.importSignals.percent')}
+              </div>
+            )}
             <div className="text-[10px] text-forensics-muted-light">{importSignals.lastUpdatedAt ?? '-'}</div>
           </div>
         ) : null}
       </div>
-      {importSignals.latestPhase ? (
+      {phase ? (
         <div className="mt-2 flex items-center gap-2">
-          <div className="h-1 flex-1 overflow-hidden border border-forensics-border bg-forensics-200">
-            <div className="h-full bg-forensics-text" style={{ width: `${importSignals.latestPhase.percent}%` }} />
-          </div>
+          <Progress
+            className="flex-1"
+            value={progress}
+            indeterminate={progress === null}
+            aria-label={getImportPhaseLabel(phase.phase)}
+          />
           <span className="font-mono text-[10px] text-forensics-text-tertiary">
             {importSignals.latestPhase.metrics.rowsProcessed}
             {importSignals.latestPhase.metrics.rowsTotal ? `/${importSignals.latestPhase.metrics.rowsTotal}` : ''}

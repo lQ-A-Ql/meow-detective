@@ -20,7 +20,7 @@ function Progress({
     >
       <ProgressPrimitive.Indicator
         data-slot="progress-indicator"
-        className={cn('bg-forensics-ink h-full w-full flex-1', indeterminate && 'animate-pulse')}
+        className={cn('bg-forensics-ink h-full w-full flex-1', indeterminate && 'motion-safe:animate-pulse')}
         style={indeterminate ? undefined : { transform: `translateX(-${100 - (value || 0)}%)` }}
       />
     </ProgressPrimitive.Root>

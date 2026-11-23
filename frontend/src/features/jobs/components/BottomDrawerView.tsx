@@ -24,7 +24,7 @@ export function BottomDrawerView({
   const { t } = useTranslation();
   const { height, isResizing, onResizeStart } = resize;
   const activeJob = model.runningJobs[0] ?? model.cancellingJobs[0];
-  const progress = activeJob ? activeJobProgress(activeJob) : null;
+  const progress = activeJob ? activeJobProgress(activeJob, model.importSignals.latestPhase) : null;
 
   return (
     <div

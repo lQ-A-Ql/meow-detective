@@ -1,5 +1,12 @@
-import type { JobSnapshot } from '@/types/models';
+import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
 
-export function activeJobProgress(job: JobSnapshot): number | null {
-  return job.status === 'cancelling' || job.progress >= 99 ? null : job.progress;
+export function importPhaseProgress(phase: ImportPhaseProgress): number | null {
+  return phase.phase === 'finalize' && phase.state === 'running' ? null : phase.percent;
+}
+
+export function activeJobProgress(job: JobSnapshot, phase?: ImportPhaseProgress): number | null {
+  if (job.status === 'running' && phase?.jobId === job.id && importPhaseProgress(phase) === null) {
+    return null;
+  }
+  return Math.min(job.progress, 99);
 }

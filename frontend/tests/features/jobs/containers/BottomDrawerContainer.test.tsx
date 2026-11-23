@@ -2,6 +2,33 @@ import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BottomDrawerContainer as BottomDrawer } from '@/features/jobs/containers/BottomDrawerContainer';
 import { JobStatusCard } from '@/features/jobs/components/JobStatusCard';
+import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
+
+const publishingJob: JobSnapshot = {
+  id: 'import',
+  name: 'Import data source',
+  scope: 'Case ingest',
+  progress: 99,
+  status: 'running',
+  detail: 'Publishing',
+  warningCount: 0,
+  skippedCount: 0,
+  failedCount: 0,
+  partial: false,
+};
+
+const publishingPhase: ImportPhaseProgress = {
+  jobId: publishingJob.id,
+  caseId: 'case-1',
+  phase: 'finalize',
+  state: 'running',
+  percent: 99,
+  detail: 'Publishing',
+  metrics: { rssMb: 0, workers: 1, rowsProcessed: 0, bytesProcessed: 0, warnings: 0, skipped: 0, failed: 0 },
+  partialResults: [],
+  cancellable: false,
+  cancelRequested: false,
+};
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -154,26 +181,35 @@ describe('BottomDrawer jobs panel', () => {
   });
 
   it('shows indeterminate progress while a running job finishes', () => {
-    render(
-      <JobStatusCard
-        tone="running"
-        job={{
-          id: 'import',
-          name: 'Import data source',
-          scope: 'Case ingest',
-          progress: 99,
-          status: 'running',
-          detail: 'Publishing',
-          warningCount: 0,
-          skippedCount: 0,
-          failedCount: 0,
-          partial: false,
-        }}
-      />,
-    );
+    render(<JobStatusCard tone="running" job={publishingJob} phase={publishingPhase} />);
 
     expect(screen.getByRole('progressbar', { name: 'Import data source' })).not.toHaveAttribute('aria-valuenow');
     expect(screen.queryByText('99%')).toBeNull();
+  });
+
+  it('ignores another job’s finalization and preserves progress during cancellation', () => {
+    const { rerender } = render(
+      <JobStatusCard tone="running" job={publishingJob} phase={{ ...publishingPhase, jobId: 'other' }} />,
+    );
+
+    expect(screen.getByRole('progressbar', { name: publishingJob.name })).toHaveAttribute('aria-valuenow', '99');
+
+    rerender(
+      <JobStatusCard
+        tone="cancelling"
+        job={{ ...publishingJob, status: 'cancelling', progress: 42 }}
+        phase={publishingPhase}
+      />,
+    );
+
+    expect(screen.getByRole('progressbar', { name: publishingJob.name })).toHaveAttribute('aria-valuenow', '42');
+  });
+
+  it('shows a partition with unknown progress without a zero percent reading', () => {
+    render(<JobStatusCard tone="running" job={{ ...publishingJob, currentPartition: 'Partition 1' }} />);
+
+    expect(screen.getByRole('progressbar', { name: 'Partition 1' })).not.toHaveAttribute('aria-valuenow');
+    expect(screen.queryByText('0%')).toBeNull();
   });
 
   it('shows typed import signals for partial freshness, cache state, cancellation, and report readiness', () => {

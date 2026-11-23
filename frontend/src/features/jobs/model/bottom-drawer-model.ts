@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
+import { importPhaseProgress } from '@/features/jobs/model/job-progress';
 import {
   deriveEvidenceHashStatus,
   getImportPhaseLabel,
@@ -96,19 +97,21 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     ...buildJobWarningIssues(jobs, input.t),
     ...processingIssues.filter((issue) => issue.severity === 'warning'),
   ];
-  const typedHeadline = input.importSignals.latestCancellation
-    ? `${
-        input.importSignals.latestCancellation.safeToClose
-          ? input.t('bottomDrawer.labels.safeToClose')
-          : input.importSignals.latestCancellation.state
-      } · ${input.importSignals.latestCancellation.detail}`
-    : input.importSignals.latestPhase
-      ? `${getImportPhaseLabel(input.importSignals.latestPhase.phase)} ${input.importSignals.latestPhase.percent}% · ${input.importSignals.latestPhase.detail}`
-      : undefined;
+  const activeJob = runningJobs[0] ?? cancellingJobs[0];
+  const phase = input.importSignals.latestPhase;
+  const cancellation = input.importSignals.latestCancellation;
+  const phaseProgress = phase ? importPhaseProgress(phase) : null;
+  const typedHeadline =
+    cancellation && (!activeJob || cancellation.jobId === activeJob.id)
+      ? `${
+          cancellation.safeToClose ? input.t('bottomDrawer.labels.safeToClose') : cancellation.state
+        } · ${cancellation.detail}`
+      : phase && (!activeJob || phase.jobId === activeJob.id)
+        ? `${getImportPhaseLabel(phase.phase)}${phaseProgress === null ? '' : ` ${phaseProgress}%`} · ${phase.detail}`
+        : undefined;
   const recentScope =
-    runningJobs[0]?.scope ||
+    activeJob?.scope ||
     warningJobs[0]?.scope ||
-    cancellingJobs[0]?.scope ||
     failedJobs[0]?.scope ||
     completedJobs[0]?.scope ||
     input.t('bottomDrawer.status.idle');
@@ -131,10 +134,9 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     trace: input.trace ?? [],
     headline:
       typedHeadline ||
-      runningJobs[0]?.detail ||
+      activeJob?.detail ||
       warningJobs[0]?.detail ||
       failedJobs[0]?.detail ||
-      cancellingJobs[0]?.detail ||
       completedJobs[0]?.detail ||
       input.t('bottomDrawer.headline.waiting'),
     recentScope,
