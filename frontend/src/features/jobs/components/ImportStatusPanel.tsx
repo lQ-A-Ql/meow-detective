@@ -69,8 +69,8 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
             aria-label={getImportPhaseLabel(phase.phase)}
           />
           <span className="font-mono text-[10px] text-forensics-text-tertiary">
-            {importSignals.latestPhase.metrics.rowsProcessed}
-            {importSignals.latestPhase.metrics.rowsTotal ? `/${importSignals.latestPhase.metrics.rowsTotal}` : ''}
+            {phase.metrics.rowsProcessed}
+            {phase.metrics.rowsTotal ? `/${phase.metrics.rowsTotal}` : ''}
           </span>
         </div>
       ) : null}

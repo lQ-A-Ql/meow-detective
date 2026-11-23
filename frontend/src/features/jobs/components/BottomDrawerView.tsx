@@ -23,7 +23,7 @@ export function BottomDrawerView({
 }: BottomDrawerProps & { resize: ReturnType<typeof useResizableHeight> }) {
   const { t } = useTranslation();
   const { height, isResizing, onResizeStart } = resize;
-  const activeJob = model.runningJobs[0] ?? model.cancellingJobs[0];
+  const { activeJob } = model;
   const progress = activeJob ? activeJobProgress(activeJob, model.importSignals.latestPhase) : null;
 
   return (
@@ -41,7 +41,7 @@ export function BottomDrawerView({
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <Terminal size={12} className="shrink-0 text-forensics-muted-light" />
             <span className="block truncate" title={model.headline}>
-              [{t('bottomDrawer.jobs.title')}] {model.headline}
+              [{!model.drawerOpen && activeJob ? activeJob.name : t('bottomDrawer.jobs.title')}] {model.headline}
             </span>
           </div>
           <div className="hidden shrink-0 items-center gap-3 whitespace-nowrap border-l border-forensics-divider px-3 text-forensics-text-tertiary 2xl:flex">
@@ -67,6 +67,11 @@ export function BottomDrawerView({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {!model.drawerOpen && progress !== null ? (
+            <span aria-hidden="true" className="w-8 text-right tabular-nums text-forensics-text">
+              {progress}%
+            </span>
+          ) : null}
           <Tooltip content={model.drawerOpen ? t('bottomDrawer.toggle.collapse') : t('bottomDrawer.toggle.expand')}>
             <Button
               type="button"

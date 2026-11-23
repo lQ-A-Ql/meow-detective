@@ -37,6 +37,7 @@ export interface DrawerIssue {
 export interface BottomDrawerModel {
   drawerOpen: boolean;
   toggleDrawer: () => void;
+  activeJob?: JobSnapshot;
   runningJobs: JobSnapshot[];
   completedJobs: JobSnapshot[];
   failedJobs: JobSnapshot[];
@@ -119,6 +120,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
   return {
     drawerOpen: input.drawerOpen,
     toggleDrawer: input.toggleDrawer,
+    activeJob,
     runningJobs,
     completedJobs,
     failedJobs,
