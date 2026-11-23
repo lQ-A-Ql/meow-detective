@@ -77,6 +77,34 @@ fn admission_is_busy_at_the_active_limit() {
 }
 
 #[test]
+fn restarting_a_terminal_entry_respects_the_active_limit_without_mutating_history() {
+    let registry = HexSearchJobRegistry::default();
+    let old = start(&registry, "case", "ds:old:entry");
+    complete(&registry, "case", "ds:old:entry");
+    for index in 0..MAX_ACTIVE_HEX_SEARCHES {
+        start(&registry, "case", &format!("ds:active:{index}"));
+    }
+    assert_eq!(
+        registry.admit("case", "ds:old:entry", HexSearchModeDto::Hex, &[0x42]),
+        HexSearchAdmission::Busy
+    );
+    let unchanged = registry.get("case", "ds:old:entry").unwrap();
+    assert_eq!(unchanged.task_id, old);
+    assert_eq!(unchanged.phase, HexSearchPhaseDto::Completed);
+    complete(&registry, "case", "ds:active:0");
+    let HexSearchAdmission::Start(restarted) =
+        registry.admit("case", "ds:old:entry", HexSearchModeDto::Hex, &[0x42])
+    else {
+        panic!("released capacity must admit the restarted search");
+    };
+    assert_ne!(restarted.task_id, old);
+    assert!(
+        !registry.update_if_current("case", "ds:old:entry", &old, |status| status.phase =
+            HexSearchPhaseDto::Completed)
+    );
+}
+
+#[test]
 fn stale_task_updates_are_ignored() {
     let registry = HexSearchJobRegistry::default();
     let current = start(&registry, "case", "ds:a:1");

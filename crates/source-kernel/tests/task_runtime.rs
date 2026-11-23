@@ -69,6 +69,57 @@ fn parallel_queue_serializes_each_source_and_runs_an_independent_source() {
 }
 
 #[test]
+fn cancelled_parallel_worker_retains_capacity_until_the_worker_returns() {
+    let manager = TaskManager::new();
+    let (entered, observed) = mpsc::channel();
+    let (release_first, wait_first) = mpsc::sync_channel(0);
+    let (release_second, wait_second) = mpsc::sync_channel(0);
+    for (id, source, wait) in [("first", "a", wait_first), ("second", "b", wait_second)] {
+        let entered = entered.clone();
+        manager
+            .spawn_scoped_parallel(
+                id.into(),
+                TaskScope::data_source("case", source, id),
+                TaskPriority::Interactive,
+                Arc::new(AtomicBool::new(false)),
+                move || {
+                    entered.send(id).unwrap();
+                    wait.recv().unwrap();
+                    Ok(())
+                },
+            )
+            .unwrap();
+    }
+    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    observed.recv_timeout(Duration::from_secs(2)).unwrap();
+    assert!(manager.cancel("first"));
+    let third_entered = entered.clone();
+    manager
+        .spawn_scoped_parallel(
+            "third".into(),
+            TaskScope::data_source("case", "c", "third"),
+            TaskPriority::Interactive,
+            Arc::new(AtomicBool::new(false)),
+            move || {
+                third_entered.send("third").unwrap();
+                Ok(())
+            },
+        )
+        .unwrap();
+    assert!(observed.recv_timeout(Duration::from_millis(100)).is_err());
+    release_first.send(()).unwrap();
+    assert_eq!(
+        observed.recv_timeout(Duration::from_secs(2)).unwrap(),
+        "third"
+    );
+    release_second.send(()).unwrap();
+    for (_, result) in manager.wait_all(Duration::from_secs(2)) {
+        result.unwrap();
+    }
+    assert_eq!(manager.task_count(), 0);
+}
+
+#[test]
 fn interactive_work_precedes_queued_background_work_for_the_same_source() {
     let manager = TaskManager::new();
     let release = Arc::new(AtomicBool::new(false));

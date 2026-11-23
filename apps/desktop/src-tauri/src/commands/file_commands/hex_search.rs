@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
 
+use app_services::task_runtime::TaskPriority;
 use domain::CaseId;
 use tauri::State;
 use transport::{
@@ -71,12 +72,13 @@ pub async fn start_hex_search(
         max_matches,
         cancel_token: Arc::clone(&cancel_token),
     };
-    let registration =
-        app_state
-            .task_manager
-            .spawn_scoped(task_id.clone(), scope, cancel_token, move || {
-                run_hex_search(worker_state, job)
-            });
+    let registration = app_state.task_manager.spawn_scoped_parallel(
+        task_id.clone(),
+        scope,
+        TaskPriority::Interactive,
+        cancel_token,
+        move || run_hex_search(worker_state, job),
+    );
     if let Err(error) = registration {
         tracing::warn!(error = %error, "Hex search task failed to start");
         mark_failed(&app_state, &case_id, &file_id, &task_id);

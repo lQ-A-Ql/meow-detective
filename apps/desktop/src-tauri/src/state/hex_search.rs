@@ -72,10 +72,6 @@ impl HexSearchJobRegistry {
                     status,
                 };
             }
-            let Some(status) = insert_entry(state, key, mode, pattern, file_id) else {
-                return HexSearchAdmission::Busy;
-            };
-            return HexSearchAdmission::Start(status);
         }
         let active = state
             .entries
