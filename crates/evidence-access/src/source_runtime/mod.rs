@@ -6,6 +6,7 @@
 
 pub mod factory;
 pub mod identity;
+pub mod nested_range;
 pub mod partition;
 pub mod snapshot;
 

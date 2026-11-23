@@ -4,6 +4,8 @@ use domain::{
     CaseId, DataSource, DataSourceHashStatus, DataSourceId, DataSourceKind, DataSourceProvenance,
     DataSourceProvenanceStatus, FileEntryId, NestedEvidenceLineage,
 };
+use evidence_access::source_runtime::nested_range::NestedRangeFactory;
+use evidence_core::EvidenceReaderFactory;
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{
     datasource_repo::{DataSourceRepo, DataSourceStorage},
@@ -135,6 +137,17 @@ fn materialize_inner(
             probe: None,
         });
     }
+    let factory = NestedRangeFactory {
+        case_root: case_root.to_path_buf(),
+        case_id: case_id.clone(),
+        parent_id: parent.clone(),
+        file_id: entry.id.clone(),
+        revision: revision.to_owned(),
+        length: size - 512,
+    };
+    let mut source_reader = factory.open_reader_with_cancel(cancel)?;
+    let detected = super::platform::detect(source_reader.as_mut())?;
+    drop(source_reader);
     let (output_path, temp_path) = prepare_output_paths(case_root, &derived_id)?;
     let write_result = copy_entry(
         &mut reader,
@@ -164,7 +177,6 @@ fn materialize_inner(
             MaterializeError::Source("parent evidence changed during materialization".into())
         });
     }
-    let detected = super::platform::detect(&output_path)?;
     let registration = register_materialized_vhd(
         case_conn,
         case_id,

@@ -1,16 +1,15 @@
 use crate::datasource_service::{
     detect_image_filesystem, ImageFilesystemKind, ImageFilesystemProbe,
 };
-use std::path::Path;
 
 pub(super) struct DetectedPlatform {
     pub platform: &'static str,
     pub probe: ImageFilesystemProbe,
 }
 
-pub(super) fn detect(path: &Path) -> Result<DetectedPlatform, persistence_sqlite::DbError> {
-    let mut reader = evidence_core::RawImageReader::open(path)
-        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+pub(super) fn detect(
+    mut reader: &mut dyn evidence_core::EvidenceReader,
+) -> Result<DetectedPlatform, persistence_sqlite::DbError> {
     let probe = detect_image_filesystem(&mut reader)
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let linux = probe.candidates.iter().any(|candidate| {
