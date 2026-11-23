@@ -142,6 +142,17 @@ fn real_linux_import_records_and_persists_source_facts_stage_timings() {
     assert_facts_measurements(&profiler.report());
     assert_facts_measurements(&persisted_report(&output));
     let events = sink.0.lock().unwrap();
+    let finalize = events
+        .iter()
+        .filter(|event| event.phase == ImportPhaseDto::Finalize)
+        .collect::<Vec<_>>();
+    let start = finalize
+        .iter()
+        .position(|event| event.state == ImportPhaseStateDto::Running)
+        .expect("running finalize event");
+    assert!(finalize[start + 1..].iter().any(|event| {
+        event.state == ImportPhaseStateDto::Completed && event.job_id == finalize[start].job_id
+    }));
     let facts = events
         .iter()
         .filter(|event| event.detail.contains("phase=source-facts"))

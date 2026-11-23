@@ -64,6 +64,14 @@ pub(crate) fn run_finalize_phase(
         )?;
     }
     ctx.report_job_progress(95, "Finalizing...")?;
+    super::super::profile::emit_timed_phase_profile(
+        ctx,
+        ImportPhaseDto::Finalize,
+        ImportPhaseStateDto::Running,
+        95,
+        Duration::ZERO,
+        "Finalizing...".into(),
+    )?;
     checkpoint_source_database(ctx, data_source)?;
     if let Some(TimelineOutcome::Completed(timeline_count)) = &timeline_outcome {
         emit_projection_ready_events(ctx, *timeline_count);
