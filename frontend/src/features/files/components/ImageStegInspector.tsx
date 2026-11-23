@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { Tooltip } from '@/app/components/ui/tooltip';
 import { Button } from '@/app/components/ui/button';
-import { InspectorSection } from '@/components/layout/InspectorPane';
+import { InspectorSection, InspectorSectionTitle } from '@/components/layout/InspectorPane';
 import type { ImageIssueSeverity, ImageStegAssessment, ImageStegBand, ImageStegReport } from '@/types/models';
 import type { ImageStegModel } from '@/features/files/hooks/use-image-steg';
 import { formatStegRatio, formatStegScore } from '@/features/files/image-steg-format';
@@ -18,14 +18,6 @@ function severityClass(severity: ImageIssueSeverity) {
   if (severity === 'error') return 'text-forensics-error-text';
   if (severity === 'warning') return 'text-forensics-warning-text';
   return 'text-forensics-muted-light';
-}
-
-function SectionLabel({ label }: { label: string }) {
-  return (
-    <div className="mb-1 border-b border-forensics-border text-[10px] uppercase tracking-wide text-forensics-muted-light">
-      {label}
-    </div>
-  );
 }
 
 function AssessmentBlock({ assessment }: { assessment: ImageStegAssessment }) {
@@ -107,14 +99,14 @@ function StegReportView({ report }: { report: ImageStegReport }) {
 
       {report.status === 'completed' && report.global ? (
         <div>
-          <SectionLabel label={t('fileBrowser.inspector.imageSteg.global')} />
+          <InspectorSectionTitle compact>{t('fileBrowser.inspector.imageSteg.global')}</InspectorSectionTitle>
           <AssessmentBlock assessment={report.global} />
         </div>
       ) : null}
 
       {planes.length > 0 ? (
         <div>
-          <SectionLabel label={t('fileBrowser.inspector.imageSteg.planes')} />
+          <InspectorSectionTitle compact>{t('fileBrowser.inspector.imageSteg.planes')}</InspectorSectionTitle>
           <div className="max-h-40 space-y-1 overflow-auto">
             {planes.map((plane) => (
               <div
@@ -141,7 +133,7 @@ function StegReportView({ report }: { report: ImageStegReport }) {
 
       {blocks.length > 0 ? (
         <div>
-          <SectionLabel label={t('fileBrowser.inspector.imageSteg.hotspots')} />
+          <InspectorSectionTitle compact>{t('fileBrowser.inspector.imageSteg.hotspots')}</InspectorSectionTitle>
           <div className="max-h-32 space-y-0.5 overflow-auto">
             {blocks.map((block) => (
               <div
@@ -169,7 +161,7 @@ function StegReportView({ report }: { report: ImageStegReport }) {
 
       {warnings.length > 0 ? (
         <div>
-          <SectionLabel label={t('fileBrowser.inspector.imageSteg.warnings')} />
+          <InspectorSectionTitle compact>{t('fileBrowser.inspector.imageSteg.warnings')}</InspectorSectionTitle>
           <div className="space-y-1">
             {warnings.map((warning, index) => (
               <div

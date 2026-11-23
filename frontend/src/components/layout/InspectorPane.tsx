@@ -49,9 +49,23 @@ export function InspectorPane({
 export function InspectorSection({ title, children }: { title: ReactNode; children: ReactNode }) {
   return (
     <section className="space-y-2 pt-4 first:pt-0">
-      <div className="text-[11px] text-forensics-muted">{title}</div>
+      <InspectorSectionTitle>{title}</InspectorSectionTitle>
       <div>{children}</div>
     </section>
+  );
+}
+
+export function InspectorSectionTitle({ children, compact = false }: { children: ReactNode; compact?: boolean }) {
+  return (
+    <div
+      className={
+        compact
+          ? 'mb-1 border-b border-forensics-border text-[10px] uppercase tracking-wide text-forensics-muted-light'
+          : 'text-[11px] text-forensics-muted'
+      }
+    >
+      {children}
+    </div>
   );
 }
 
