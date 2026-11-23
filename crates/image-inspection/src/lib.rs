@@ -12,6 +12,8 @@ mod stats;
 mod types;
 mod warnings;
 
+/// Shared GIF codec and structural decoder.
+pub use gif as gif_codec;
 /// Shared PNG codec and structural decoder.
 pub use png as png_codec;
 /// Shared BMP parser used by metadata inspection and pixel analysis.

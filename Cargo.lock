@@ -2852,6 +2852,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "gif"
+version = "0.14.2"
+dependencies = [
+ "weezl 0.1.12",
+]
+
+[[package]]
 name = "gio"
 version = "0.18.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3472,6 +3479,7 @@ dependencies = [
 name = "image-inspection"
 version = "0.1.1"
 dependencies = [
+ "gif",
  "png 0.18.1",
  "thiserror 2.0.21",
  "tinybmp",
@@ -4064,7 +4072,7 @@ dependencies = [
  "stringprep",
  "thiserror 2.0.21",
  "time",
- "weezl",
+ "weezl 0.2.1",
 ]
 
 [[package]]
@@ -8377,6 +8385,12 @@ dependencies = [
  "windows 0.61.3",
  "windows-core 0.61.2",
 ]
+
+[[package]]
+name = "weezl"
+version = "0.1.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88"
 
 [[package]]
 name = "weezl"

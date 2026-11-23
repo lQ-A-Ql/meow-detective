@@ -64,6 +64,7 @@ exclude = [
   "vendor/rust-fs-btrfs",
   "vendor/tinybmp-0.7.0",
   "vendor/kamadak-exif-0.6.1",
+  "vendor/gif-0.14.2",
 ]
 
 [workspace.package]
@@ -145,6 +146,7 @@ evtx = { path = "crates/evtx-patched", default-features = false, features = ["mu
 flate2 = "1"
 kamadak-exif = "0.6.1"
 png = "0.18"
+gif = { version = "=0.14.2", default-features = false, features = ["std", "raii_no_panic"] }
 tinybmp = "=0.7.0"
 crc32fast = "1.5"
 crc32c = "0.6"
@@ -236,6 +238,7 @@ import-core = { path = "crates/import-core" }
 source-reconstruction = { path = "crates/source-reconstruction" }
 
 [patch.crates-io]
+gif = { path = "vendor/gif-0.14.2" }
 kamadak-exif = { path = "vendor/kamadak-exif-0.6.1" }
 tinybmp = { path = "vendor/tinybmp-0.7.0" }
 fjall = { path = "vendor/fjall-3.1.13" }

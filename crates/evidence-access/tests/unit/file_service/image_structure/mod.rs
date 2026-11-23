@@ -1,5 +1,6 @@
 #[path = "../image_metadata_fixture.rs"]
 mod fixture;
+mod gif_native;
 mod tiff_native;
 
 use std::sync::atomic::AtomicBool;
@@ -21,11 +22,7 @@ fn viewer(bytes: Vec<u8>) -> super::ImageAnalysisReport {
 }
 
 fn gif() -> Vec<u8> {
-    let mut bytes = b"GIF89a".to_vec();
-    bytes.extend_from_slice(&2u16.to_le_bytes());
-    bytes.extend_from_slice(&3u16.to_le_bytes());
-    bytes.extend_from_slice(&[0, 0, 0, 0x3b]);
-    bytes
+    gif_native::encoded(false)
 }
 
 fn bmp() -> Vec<u8> {
