@@ -1,11 +1,28 @@
 import { useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getSourceCapabilities } from '@/lib/api/capability';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getSourceCapabilities, retrySourceCapability } from '@/lib/api/capability';
 import { useCurrentCase } from '@/features/case/hooks';
 import { CAPABILITY_MATRIX_QUERY_KEY } from '@/features/cache-invalidation';
 import type { CapabilityKind, SourceCapability } from '@/types/models';
 
 export { CAPABILITY_MATRIX_QUERY_KEY };
+
+export function useRetrySourceCapability() {
+  const currentCase = useCurrentCase();
+  const caseId = currentCase.data?.id;
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: { dataSourceId: string; capability: 'timeline' | 'artifacts' }) =>
+      retrySourceCapability(request.dataSourceId, request.capability),
+    onMutate: () => ({ caseId }),
+    onSettled: (_data, _error, _request, context) => {
+      if (context?.caseId) {
+        return queryClient.invalidateQueries({ queryKey: [...CAPABILITY_MATRIX_QUERY_KEY, context.caseId] });
+      }
+    },
+    retry: false,
+  });
+}
 
 /**
  * Case-wide capability matrix. `staleTime` keeps the matrix stable between

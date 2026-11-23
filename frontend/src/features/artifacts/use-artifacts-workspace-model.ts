@@ -6,23 +6,12 @@ import {
   useInfiniteArtifactRows,
 } from '@/features/artifacts/hooks';
 import { useArtifactsSelectionModel } from '@/features/artifacts/use-artifacts-page-model';
-import { useCapabilityMatrix } from '@/features/capability/hooks';
+import { useCapabilityMatrix, useRetrySourceCapability } from '@/features/capability/hooks';
+import { artifactAdvisoryPresentation, pickArtifactsCapabilityAdvisory } from './capability-advisory';
+import { errorMessage } from '@/lib/errors';
 import type { ArtifactRow, SourceCapability } from '@/types/models';
 
-/**
- * Pick the case-wide artifacts advisory row: an in-flight (`running`/`queued`)
- * row wins over a `partial` row, which in turn wins over a `deferred` row. A
- * `ready` row never surfaces here, so partial results are never presented as
- * complete. Rows for other capabilities are ignored.
- */
-export function pickArtifactsCapabilityAdvisory(rows: SourceCapability[]): SourceCapability | undefined {
-  const artifacts = rows.filter((row) => row.capability === 'artifacts');
-  return (
-    artifacts.find((row) => row.state === 'running' || row.state === 'queued') ??
-    artifacts.find((row) => row.state === 'partial') ??
-    artifacts.find((row) => row.state === 'deferred')
-  );
-}
+export { pickArtifactsCapabilityAdvisory } from './capability-advisory';
 
 /** Owns artifact queries, persisted selection state, and cross-workspace navigation. */
 export function useArtifactsWorkspaceModel() {
@@ -59,13 +48,27 @@ export function useArtifactsWorkspaceModel() {
   }, [rows, selectedArtifactQuery.data]);
   const selectedArtifact =
     selectedArtifactQuery.data ?? tableRows.find((row) => row?.id === selectedArtifactId) ?? tableRows[0];
-  // Case-wide advisory: surface the first non-ready artifacts row so partial
-  // results are never presented as complete; running/deferred stay informational.
   const { data: capabilityMatrix } = useCapabilityMatrix();
+  const capabilityRetry = useRetrySourceCapability();
   const artifactsCapability = useMemo<SourceCapability | undefined>(
     () => pickArtifactsCapabilityAdvisory(capabilityMatrix?.sources ?? []),
     [capabilityMatrix],
   );
+  const advisory = artifactsCapability ? artifactAdvisoryPresentation(artifactsCapability) : undefined;
+  const retryArtifactsCapability = useCallback(() => {
+    if (!artifactsCapability || !advisory?.retryable || capabilityRetry.isPending) return;
+    capabilityRetry.mutate({ dataSourceId: artifactsCapability.dataSourceId, capability: 'artifacts' });
+  }, [artifactsCapability, advisory?.retryable, capabilityRetry]);
+  const systemdStateCounts = useMemo(() => {
+    if (selectedArtifactFamily !== 'LinuxSystemConfig') return undefined;
+    return tableRows.reduce<Record<string, number>>((counts, row) => {
+      if (row.attrs.configKind === 'systemdServiceUnit') {
+        const state = String(row.attrs.state ?? 'unknown');
+        counts[state] = (counts[state] ?? 0) + 1;
+      }
+      return counts;
+    }, {});
+  }, [selectedArtifactFamily, tableRows]);
   const families = useMemo(() => {
     const counts = new Map(artifactFamilyCounts.data?.map((entry) => [entry.family, entry.count]));
     return (artifactFamilies.data ?? []).map((family) => ({
@@ -102,8 +105,14 @@ export function useArtifactsWorkspaceModel() {
     selectArtifactFamily: setSelectedArtifactFamily,
     tableRows,
     totalRows,
-    artifactsCapabilityState: artifactsCapability?.state,
-    artifactsCapabilityDetail: artifactsCapability?.detail,
+    artifactsAdvisory: advisory,
+    retryArtifactsCapability,
+    retryingArtifacts: capabilityRetry.isPending,
+    artifactsRetryError:
+      capabilityRetry.error && capabilityRetry.variables?.dataSourceId === artifactsCapability?.dataSourceId
+        ? errorMessage(capabilityRetry.error)
+        : undefined,
+    systemdStateCounts,
   };
 }
 

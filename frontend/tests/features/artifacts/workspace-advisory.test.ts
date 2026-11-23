@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { pickArtifactsCapabilityAdvisory } from '@/features/artifacts/use-artifacts-workspace-model';
+import { pickArtifactsCapabilityAdvisory } from '@/features/artifacts/capability-advisory';
 import type { SourceCapability } from '@/types/models';
 
 function row(state: SourceCapability['state'], extra: Partial<SourceCapability> = {}): SourceCapability {

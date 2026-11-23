@@ -1,5 +1,6 @@
 import { CircleAlert, LoaderCircle, RefreshCw } from '@/components/icons';
 import { Button } from '@/app/components/ui/button';
+import { StatusNotice } from '@/app/components/ui/status-notice';
 import { useTranslation } from 'react-i18next';
 import { formatBytes } from '@/lib/format-bytes';
 import { errorMessage } from '@/lib/errors';
@@ -74,11 +75,7 @@ export function TimelineProjectionBanner({
     const running = capabilityState === 'running' || capabilityState === 'queued';
     const failed = capabilityState === 'failed';
     const deferred = capabilityState === 'deferred';
-    const tone = failed
-      ? 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text'
-      : deferred || running
-        ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
-        : 'border-forensics-border bg-forensics-panel text-forensics-muted';
+    const tone = failed ? 'error' : deferred || running ? 'warning' : 'neutral';
     const progressText = formatProgress(capabilityProgress);
 
     const title = failed
@@ -97,7 +94,7 @@ export function TimelineProjectionBanner({
           : t('timeline.projection.capabilityPartialDescription');
 
     return (
-      <div role="status" data-testid="timeline-projection-banner" className={`border-b px-4 py-3 ${tone}`}>
+      <StatusNotice tone={tone} data-testid="timeline-projection-banner">
         <div className="flex items-center gap-2">
           {rebuilding || running ? (
             <LoaderCircle size={14} className="shrink-0 animate-spin" />
@@ -143,19 +140,16 @@ export function TimelineProjectionBanner({
             {t('timeline.projection.rebuildFailed', { message: errorMessage(rebuildError) })}
           </div>
         ) : null}
-      </div>
+      </StatusNotice>
     );
   }
 
   // --- Legacy projection-status branch (complete/building/deferred) ---
   const detail = detailSource(sources, state!);
-  const tone =
-    state === 'building'
-      ? 'border-forensics-warning-border bg-forensics-warning-bg text-forensics-warning-text'
-      : 'border-forensics-error-border bg-forensics-error-bg text-forensics-error-text';
+  const tone = state === 'building' ? 'warning' : 'error';
 
   return (
-    <div role="status" data-testid="timeline-projection-banner" className={`border-b px-4 py-3 ${tone}`}>
+    <StatusNotice tone={tone} data-testid="timeline-projection-banner">
       <div className="flex items-center gap-2">
         {rebuilding ? (
           <LoaderCircle size={14} className="shrink-0 animate-spin" />
@@ -213,6 +207,6 @@ export function TimelineProjectionBanner({
           {t('timeline.projection.rebuildFailed', { message: errorMessage(rebuildError) })}
         </div>
       ) : null}
-    </div>
+    </StatusNotice>
   );
 }

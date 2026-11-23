@@ -503,7 +503,12 @@
     "capability": {
       "running": "Artifact extraction in progress; the list shows committed results only.",
       "partial": "Only partial artifact results are shown; this is not the complete inventory.",
-      "deferred": "Artifact extraction was deferred"
+      "deferred": "Artifact extraction was deferred",
+      "failed": "Artifact extraction failed; available results may be incomplete.",
+      "cancelled": "Artifact extraction was cancelled; available results may be incomplete.",
+      "pending": "Artifact extraction is waiting to start.",
+      "stale": "Artifact results need to be refreshed.",
+      "retry": "Retry extraction"
     },
     "systemd": {
       "states": {

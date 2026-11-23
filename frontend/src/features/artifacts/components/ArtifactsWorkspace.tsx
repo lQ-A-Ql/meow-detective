@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ActionIcon } from '@/components/controls/ActionIcon';
 import { CircleAlert, LoaderCircle } from '@/components/icons';
 import { Tooltip } from '@/app/components/ui/tooltip';
+import { StatusNotice } from '@/app/components/ui/status-notice';
 
 import { useTranslation } from 'react-i18next';
 import { Button } from '@/app/components/ui/button';
@@ -22,17 +23,6 @@ interface ArtifactsWorkspaceProps {
 /** Pure artifact presentation surface. Query, selection, and navigation behavior stay in the model. */
 export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
   const { t } = useTranslation();
-  const systemdStateCounts = useMemo(() => {
-    if (model.selectedArtifactFamily !== 'LinuxSystemConfig') return undefined;
-    return model.tableRows.reduce<Record<string, number>>((counts, row) => {
-      const kind = String(row.attrs.configKind ?? '');
-      if (kind === 'systemdServiceUnit') {
-        const state = String(row.attrs.state ?? 'unknown');
-        counts[state] = (counts[state] ?? 0) + 1;
-      }
-      return counts;
-    }, {});
-  }, [model.selectedArtifactFamily, model.tableRows]);
   const columns = useMemo<DenseColumn<ArtifactRow>[]>(
     () => [
       {
@@ -69,42 +59,53 @@ export function ArtifactsWorkspace({ model }: ArtifactsWorkspaceProps) {
         <ContextBar>
           <div className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none">
             {model.families.map(({ family, count }) => (
-              <div
+              <Button
                 key={family}
-                role="button"
-                tabIndex={0}
+                type="button"
+                shape="pill"
+                variant="forensicsLink"
+                size="xs"
+                aria-pressed={model.selectedArtifactFamily === family}
                 onClick={() => model.selectArtifactFamily(family)}
                 className="shrink-0 whitespace-nowrap font-mono"
               >
+                <ActionIcon name="list" />
                 {family} <span className="text-forensics-muted-lighter">{count}</span>
-              </div>
+              </Button>
             ))}
           </div>
         </ContextBar>
-        {model.artifactsCapabilityState === 'running' || model.artifactsCapabilityState === 'queued' ? (
-          <div className="flex items-center gap-2 border-b border-forensics-warning-border bg-forensics-warning-bg px-4 py-2 text-[11px] text-forensics-warning-text">
-            <LoaderCircle size={12} className="shrink-0 animate-spin" />
-            <span className="min-w-0 flex-1">{t('artifacts.capability.running')}</span>
-          </div>
-        ) : model.artifactsCapabilityState === 'partial' ? (
-          <div className="flex items-center gap-2 border-b border-forensics-border bg-forensics-panel px-4 py-2 text-[11px] text-forensics-muted">
-            <CircleAlert size={12} className="shrink-0" />
-            <span className="min-w-0 flex-1">{t('artifacts.capability.partial')}</span>
-          </div>
-        ) : model.artifactsCapabilityState === 'deferred' ? (
-          <div className="flex items-center gap-2 border-b border-forensics-warning-border bg-forensics-warning-bg px-4 py-2 text-[11px] text-forensics-warning-text">
-            <CircleAlert size={12} className="shrink-0" />
-            <span className="min-w-0 flex-1">
-              {t('artifacts.capability.deferred')}
-              {model.artifactsCapabilityDetail ? `: ${model.artifactsCapabilityDetail}` : ''}
-            </span>
-          </div>
+        {model.artifactsAdvisory ? (
+          <StatusNotice tone={model.artifactsAdvisory.tone} className="py-2">
+            <div className="flex items-center gap-2">
+              {model.artifactsAdvisory.active ? (
+                <LoaderCircle size={12} className="shrink-0 animate-spin" />
+              ) : (
+                <CircleAlert size={12} className="shrink-0" />
+              )}
+              <span className="min-w-0 flex-1">{t(model.artifactsAdvisory.messageKey)}</span>
+              {model.artifactsAdvisory.retryable ? (
+                <Button
+                  type="button"
+                  shape="pill"
+                  variant="forensicsOutline"
+                  size="xs"
+                  onClick={model.retryArtifactsCapability}
+                  disabled={model.retryingArtifacts}
+                >
+                  <ActionIcon name="refresh" />
+                  {t('artifacts.capability.retry')}
+                </Button>
+              ) : null}
+            </div>
+            {model.artifactsRetryError ? <div className="mt-1">{model.artifactsRetryError}</div> : null}
+          </StatusNotice>
         ) : null}
-        {systemdStateCounts ? (
+        {model.systemdStateCounts ? (
           <div className="flex flex-wrap gap-3 border-b border-forensics-divider px-4 py-2 font-mono text-[10px] text-forensics-muted">
             {['enabled', 'disabled', 'masked', 'static'].map((state) => (
               <span key={state}>
-                {t(`artifacts.systemd.states.${state}`)}: {systemdStateCounts[state] ?? 0}
+                {t(`artifacts.systemd.states.${state}`)}: {model.systemdStateCounts?.[state] ?? 0}
               </span>
             ))}
           </div>

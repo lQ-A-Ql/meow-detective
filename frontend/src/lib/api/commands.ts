@@ -200,6 +200,7 @@ export const COMMANDS = {
   },
   capability: {
     GET_SOURCE_CAPABILITIES: 'get_source_capabilities',
+    RETRY_SOURCE_CAPABILITY: 'retry_source_capability',
   },
   notebook: {
     LIST_NOTEBOOK_ENTRIES: 'list_notebook_entries',
