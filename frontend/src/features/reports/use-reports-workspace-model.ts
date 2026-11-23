@@ -28,7 +28,7 @@ export function useReportsWorkspaceModel() {
   const currentCase = useCurrentCase();
   const historyQuery = useReportHistory(currentCase.data?.id);
   const dataSourcesQuery = useDataSources();
-  const importSignals = useImportEventState();
+  const importSignals = useImportEventState(currentCase.data?.id);
   const exportMutation = useExportReport();
   const [selectedFormat, setSelectedFormat] = useState<ReportExportFormat>('html');
   const [exportScope, setExportScope] = useState<ExportScope>({

@@ -8,5 +8,8 @@ export function activeJobProgress(job: JobSnapshot, phase?: ImportPhaseProgress)
   if (job.status === 'running' && phase?.jobId === job.id && importPhaseProgress(phase) === null) {
     return null;
   }
-  return Math.min(job.progress, 99);
+  if (job.status === 'completed') return 100;
+  const progress =
+    job.status === 'running' && phase?.jobId === job.id ? Math.max(job.progress, phase.percent) : job.progress;
+  return Math.max(0, Math.min(progress, 99));
 }

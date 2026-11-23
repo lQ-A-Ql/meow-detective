@@ -13,7 +13,7 @@ export function useBottomDrawerModel() {
   const warningsQuery = useWarnings(caseId);
   const dataSourcesQuery = useDataSources();
   const traceQuery = useTraceItems(caseId);
-  const importSignals = useImportEventState();
+  const importSignals = useImportEventState(caseId);
   const drawerOpen = useUiStore((state) => state.drawerOpen);
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
 

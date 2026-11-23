@@ -1,51 +1,20 @@
-import { useSyncExternalStore } from 'react';
+import { useEffect } from 'react';
+import { useStore } from 'zustand';
 import i18n from '@/i18n';
-import { subscribeToEvent } from '@/lib/events/subscribers';
+import { createImportEventStateStore, emptyImportSignals } from './import-event-store';
 import type {
   DataSourceSummary,
   ImportPhase,
-  ImportPhaseProgress,
   ImportPhaseState,
-  IndexCacheStatus,
-  JobCancellation,
   PartialResult,
   PartialResultKind,
-  PerformanceReport,
   ResultFreshness,
 } from '@/types/models';
 
+export { createImportEventStateStore } from './import-event-store';
+export type { ImportSignalSnapshot } from './import-event-store';
 export type EvidenceHashStatus = 'pending' | 'ready' | 'failed' | 'unavailable' | 'deferred';
 
-export type ImportSignalSnapshot = {
-  activeJobId?: string;
-  latestPhase?: ImportPhaseProgress;
-  latestCancellation?: JobCancellation;
-  partialResults: PartialResult[];
-  cacheStatuses: IndexCacheStatus[];
-  latestReport?: PerformanceReport;
-  lastUpdatedAt?: string;
-};
-
-type EventState = {
-  activeJobId?: string;
-  phases: Record<string, ImportPhaseProgress>;
-  cancellations: Record<string, JobCancellation>;
-  partialResults: Record<string, PartialResult>;
-  caches: Record<string, IndexCacheStatus>;
-  latestReport?: PerformanceReport;
-  lastUpdatedAt?: string;
-};
-
-const freshnessPriority: Record<ResultFreshness, number> = {
-  invalidated: 0,
-  stale: 1,
-  deferred: 2,
-  partial: 3,
-  ready: 4,
-};
-
-// Key paths, not literals: the label is resolved when it is rendered so a language
-// change takes effect without reloading the module.
 const phaseLabelKeys: Record<ImportPhase, string> = {
   queued: 'jobs.import.phase.queued',
   attach: 'jobs.import.phase.attach',
@@ -92,14 +61,6 @@ const freshnessLabelKeys: Record<ResultFreshness, string> = {
   invalidated: 'jobs.import.freshness.invalidated',
 };
 
-const evidenceHashStatusLabelKeys: Record<EvidenceHashStatus, string> = {
-  pending: 'jobs.import.evidenceHashStatus.pending',
-  ready: 'jobs.import.evidenceHashStatus.ready',
-  failed: 'jobs.import.evidenceHashStatus.failed',
-  unavailable: 'jobs.import.evidenceHashStatus.unavailable',
-  deferred: 'jobs.import.evidenceHashStatus.deferred',
-};
-
 const evidenceHashStatusPriority: Record<EvidenceHashStatus, number> = {
   failed: 0,
   pending: 1,
@@ -108,190 +69,14 @@ const evidenceHashStatusPriority: Record<EvidenceHashStatus, number> = {
   ready: 4,
 };
 
-function createInitialState(): EventState {
-  return {
-    phases: {},
-    cancellations: {},
-    partialResults: {},
-    caches: {},
-  };
-}
-
-function partialKey(result: PartialResult) {
-  return `${result.queryKey}::${result.scopeId}::${result.kind}`;
-}
-
-function sortPartialResults(results: PartialResult[]) {
-  return [...results].sort((left, right) => {
-    const freshnessDiff = freshnessPriority[left.freshness] - freshnessPriority[right.freshness];
-    if (freshnessDiff !== 0) {
-      return freshnessDiff;
-    }
-
-    if (left.readyCount !== right.readyCount) {
-      return right.readyCount - left.readyCount;
-    }
-
-    return left.kind.localeCompare(right.kind);
-  });
-}
-
-function sortCacheStatuses(statuses: IndexCacheStatus[]) {
-  return [...statuses].sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
-}
-
-function deriveSnapshot(state: EventState): ImportSignalSnapshot {
-  const activeJobId = state.activeJobId;
-
-  return {
-    activeJobId,
-    latestPhase: activeJobId ? state.phases[activeJobId] : undefined,
-    latestCancellation: activeJobId ? state.cancellations[activeJobId] : undefined,
-    partialResults: sortPartialResults(Object.values(state.partialResults)),
-    cacheStatuses: sortCacheStatuses(Object.values(state.caches)),
-    latestReport: state.latestReport,
-    lastUpdatedAt: state.lastUpdatedAt,
-  };
-}
-
-export function createImportEventStateStore() {
-  let state = createInitialState();
-  let snapshot = deriveSnapshot(state);
-  let connected = false;
-  let unsubs: Array<() => void> = [];
-  const listeners = new Set<() => void>();
-
-  function emit() {
-    snapshot = deriveSnapshot(state);
-    listeners.forEach((listener) => listener());
-  }
-
-  function update(next: Partial<EventState>) {
-    state = { ...state, ...next };
-    emit();
-  }
-
-  function connect() {
-    if (connected) {
-      return;
-    }
-
-    connected = true;
-    unsubs = [
-      subscribeToEvent<ImportPhaseProgress>('import-phase-progress', (event) => {
-        const payload = event.payload;
-        const nextPartials = { ...state.partialResults };
-        payload.partialResults.forEach((result) => {
-          nextPartials[partialKey(result)] = result;
-        });
-        update({
-          activeJobId: payload.jobId,
-          phases: { ...state.phases, [payload.jobId]: payload },
-          partialResults: nextPartials,
-          lastUpdatedAt: event.ts,
-        });
-      }),
-      subscribeToEvent<PartialResult>('import-partial-result', (event) => {
-        const payload = event.payload;
-        update({
-          partialResults: { ...state.partialResults, [partialKey(payload)]: payload },
-          lastUpdatedAt: event.ts,
-        });
-      }),
-      subscribeToEvent<JobCancellation>('job-cancellation', (event) => {
-        const payload = event.payload;
-        update({
-          activeJobId: payload.jobId,
-          cancellations: { ...state.cancellations, [payload.jobId]: payload },
-          lastUpdatedAt: event.ts,
-        });
-      }),
-      subscribeToEvent<IndexCacheStatus>('cache-index-status', (event) => {
-        const payload = event.payload;
-        update({
-          caches: { ...state.caches, [payload.cacheKey]: payload },
-          lastUpdatedAt: event.ts,
-        });
-      }),
-      subscribeToEvent<PerformanceReport>('performance-report-ready', (event) => {
-        const payload = event.payload;
-        update({
-          activeJobId: payload.summary.jobId ?? state.activeJobId,
-          latestReport: payload,
-          lastUpdatedAt: event.ts,
-        });
-      }),
-    ];
-  }
-
-  return {
-    subscribe(listener: () => void) {
-      connect();
-      listeners.add(listener);
-      return () => listeners.delete(listener);
-    },
-    getSnapshot() {
-      return snapshot;
-    },
-    ingestPhase(eventTs: string, payload: ImportPhaseProgress) {
-      const nextPartials = { ...state.partialResults };
-      payload.partialResults.forEach((result) => {
-        nextPartials[partialKey(result)] = result;
-      });
-      update({
-        activeJobId: payload.jobId,
-        phases: { ...state.phases, [payload.jobId]: payload },
-        partialResults: nextPartials,
-        lastUpdatedAt: eventTs,
-      });
-    },
-    ingestPartial(eventTs: string, payload: PartialResult) {
-      update({
-        partialResults: { ...state.partialResults, [partialKey(payload)]: payload },
-        lastUpdatedAt: eventTs,
-      });
-    },
-    ingestCancellation(eventTs: string, payload: JobCancellation) {
-      update({
-        activeJobId: payload.jobId,
-        cancellations: { ...state.cancellations, [payload.jobId]: payload },
-        lastUpdatedAt: eventTs,
-      });
-    },
-    ingestCache(eventTs: string, payload: IndexCacheStatus) {
-      update({
-        caches: { ...state.caches, [payload.cacheKey]: payload },
-        lastUpdatedAt: eventTs,
-      });
-    },
-    ingestReport(eventTs: string, payload: PerformanceReport) {
-      update({
-        activeJobId: payload.summary.jobId ?? state.activeJobId,
-        latestReport: payload,
-        lastUpdatedAt: eventTs,
-      });
-    },
-    reset() {
-      state = createInitialState();
-      snapshot = deriveSnapshot(state);
-      emit();
-    },
-    disconnect() {
-      unsubs.forEach((unsub) => unsub());
-      unsubs = [];
-      connected = false;
-    },
-  };
-}
-
 const importEventStateStore = createImportEventStateStore();
 
-export function useImportEventState() {
-  return useSyncExternalStore(
-    importEventStateStore.subscribe,
-    importEventStateStore.getSnapshot,
-    importEventStateStore.getSnapshot,
-  );
+export function useImportEventState(caseId?: string) {
+  useEffect(() => {
+    importEventStateStore.setCase(caseId);
+    importEventStateStore.connect();
+  }, [caseId]);
+  return useStore(importEventStateStore.api, (state) => (state.caseId === caseId ? state : emptyImportSignals));
 }
 
 export function resetImportEventStateForTests() {
@@ -316,7 +101,7 @@ export function getFreshnessLabel(freshness: ResultFreshness) {
 }
 
 export function getEvidenceHashStatusLabel(status: EvidenceHashStatus) {
-  return i18n.t(evidenceHashStatusLabelKeys[status]);
+  return i18n.t(`jobs.import.evidenceHashStatus.${status}`);
 }
 
 export function getEvidenceHashCaveatText(status: EvidenceHashStatus) {
@@ -344,7 +129,6 @@ export function deriveEvidenceHashStatus(
     if (result.kind !== 'evidenceHash') {
       continue;
     }
-
     if (result.freshness === 'ready') {
       statuses.push('ready');
     } else if (result.freshness === 'partial') {
@@ -368,7 +152,6 @@ export function deriveEvidenceHashStatus(
       statuses.push('deferred');
     }
   }
-
   return statuses.sort((left, right) => evidenceHashStatusPriority[left] - evidenceHashStatusPriority[right])[0];
 }
 
@@ -387,6 +170,5 @@ export function getCacheStateLabel(state: string) {
     cancelled: 'Cancelled',
     draining: 'Draining',
   };
-
   return labels[state] ?? state;
 }

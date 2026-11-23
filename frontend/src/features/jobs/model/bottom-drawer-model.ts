@@ -1,6 +1,5 @@
 import type { TFunction } from 'i18next';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
-import { importPhaseProgress } from '@/features/jobs/model/job-progress';
 import {
   deriveEvidenceHashStatus,
   getImportPhaseLabel,
@@ -38,6 +37,7 @@ export interface BottomDrawerModel {
   drawerOpen: boolean;
   toggleDrawer: () => void;
   activeJob?: JobSnapshot;
+  activePhase?: ImportPhaseProgress;
   runningJobs: JobSnapshot[];
   completedJobs: JobSnapshot[];
   failedJobs: JobSnapshot[];
@@ -99,16 +99,15 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     ...processingIssues.filter((issue) => issue.severity === 'warning'),
   ];
   const activeJob = runningJobs[0] ?? cancellingJobs[0];
-  const phase = input.importSignals.latestPhase;
-  const cancellation = input.importSignals.latestCancellation;
-  const phaseProgress = phase ? importPhaseProgress(phase) : null;
+  const phase = activeJob ? input.importSignals.phasesByJob[activeJob.id] : input.importSignals.latestPhase;
+  const cancellation = activeJob
+    ? input.importSignals.cancellationsByJob[activeJob.id]
+    : input.importSignals.latestCancellation;
   const typedHeadline =
     cancellation && (!activeJob || cancellation.jobId === activeJob.id)
-      ? `${
-          cancellation.safeToClose ? input.t('bottomDrawer.labels.safeToClose') : cancellation.state
-        } · ${cancellation.detail}`
+      ? `${cancellation.safeToClose ? input.t('bottomDrawer.labels.safeToClose') : cancellation.state}`
       : phase && (!activeJob || phase.jobId === activeJob.id)
-        ? `${getImportPhaseLabel(phase.phase)}${phaseProgress === null ? '' : ` ${phaseProgress}%`} · ${phase.detail}`
+        ? `${getImportPhaseLabel(phase.phase)} · ${getImportPhaseStateLabel(phase.state)}`
         : undefined;
   const recentScope =
     activeJob?.scope ||
@@ -121,6 +120,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     drawerOpen: input.drawerOpen,
     toggleDrawer: input.toggleDrawer,
     activeJob,
+    activePhase: phase,
     runningJobs,
     completedJobs,
     failedJobs,
