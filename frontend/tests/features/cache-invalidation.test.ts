@@ -133,12 +133,7 @@ describe('projection cache invalidation', () => {
 
     vi.advanceTimersByTime(300);
 
-    expect(invalidatedKeys(invalidateSpy)).toEqual([
-      ['artifacts'],
-      ['timeline'],
-      ['capability', 'matrix'],
-      ['search'],
-    ]);
+    expect(invalidatedKeys(invalidateSpy)).toEqual([['artifacts'], ['timeline'], ['capability', 'matrix'], ['search']]);
   });
 
   it('refreshes projections when a background job reaches a terminal state', () => {
