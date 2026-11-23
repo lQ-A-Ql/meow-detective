@@ -3,10 +3,12 @@ use std::path::PathBuf;
 
 mod admission;
 mod factory;
+mod fixed_vhd;
 pub use admission::{ReaderAdmission, ReaderAllocationScope, ReaderResourceHold};
 mod partition_window;
 
 pub use factory::{EvidenceReaderFactory, ReaderCapabilities, SharedReaderFactory};
+pub use fixed_vhd::{fixed_vhd_payload_length, open_fixed_vhd_payload};
 pub use partition_window::PartitionWindowReader;
 
 /// Upper bound on the number of bytes read when inspecting file headers or magic values.

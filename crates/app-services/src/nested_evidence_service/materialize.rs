@@ -98,7 +98,8 @@ fn materialize_inner(
     let footer =
         crate::file_service::read_file_bytes_for_case(&mut reader, &entry.id, size - 512, 512)
             .map_err(|error| MaterializeError::Source(error.to_string()))?;
-    validate_fixed_vhd_footer(&footer, size)?;
+    evidence_core::reader::fixed_vhd_payload_length(&footer, size)
+        .map_err(|_| MaterializeError::UnsupportedFormat)?;
 
     let global_id = format!("ds:{parent_id}:{file_id}");
     let target = crate::digest_service::DigestTarget {
@@ -352,35 +353,6 @@ fn materialized_result(
         import_state: "pending".into(),
         import_job_id: None,
     }
-}
-
-fn validate_fixed_vhd_footer(footer: &[u8], size: u64) -> Result<(), MaterializeError> {
-    if footer.len() != 512 || &footer[..8] != b"conectix" {
-        return Err(MaterializeError::UnsupportedFormat);
-    }
-    let disk_type = u32::from_be_bytes(footer[60..64].try_into().expect("fixed slice"));
-    let virtual_size = u64::from_be_bytes(footer[48..56].try_into().expect("fixed slice"));
-    // A fixed VHD footer occupies the final 512 bytes and the virtual disk
-    // payload must fit entirely before it.  Allowing `virtual_size == size`
-    // would register a source whose logical reader exposes footer bytes.
-    let payload_len = size.saturating_sub(512);
-    let version = u32::from_be_bytes(footer[12..16].try_into().expect("fixed slice"));
-    let checksum = u32::from_be_bytes(footer[64..68].try_into().expect("fixed slice"));
-    let sum = footer
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| !(64..68).contains(i))
-        .fold(0u32, |sum, (_, byte)| sum.wrapping_add(u32::from(*byte)));
-    if disk_type != 2
-        || version != 0x0001_0000
-        || checksum != !sum
-        || virtual_size == 0
-        || virtual_size != payload_len
-        || virtual_size % 512 != 0
-    {
-        return Err(MaterializeError::UnsupportedFormat);
-    }
-    Ok(())
 }
 
 fn copy_entry(
