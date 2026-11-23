@@ -1,5 +1,14 @@
 import type { QueryClient } from '@tanstack/react-query';
-import type { EventTopic, IndexCacheStatus, PartialResult, PartialResultKind } from '@/types/models';
+import type {
+  CapabilityKind,
+  CapabilityStatusChangedPayload,
+  EventTopic,
+  IndexCacheStatus,
+  PartialResult,
+  PartialResultKind,
+} from '@/types/models';
+
+export const CAPABILITY_MATRIX_QUERY_KEY = ['capability', 'matrix'] as const;
 
 export const PROJECTION_EVENT_TOPICS = [
   'case-opened',
@@ -11,6 +20,7 @@ export const PROJECTION_EVENT_TOPICS = [
   'artifact-added',
   'timeline-updated',
   'search-index-progress',
+  'capability-status-changed',
 ] as const satisfies readonly EventTopic[];
 
 export const timelineQueryKeys = {
@@ -53,6 +63,7 @@ export const projectionQueryKeys = {
   jobWarnings: ['jobs', 'warnings'] as const,
   jobTrace: ['jobs', 'trace'] as const,
   graph: ['graph'] as const,
+  capabilities: CAPABILITY_MATRIX_QUERY_KEY,
   linuxEvidenceSets: ['linux-evidence-sets'] as const,
   linuxEvidenceSetSummary: ['linux-evidence-set-summary'] as const,
   linuxEvidenceSetEvents: ['linux-evidence-set-events'] as const,
@@ -71,6 +82,7 @@ const importProjectionKeys: ProjectionKey[] = [
   'search',
   'analysis',
   'graph',
+  'capabilities',
   'linuxEvidenceSets',
   'linuxEvidenceSetSummary',
   'linuxEvidenceSetEvents',
@@ -163,13 +175,50 @@ export function invalidateCacheStatusQueries(
   }
 }
 
-export function invalidateEventProjectionQueries(queryClient: QueryInvalidator, topic: EventTopic) {
+const capabilityProjectionKeys: Record<CapabilityKind, ProjectionKey[]> = {
+  catalog: ['files', 'caseDataSources', 'caseMetrics'],
+  search: ['search'],
+  timeline: ['timeline', 'graph', 'analysis', 'caseMetrics', 'caseRecentObjects'],
+  graph: ['graph'],
+  platformFacts: ['analysis', 'caseDataSources', 'caseMetrics'],
+  artifacts: ['artifacts', 'analysis', 'timeline', 'graph', 'caseMetrics', 'caseRecentObjects'],
+};
+
+function invalidateCapabilityPublication(queryClient: QueryInvalidator, payload: CapabilityStatusChangedPayload) {
+  const { caseId, dataSourceId, capability, state } = payload;
+  if (!caseId) return;
+  void queryClient.invalidateQueries({ queryKey: [...CAPABILITY_MATRIX_QUERY_KEY, caseId] });
+  if (!capability || !state || ['pending', 'queued', 'running'].includes(state)) return;
+  const roots = new Set<string>(capabilityProjectionKeys[capability].map((key) => projectionQueryKeys[key][0]));
+  void queryClient.invalidateQueries({
+    predicate: ({ queryKey }) => {
+      const family = queryKey[0];
+      if (typeof family !== 'string' || !roots.has(family)) return false;
+      const caseIndex = ['artifacts', 'timeline', 'search'].includes(family) ? 1 : 2;
+      if (queryKey[caseIndex] !== caseId) return false;
+      return family !== 'analysis' || !dataSourceId || typeof queryKey[3] !== 'string' || queryKey[3] === dataSourceId;
+    },
+  });
+}
+
+export function invalidateEventProjectionQueries(
+  queryClient: QueryInvalidator,
+  topic: EventTopic,
+  payload: CapabilityStatusChangedPayload = {},
+) {
   switch (topic) {
     case 'data-source-imported':
       invalidateImportProjectionQueries(queryClient);
       return;
     case 'timeline-updated':
-      scheduleProjectionInvalidation(queryClient, ['timeline']);
+      if (payload.caseId) {
+        invalidateCapabilityPublication(queryClient, { ...payload, capability: 'timeline', state: 'ready' });
+      } else {
+        scheduleProjectionInvalidation(queryClient, ['timeline', 'capabilities']);
+      }
+      return;
+    case 'capability-status-changed':
+      invalidateCapabilityPublication(queryClient, payload);
       return;
     case 'artifact-added':
       scheduleProjectionInvalidation(queryClient, ['artifacts', 'timeline']);

@@ -9,12 +9,12 @@ import {
   invalidateEventProjectionQueries,
   invalidatePartialResultQueries,
 } from '@/features/cache-invalidation';
-import type { IndexCacheStatus, PartialResult } from '@/types/models';
+import type { CapabilityStatusChangedPayload, IndexCacheStatus, PartialResult } from '@/types/models';
 
 function subscribeToProjectionInvalidations(queryClient: QueryClient) {
   const unsubs = PROJECTION_EVENT_TOPICS.map((topic) =>
-    subscribeToEvent(topic, () => {
-      invalidateEventProjectionQueries(queryClient, topic);
+    subscribeToEvent<CapabilityStatusChangedPayload>(topic, (event) => {
+      invalidateEventProjectionQueries(queryClient, topic, event.payload);
     }),
   );
 

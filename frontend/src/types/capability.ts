@@ -39,3 +39,11 @@ export interface SourceCapability {
 export interface CapabilityMatrix {
   sources: SourceCapability[];
 }
+
+export interface CapabilityStatusChangedPayload {
+  caseId?: string;
+  dataSourceId?: string;
+  capability?: CapabilityKind;
+  state?: CapabilityState;
+  revision?: number;
+}
