@@ -118,3 +118,83 @@ fn failed_native_session_prevents_following_writes_and_publication() {
         Err(FjallStorageError::WriteSessionFailed)
     ));
 }
+
+#[test]
+fn process_exit_keeps_the_published_database_and_rejects_the_incomplete_generation() {
+    const CHILD_ROOT: &str = "FORENSICS_NATIVE_CRASH_ROOT";
+    if let Some(root) = std::env::var_os(CHILD_ROOT) {
+        let database = SourceDatabase::open(
+            std::path::PathBuf::from(root).join("building"),
+            DatabaseConfig::default(),
+        )
+        .unwrap();
+        let session = database
+            .begin_write_session(WriteSessionConfig::default())
+            .unwrap();
+        let mut input = Some(
+            (0..8192u64)
+                .map(|id| SnapshotEntry {
+                    key: id.to_be_bytes().to_vec(),
+                    value: id.to_be_bytes().to_vec(),
+                })
+                .collect(),
+        );
+        session
+            .run(
+                &AtomicBool::new(false),
+                || Ok(input.take()),
+                |entry| u64::from_be_bytes(entry.key.as_slice().try_into().unwrap()),
+                |_, entries| {
+                    Ok(entries
+                        .into_iter()
+                        .map(|entry| WriteAction::Put {
+                            keyspace: KeyspaceName::TimelineRecords,
+                            key: entry.key,
+                            value: entry.value,
+                        })
+                        .collect())
+                },
+            )
+            .unwrap();
+        std::process::exit(77);
+    }
+    let root = tempfile::tempdir().unwrap();
+    let published_path = root.path().join("published");
+    let database = SourceDatabase::open(&published_path, DatabaseConfig::default()).unwrap();
+    database
+        .write_batch(
+            &[WriteAction::Put {
+                keyspace: KeyspaceName::Meta,
+                key: b"published".to_vec(),
+                value: b"stable".to_vec(),
+            }],
+            persistence_fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
+    drop(database);
+    let status = std::process::Command::new(std::env::current_exe().unwrap())
+        .args([
+            "--exact",
+            "process_exit_keeps_the_published_database_and_rejects_the_incomplete_generation",
+        ])
+        .env(CHILD_ROOT, root.path())
+        .status()
+        .unwrap();
+    assert_eq!(status.code(), Some(77));
+    assert!(matches!(
+        SourceDatabase::open(root.path().join("building"), DatabaseConfig::default()),
+        Err(FjallStorageError::WriteSessionFailed)
+    ));
+    assert!(matches!(
+        persistence_fjall::seal_build(root.path().join("building")),
+        Err(FjallStorageError::WriteSessionFailed)
+    ));
+    let published = SourceDatabase::open(published_path, DatabaseConfig::default()).unwrap();
+    assert_eq!(
+        published
+            .read_snapshot()
+            .get(KeyspaceName::Meta, b"published")
+            .unwrap(),
+        Some(b"stable".to_vec())
+    );
+}
