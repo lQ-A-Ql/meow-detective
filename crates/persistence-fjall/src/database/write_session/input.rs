@@ -19,12 +19,6 @@ impl NativeWriteInput for TimelineRecord {
     }
 }
 
-impl NativeWriteInput for u64 {
-    fn budget_bytes(&self) -> Result<usize> {
-        Ok(std::mem::size_of::<Self>())
-    }
-}
-
 impl NativeWriteInput for FileEntryRecord {
     fn budget_bytes(&self) -> Result<usize> {
         Ok(std::mem::size_of::<Self>()

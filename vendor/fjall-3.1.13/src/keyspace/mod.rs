@@ -786,7 +786,10 @@ impl Keyspace {
     }
 
     fn check_write_halt(&self) {
-        while self.tree.l0_run_count() >= 30 {
+        while self.tree.l0_run_count() >= 30 && !self.is_poisoned.is_poisoned() {
+            self.worker_messager
+                .try_send(WorkerMessage::Compact(self.clone()))
+                .ok();
             std::thread::sleep(Duration::from_millis(10));
         }
     }
