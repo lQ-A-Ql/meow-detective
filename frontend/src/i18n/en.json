@@ -20,7 +20,7 @@
     "timelineWork": "Build timeline",
     "heartbeat": {
       "waiting": "Waiting for the background task",
-      "unresponsive": "No heartbeat for over 30 seconds. View diagnostics or cancel the task."
+      "unresponsive": "Background task is not responding"
     },
     "stage": {
       "validate": "Validate parent evidence",

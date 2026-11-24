@@ -23,9 +23,15 @@ use transport::dto::{
 };
 
 #[derive(Default)]
-struct RecordingSink(Mutex<Vec<ImportPhaseProgressDto>>);
+struct RecordingSink(
+    Mutex<Vec<ImportPhaseProgressDto>>,
+    Mutex<Vec<transport::dto::TaskProgressDto>>,
+);
 
 impl ImportEventSink for RecordingSink {
+    fn task_progress(&self, value: &transport::dto::TaskProgressDto) {
+        self.1.lock().unwrap().push(value.clone());
+    }
     fn job_progress(&self, _: &str, _: u32, _: &str) {}
     fn data_source_imported(&self, _: &str, _: &DataSourceSummaryDto, _: &str) {}
     fn partition_progress(&self, _: &str, _: &str, _: u32, _: u32, _: u32) {}
@@ -115,7 +121,7 @@ fn real_linux_import_records_and_persists_source_facts_stage_timings() {
         let config = import_precheck::prepare_import_source_config_from_path(
             &evidence.to_string_lossy(), DataSourcePlatform::Linux,
         ).unwrap();
-        execute_import_job_profiled(
+        let (_, counts) = execute_import_job_profiled(
             connection, &active.meta.id, &active.case_root, config, &job,
             ImportJobOptions {
                 projection_policy: Default::default(),
@@ -128,6 +134,19 @@ fn real_linux_import_records_and_persists_source_facts_stage_timings() {
             },
             &profiler,
         ).unwrap();
+        let expected_state = if counts.warning_count > 0 || counts.skipped_count > 0 || counts.failed_count > 0 {
+            transport::dto::TaskProgressStateDto::Partial
+        } else {
+            transport::dto::TaskProgressStateDto::Completed
+        };
+        let tasks = sink.1.lock().unwrap();
+        let final_task = tasks.last().expect("terminal import task event");
+        assert_eq!(final_task.state, expected_state);
+        assert_eq!(final_task.job_id, job.0);
+        assert!(!final_task.cancellable);
+        assert!(final_task.eta_seconds.is_none());
+        assert!(tasks.windows(2).all(|events| events[0].seq < events[1].seq));
+        drop(tasks);
         let sources = DataSourceRepo::new(connection).find_by_case(&active.meta.id)?;
         assert_eq!(sources.len(), 1);
         let source = app_services::source_db::open_registered_source_db_read_only(

@@ -40,16 +40,14 @@ impl<'a> ObservedImportSink<'a> {
     }
 
     pub fn heartbeat(&self, cancel: &AtomicBool) {
-        let progress = self
-            .reporter
-            .lock()
-            .unwrap()
-            .heartbeat(cancel.load(Ordering::Acquire));
+        let mut reporter = self.reporter.lock().unwrap();
+        let progress = reporter.heartbeat(cancel.load(Ordering::Acquire));
         self.emit(&progress);
     }
 
     pub fn finish(&self, state: State) {
-        let progress = self.reporter.lock().unwrap().finish(state);
+        let mut reporter = self.reporter.lock().unwrap();
+        let progress = reporter.finish(state);
         self.emit(&progress);
     }
 
@@ -122,10 +120,11 @@ impl ImportEventSink for ObservedImportSink<'_> {
     }
 
     fn task_stage(&self, stage: Stage, complete: bool) {
+        let mut reporter = self.reporter.lock().unwrap();
         let event = if complete {
-            self.reporter.lock().unwrap().finish_stage(stage, false)
+            reporter.finish_stage(stage, false)
         } else {
-            self.reporter.lock().unwrap().start(stage)
+            reporter.start(stage)
         };
         self.emit(&event);
     }
@@ -151,10 +150,10 @@ impl ImportEventSink for ObservedImportSink<'_> {
             event = Some(reporter.finish_stage(stage, false));
         }
         let weighted = reporter.progress();
-        drop(reporter);
         if let Some(event) = &event {
             self.emit(event);
         }
+        drop(reporter);
         if let Some(sink) = self.downstream {
             let mut phase = phase.clone();
             phase.percent = weighted;
@@ -170,11 +169,8 @@ impl ImportEventSink for ObservedImportSink<'_> {
         );
         let completed = categories.values().map(|(done, _)| *done).sum();
         let total = categories.values().map(|(_, total)| *total).sum();
-        let event = self
-            .reporter
-            .lock()
-            .unwrap()
-            .advance(completed, Some(total), Unit::Items);
+        let mut reporter = self.reporter.lock().unwrap();
+        let event = reporter.advance(completed, Some(total), Unit::Items);
         if let Some(event) = event {
             self.emit(&event);
         }

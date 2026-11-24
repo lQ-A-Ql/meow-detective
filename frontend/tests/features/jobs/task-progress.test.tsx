@@ -90,6 +90,14 @@ describe('weighted progress and independent heartbeat', () => {
     expect(taskHeartbeatState({ ...task, state: 'completed' }, received + 90000)).toBe('current');
   });
 
+  it('hides outdated speed and remaining time while waiting for the backend', () => {
+    const [job] = mergeTaskJobs([], { job: task }, [], i18n.t);
+    render(<JobStatusCard job={job} tone="running" task={task} />);
+    expect(screen.queryByText('当前步骤预计剩余约 10秒钟')).not.toBeInTheDocument();
+    expect(screen.queryByText(i18n.t('taskProgress.itemsPerSecond', { amount: '5' }))).not.toBeInTheDocument();
+    expect(screen.getByText('后台暂未响应')).toBeInTheDocument();
+  });
+
   it('formats long running times using localized duration units', () => {
     expect(taskDuration(600, 'zh-CN')).toBe('10分钟');
     expect(taskDuration(7200, 'en')).toBe('2 hours');
@@ -114,6 +122,13 @@ describe('weighted progress and independent heartbeat', () => {
     expect(taskHeartbeatState(finished, Date.parse(task.heartbeatAt) + 90000)).toBe('current');
     expect(finished.stages.every((stage) => stage.state === 'completed')).toBe(true);
     expect(taskForJob({ ...job, status: 'failed' }, task)?.state).toBe('failed');
+    const partial = { ...job, partial: true, failedCount: 1 };
+    expect(taskForJob(partial, task)?.state).toBe('partial');
+    expect(activeJobProgress(partial, undefined, taskForJob(partial, task))).toBe(26);
+    expect(mergeTaskJobs([partial], { job: task }, [], i18n.t)[0].status).toBe('warning');
+    expect(
+      mergeTaskJobs([{ ...job, status: 'running' }], { job: { ...task, state: 'partial' } }, [], i18n.t)[0].status,
+    ).toBe('warning');
     const cancelled = { ...job, status: 'cancelled' as const, progress: 70 };
     expect(activeJobProgress(cancelled, undefined, taskForJob(cancelled, task))).toBe(26);
     const queued = { ...job, status: 'pending' as const, progress: 0 };

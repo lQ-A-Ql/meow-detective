@@ -6,7 +6,7 @@ import {
   mergeJobSnapshots,
   subscribeToJobSnapshotEvents,
 } from '@/features/jobs/job-snapshot-events';
-import type { JobSnapshot } from '@/types/models';
+import type { JobSnapshot, TaskProgress } from '@/types/models';
 
 const job: JobSnapshot = {
   id: 'import-1',
@@ -22,6 +22,52 @@ const job: JobSnapshot = {
 };
 
 describe('event-driven task snapshots', () => {
+  it('keeps structured task heartbeats separate from partition snapshot ordering', () => {
+    const client = new QueryClient();
+    const key = ['jobs', 'snapshot', 'case-1'];
+    client.setQueryData(key, [job]);
+    const disconnect = subscribeToJobSnapshotEvents(client);
+    const task: TaskProgress = {
+      jobId: job.id,
+      caseId: 'case-1',
+      kind: 'import',
+      seq: 3,
+      state: 'running',
+      progress: 40,
+      mode: 'indeterminate',
+      stage: 'index',
+      stages: [{ key: 'index', weight: 100, state: 'running' }],
+      completedUnits: 0,
+      unit: 'items',
+      elapsedMs: 10000,
+      stageElapsedMs: 1000,
+      heartbeatAt: '2026-11-24T04:00:02Z',
+      heartbeat: true,
+      cancellable: true,
+    };
+    try {
+      eventBus.publishEvent({ eventId: 'heartbeat', topic: 'job-progress', ts: task.heartbeatAt, payload: task });
+      expect(jobsSnapshotPollInterval(client, 'case-1')).toBe(1500);
+      expect(client.getQueryData<JobSnapshot[]>(key)?.[0].progress).toBe(30);
+      eventBus.publishEvent({
+        eventId: 'partition',
+        topic: 'partition-progress',
+        ts: '2026-11-24T04:00:01Z',
+        payload: {
+          jobId: job.id,
+          currentPartition: '2',
+          completedPartitions: 1,
+          totalPartitions: 2,
+          partitionProgress: 50,
+        },
+      });
+      expect(client.getQueryData<JobSnapshot[]>(key)?.[0].currentPartition).toBe('2');
+    } finally {
+      disconnect();
+      client.clear();
+    }
+  });
+
   it('updates known jobs immediately and reduces polling while events arrive', () => {
     const client = new QueryClient();
     const key = ['jobs', 'snapshot', 'case-1'];

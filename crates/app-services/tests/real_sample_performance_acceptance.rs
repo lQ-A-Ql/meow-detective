@@ -215,7 +215,15 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         .unwrap();
     let after = input_metadata(&fixture);
     let task_progress = sink.task_report();
-    let task_passed = task_progress["last"]["state"] == "completed"
+    let expected_task_state = if summary["warningCount"].as_u64().unwrap() > 0
+        || summary["skippedCount"].as_u64().unwrap() > 0
+        || summary["failedCount"].as_u64().unwrap() > 0
+    {
+        "partial"
+    } else {
+        "completed"
+    };
+    let task_passed = task_progress["last"]["state"] == expected_task_state
         && task_progress["monotonicViolations"] == 0
         && (import_elapsed_ms < 4000 || task_progress["heartbeats"].as_u64().unwrap_or(0) > 0);
     let required_passed = summary["sourceCount"] == 1
@@ -274,7 +282,7 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
             > 0,
         "artifact extraction must produce real records"
     );
-    assert_eq!(report["taskProgress"]["last"]["state"], "completed");
+    assert_eq!(report["taskProgress"]["last"]["state"], expected_task_state);
     assert_eq!(report["taskProgress"]["monotonicViolations"], 0);
     if import_elapsed_ms >= 4000 {
         assert!(report["taskProgress"]["heartbeats"].as_u64().unwrap() > 0);

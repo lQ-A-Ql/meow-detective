@@ -14,6 +14,7 @@ use crate::import_pipeline::emit;
 use crate::import_pipeline::profile::elapsed_ms;
 
 mod budget;
+mod summary;
 
 /// Three-state materialization result: completed with an event count, or
 /// capacity-deferred (import keeps running as partial), or propagated as a
@@ -78,7 +79,7 @@ pub(crate) fn run_finalize_phase(
     }
     Ok(match ctx.content_kind {
         crate::import_pipeline::context::ImportContentKind::Filesystem => {
-            build_summary_message(&ctx.import_config.source_name, stats, pipeline_message)
+            summary::build(&ctx.import_config.source_name, stats, pipeline_message)
         }
         crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata => format!(
             "Imported {} as Ceph BlueStore metadata-only source. {}",
@@ -486,20 +487,4 @@ fn checkpoint_source_database(
         ),
     )?;
     Ok(())
-}
-
-fn build_summary_message(
-    source_name: &str,
-    stats: &file_service::EnumerationStats,
-    pipeline_message: &str,
-) -> String {
-    let mut message = format!(
-        "Imported {source_name}: {} files, {} dirs",
-        stats.file_count, stats.dir_count
-    );
-    if !pipeline_message.is_empty() {
-        message.push_str(". ");
-        message.push_str(pipeline_message);
-    }
-    message
 }

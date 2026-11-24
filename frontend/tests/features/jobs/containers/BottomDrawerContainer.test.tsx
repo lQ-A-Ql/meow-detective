@@ -146,7 +146,7 @@ describe('BottomDrawer jobs panel', () => {
     expect(screen.getByText('警告 2')).toBeDefined();
     expect(screen.getByText('跳过 3')).toBeDefined();
     expect(screen.getByText('失败 0')).toBeDefined();
-    expect(screen.getByText(/1 运行 \/ 1 完成 \/ 1 部分 \/ 0 失败/)).toBeDefined();
+    expect(screen.getByText(/1 运行 \/ 0 完成 \/ 1 部分 \/ 0 失败/)).toBeDefined();
   });
 
   it('keeps running jobs visible for cancel surfaces outside the drawer', () => {

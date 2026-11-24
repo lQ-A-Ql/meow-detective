@@ -122,12 +122,8 @@ pub(super) fn observe(
             while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) =
                 receiver.recv_timeout(Duration::from_secs(2))
             {
-                let event = work
-                    .progress
-                    .reporter
-                    .lock()
-                    .unwrap()
-                    .heartbeat(cancel.load(Ordering::Acquire));
+                let mut reporter = work.progress.reporter.lock().unwrap();
+                let event = reporter.heartbeat(cancel.load(Ordering::Acquire));
                 emit(work, event);
             }
         });

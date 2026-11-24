@@ -1,6 +1,6 @@
 import type { QueryClient } from '@tanstack/react-query';
 import { subscribeToEvent } from '@/lib/events/subscribers';
-import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
+import type { ImportPhaseProgress, JobSnapshot, TaskProgress } from '@/types/models';
 
 interface JobProgressPayload {
   jobId: string;
@@ -55,7 +55,8 @@ export function subscribeToJobSnapshotEvents(client: QueryClient) {
   }
 
   const unsubs = [
-    subscribeToEvent<JobProgressPayload>('job-progress', ({ ts, payload }) => {
+    subscribeToEvent<JobProgressPayload | TaskProgress>('job-progress', ({ ts, payload }) => {
+      if ('seq' in payload) return;
       updateJob(payload.jobId, ts, (job) => ({
         ...job,
         progress: Math.max(job.progress, payload.progress),

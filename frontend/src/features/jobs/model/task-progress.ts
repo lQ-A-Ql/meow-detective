@@ -1,6 +1,10 @@
 import type { DataSourceSummary, JobSnapshot, TaskProgress, TaskStageProgress } from '@/types/models';
 import type { TFunction } from 'i18next';
 
+export function jobHasPartialOutcome(job: JobSnapshot) {
+  return job.partial || job.warningCount > 0 || job.skippedCount > 0 || job.failedCount > 0;
+}
+
 export function taskDuration(seconds: number, language: string) {
   const unit = seconds >= 3600 ? 'hour' : seconds >= 60 ? 'minute' : 'second';
   const divisor = unit === 'hour' ? 3600 : unit === 'minute' ? 60 : 1;
@@ -18,7 +22,8 @@ export function taskStageLabel(task: TaskProgress, stage: TaskStageProgress['key
 export function taskForJob(job: JobSnapshot, task?: TaskProgress): TaskProgress | undefined {
   if (!task || task.jobId !== job.id) return undefined;
   if (job.status === 'pending' || job.status === 'running' || job.status === 'cancelling') return task;
-  const state = job.status === 'warning' ? 'partial' : job.status;
+  const state =
+    job.status === 'warning' || (job.status === 'completed' && jobHasPartialOutcome(job)) ? 'partial' : job.status;
   return {
     ...task,
     state,
@@ -62,7 +67,10 @@ export function mergeTaskJobs(
     }));
   const observed = jobs.map((job): JobSnapshot => {
     const task = tasks[job.id];
-    if (job.status !== 'pending' || !task || task.state === 'pending') return job;
+    if (job.status === 'completed' && jobHasPartialOutcome(job)) {
+      return { ...job, status: 'warning', progress: Math.min(task?.progress ?? job.progress, 99) };
+    }
+    if (!task || !['pending', 'running', 'cancelling'].includes(job.status) || task.state === 'pending') return job;
     return {
       ...job,
       progress: task.progress,

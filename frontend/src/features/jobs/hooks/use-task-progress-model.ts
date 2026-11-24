@@ -29,16 +29,17 @@ export function useTaskProgressModel(task: TaskProgress) {
         ? units(task.completedUnits)
         : t('taskProgress.count', { processed: units(task.completedUnits), total: units(task.totalUnits) });
   const rate =
-    task.rate === undefined
+    !active || heartbeat !== 'current' || task.rate === undefined
       ? undefined
       : task.unit === 'bytes'
         ? t('taskProgress.bytesPerSecond', { amount: formatBytes(task.rate) })
         : t('taskProgress.itemsPerSecond', { amount: number.format(task.rate) });
-  const eta = !active
-    ? undefined
-    : task.etaSeconds === undefined
-      ? t('taskProgress.estimating')
-      : t('taskProgress.stageRemaining', { duration: taskDuration(task.etaSeconds, i18n.language) });
+  const eta =
+    !active || heartbeat !== 'current'
+      ? undefined
+      : task.etaSeconds === undefined
+        ? t('taskProgress.estimating')
+        : t('taskProgress.stageRemaining', { duration: taskDuration(task.etaSeconds, i18n.language) });
   return {
     work: task.work ? t(`taskProgress.work.${task.work}`) : undefined,
     stage: taskStageLabel(task, task.stage, t),

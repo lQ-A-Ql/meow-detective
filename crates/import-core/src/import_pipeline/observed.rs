@@ -54,6 +54,7 @@ pub(super) fn execute_import_job_internal(
             observer.catalog_only();
         }
         let state = match &result {
+            Ok((_, counts)) if counts.is_partial() => State::Partial,
             Ok(_) => State::Completed,
             Err(error) if error.category == "cancelled" => State::Cancelled,
             Err(_) => State::Failed,

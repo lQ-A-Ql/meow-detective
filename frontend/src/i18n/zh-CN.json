@@ -20,7 +20,7 @@
     "timelineWork": "构建时间线",
     "heartbeat": {
       "waiting": "等待后台响应",
-      "unresponsive": "超过 30 秒未收到后台心跳，可查看诊断或取消任务"
+      "unresponsive": "后台暂未响应"
     },
     "stage": {
       "validate": "校验父证据",
