@@ -15,7 +15,9 @@ use std::{
         Arc, Mutex,
     },
 };
+mod memory_metrics;
 mod write_stream;
+pub use memory_metrics::{DatabaseMemoryMetrics, KeyspaceMemoryMetrics};
 pub(crate) use write_stream::WriteStream;
 
 #[derive(Debug, Clone)]
