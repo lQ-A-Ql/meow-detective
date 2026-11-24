@@ -17,6 +17,10 @@ pub(super) fn run() {
     )
     .unwrap();
     assert!(paths.len() <= 64);
+    let paths = paths
+        .into_iter()
+        .map(|path| path.to_ascii_lowercase())
+        .collect::<Vec<_>>();
     let report = active
         .with_conn(|connection| {
             let handle = app_services::source_db::open_registered_fjall_source_read_only(
@@ -95,7 +99,10 @@ pub(super) fn run() {
                             "reason": result.err().map(|error| error.to_string()),
                         }));
                     }
-                    if paths.iter().any(|path| entry.path.ends_with(path)) {
+                    if paths
+                        .iter()
+                        .any(|path| entry.path.to_ascii_lowercase().ends_with(path))
+                    {
                         selected.push(entry);
                         assert!(
                             selected.len() <= 128,
@@ -145,7 +152,9 @@ pub(super) fn run() {
                 .collect::<Vec<_>>();
             let technical = technical_entries
                 .values()
-                .filter(|entry| entry.id.starts_with("mft:"))
+                .filter(|entry| {
+                    entry.id.starts_with("mft:") && entry.entry_type == CatalogEntryType::File
+                })
                 .map(|entry| {
                     let global = app_services::source_db::GlobalFileId::new(
                         source.id.clone(),
@@ -178,7 +187,7 @@ pub(super) fn run() {
             Ok(json!({
                 "caseId": active.meta.id.0,
                 "sourceId": source.id.0,
-                "catalogFilesScanned": scanned,
+                "catalogRecordsScanned": scanned,
                 "headerWindowExclusions": exclusions,
                 "headerWindowExamples": header_window,
                 "evtxPathValidation": evtx,
