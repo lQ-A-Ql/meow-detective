@@ -1,7 +1,7 @@
 use super::SourceStore;
 use crate::{
-    DatabaseConfig, FjallStorageError, KeyspaceName, PersistMode, Result, SnapshotEntry,
-    SourceReadSnapshot, WriteAction,
+    DatabaseConfig, FjallStorageError, KeyspaceName, Result, SnapshotEntry, SourceReadSnapshot,
+    SourceWriteSession, WriteAction, WriteSessionConfig,
 };
 use std::{
     ops::Bound,
@@ -33,6 +33,7 @@ pub struct SourceCloneProgress {
     /// Logical key and value bytes copied, excluding engine bookkeeping.
     pub bytes_copied: u64,
     pub durable: bool,
+    pub native_writes: Option<crate::NativeWriteReport>,
 }
 
 impl SourceStore {
@@ -48,6 +49,9 @@ impl SourceStore {
     ) -> Result<SourceStore> {
         ensure_not_cancelled(cancel)?;
         let target = SourceStore::open(path, config)?;
+        let session = target
+            .database()
+            .begin_write_session(WriteSessionConfig::default())?;
         let snapshot = self.database.read_snapshot();
         let mut keyspaces = self.database.keyspace_names().collect::<Vec<_>>();
         keyspaces.sort_unstable_by_key(|keyspace| keyspace.as_str());
@@ -58,16 +62,17 @@ impl SourceStore {
             records_copied: 0,
             bytes_copied: 0,
             durable: false,
+            native_writes: None,
         };
         progress(state);
         for keyspace in keyspaces {
             state.keyspace = Some(keyspace);
-            copy_keyspace(&snapshot, &target, cancel, &mut state, &mut progress)?;
+            copy_keyspace(&snapshot, &session, cancel, &mut state, &mut progress)?;
             state.completed_keyspaces += 1;
             progress(state);
         }
         ensure_not_cancelled(cancel)?;
-        target.database.persist(PersistMode::SyncAll)?;
+        state.native_writes = Some(session.finish()?);
         state.keyspace = None;
         state.durable = true;
         progress(state);
@@ -77,7 +82,7 @@ impl SourceStore {
 
 fn copy_keyspace(
     snapshot: &SourceReadSnapshot,
-    target: &SourceStore,
+    session: &SourceWriteSession,
     cancel: &AtomicBool,
     state: &mut SourceCloneProgress,
     progress: &mut impl FnMut(SourceCloneProgress),
@@ -86,35 +91,45 @@ fn copy_keyspace(
         .keyspace
         .expect("clone keyspace selected before copying");
     let mut cursor = None;
-    loop {
-        ensure_not_cancelled(cancel)?;
-        let (page, bytes) = read_bounded_page(snapshot, keyspace, cursor.as_deref(), cancel)?;
-        if page.is_empty() {
-            return Ok(());
-        }
-        ensure_not_cancelled(cancel)?;
-        let count = page.len() as u64;
-        cursor = page.last().map(|entry| entry.key.clone());
-        let actions = page
-            .into_iter()
-            .map(|entry| WriteAction::Put {
-                keyspace,
-                key: entry.key,
-                value: entry.value,
-            })
-            .collect::<Vec<_>>();
-        ensure_not_cancelled(cancel)?;
-        target.database.write_batch(&actions, PersistMode::Buffer)?;
-        state.records_copied = state
-            .records_copied
-            .checked_add(count)
-            .ok_or_else(progress_overflow)?;
-        state.bytes_copied = state
-            .bytes_copied
-            .checked_add(bytes)
-            .ok_or_else(progress_overflow)?;
-        progress(*state);
-    }
+    session.run(
+        cancel,
+        || {
+            ensure_not_cancelled(cancel)?;
+            let (page, bytes) = read_bounded_page(snapshot, keyspace, cursor.as_deref(), cancel)?;
+            if page.is_empty() {
+                return Ok(None);
+            }
+            ensure_not_cancelled(cancel)?;
+            let count = page.len() as u64;
+            cursor = page.last().map(|entry| entry.key.clone());
+            state.records_copied = state
+                .records_copied
+                .checked_add(count)
+                .ok_or_else(progress_overflow)?;
+            state.bytes_copied = state
+                .bytes_copied
+                .checked_add(bytes)
+                .ok_or_else(progress_overflow)?;
+            progress(*state);
+            Ok(Some(page))
+        },
+        |entry| {
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            entry.key.hash(&mut hash);
+            hash.finish()
+        },
+        |_, entries| {
+            Ok(entries
+                .into_iter()
+                .map(|entry| WriteAction::Put {
+                    keyspace,
+                    key: entry.key,
+                    value: entry.value,
+                })
+                .collect())
+        },
+    )
 }
 
 pub(crate) fn read_bounded_page(

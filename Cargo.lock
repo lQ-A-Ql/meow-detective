@@ -4967,6 +4967,7 @@ name = "persistence-fjall"
 version = "0.1.1"
 dependencies = [
  "chrono",
+ "crossbeam-channel",
  "fjall",
  "hex",
  "postcard",

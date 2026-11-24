@@ -26,8 +26,9 @@ pub use codec::{
     KEY_FORMAT_VERSION,
 };
 pub use database::{
-    BatchReceiptState, DatabaseConfig, DatabaseMemoryMetrics, KeyspaceMemoryMetrics, PersistMode,
-    SourceDatabase, SourceReadHandle, SourceReadSnapshot, WriteAction, WriteBatchReceipt,
+    BatchReceiptState, DatabaseConfig, DatabaseMemoryMetrics, KeyspaceMemoryMetrics,
+    NativeWriteReport, PersistMode, SourceDatabase, SourceReadHandle, SourceReadSnapshot,
+    SourceWriteSession, WriteAction, WriteBatchReceipt, WriteSessionConfig,
 };
 pub use deleted_recovery::DeletedRecoveryRecordStore;
 pub use deleted_recovery_types::{

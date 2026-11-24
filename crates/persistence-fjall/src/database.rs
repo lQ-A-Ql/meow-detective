@@ -16,13 +16,17 @@ use std::{
     },
 };
 mod memory_metrics;
+mod native_write;
 mod read_view;
 mod transaction;
+mod write_session;
 mod write_stream;
 pub use memory_metrics::{DatabaseMemoryMetrics, KeyspaceMemoryMetrics};
 pub use read_view::SourceReadHandle;
 pub(crate) use read_view::TransactionReadView;
+pub use write_session::{NativeWriteReport, SourceWriteSession, WriteSessionConfig};
 pub(crate) use write_stream::WriteStream;
+pub(crate) const NATIVE_WRITE_INCOMPLETE_FILE: &str = "native-write-incomplete";
 
 #[derive(Debug, Clone)]
 pub struct DatabaseConfig {
@@ -72,11 +76,16 @@ pub(crate) struct DatabaseState {
     immutable_epoch: AtomicU64,
     lifecycle: RwLock<()>,
     immutable_sealed: AtomicBool,
+    session_active: AtomicBool,
+    session_failed: AtomicBool,
 }
 
 impl SourceDatabase {
     pub fn open(path: impl AsRef<Path>, config: DatabaseConfig) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
+        if path.join(NATIVE_WRITE_INCOMPLETE_FILE).exists() {
+            return Err(FjallStorageError::WriteSessionFailed);
+        }
         let builder = fjall::OptimisticTxDatabase::builder(&path)
             .cache_size(config.cache_size_bytes)
             .worker_threads(config.worker_threads)
@@ -96,6 +105,8 @@ impl SourceDatabase {
                 immutable_epoch: AtomicU64::new(0),
                 lifecycle: RwLock::new(()),
                 immutable_sealed: AtomicBool::new(false),
+                session_active: AtomicBool::new(false),
+                session_failed: AtomicBool::new(false),
             }),
         })
     }
@@ -118,6 +129,7 @@ impl SourceDatabase {
             .lifecycle
             .write()
             .map_err(|_| FjallStorageError::LockPoisoned)?;
+        self.ensure_regular_write()?;
         if self.immutable_epoch() != epoch {
             return Err(FjallStorageError::InvalidEnvelope(
                 "verified immutable data changed".into(),
@@ -155,6 +167,16 @@ impl SourceDatabase {
             keyspaces: Arc::clone(&self.inner.keyspaces),
             _owner: self.clone(),
         }
+    }
+
+    pub(crate) fn ensure_regular_write(&self) -> Result<()> {
+        if self.inner.session_failed.load(Ordering::Acquire) {
+            return Err(FjallStorageError::WriteSessionFailed);
+        }
+        if self.inner.session_active.load(Ordering::Acquire) {
+            return Err(FjallStorageError::WriteSessionBusy);
+        }
+        Ok(())
     }
 }
 

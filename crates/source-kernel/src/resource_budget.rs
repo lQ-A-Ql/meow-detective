@@ -6,6 +6,7 @@ use std::time::Duration;
 pub const MIB: u64 = 1024 * 1024;
 pub const WORKSPACE_BYTES: u64 = 1020 * MIB;
 pub const ENUMERATION_BYTES: u64 = 560 * MIB;
+pub const STORAGE_WORKERS: u64 = 12;
 
 const DEFAULT_CPU_CAP: usize = 6;
 const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 192;
@@ -245,7 +246,7 @@ impl ResourcePool {
         let parent = self.acquire(
             Resources {
                 bytes: WORKSPACE_BYTES,
-                workers: 4,
+                workers: STORAGE_WORKERS,
                 ..Default::default()
             },
             Some(cancel),
@@ -253,7 +254,7 @@ impl ResourcePool {
         let pool = Self(Arc::new(Inner {
             limits: Resources {
                 bytes: WORKSPACE_BYTES,
-                workers: 4,
+                workers: STORAGE_WORKERS,
                 catalogs: 1,
                 readers: 32,
                 handles: 512,
@@ -320,7 +321,7 @@ pub fn global_pool() -> &'static ResourcePool {
             metadata: 516 * MIB,
             readers: 32,
             handles: 512,
-            workers: 4,
+            workers: STORAGE_WORKERS,
             catalogs: 1,
         })
     });

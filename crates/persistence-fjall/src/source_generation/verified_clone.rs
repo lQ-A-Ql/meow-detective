@@ -5,8 +5,8 @@ use super::{
 };
 use crate::{
     source_store::{ensure_not_cancelled, read_bounded_page},
-    DatabaseConfig, FjallStorageError, PersistMode, Result, SourceCloneProgress,
-    SourceReadSnapshot, SourceStore, WriteAction,
+    DatabaseConfig, FjallStorageError, Result, SourceCloneProgress, SourceReadSnapshot,
+    SourceStore, SourceWriteSession, WriteAction, WriteSessionConfig,
 };
 use sha2::{Digest, Sha256};
 use std::{
@@ -103,6 +103,9 @@ pub fn clone_verified_generation_with_control(
         return Err(FjallStorageError::PublicationConflict(path.to_owned()));
     }
     let target = SourceStore::open(path, config)?;
+    let session = target
+        .database()
+        .begin_write_session(WriteSessionConfig::default())?;
     let snapshot = source.database().read_snapshot();
     let mut remaining = source
         .database()
@@ -121,6 +124,7 @@ pub fn clone_verified_generation_with_control(
         records_copied: 0,
         bytes_copied: 0,
         durable: false,
+        native_writes: None,
     };
     let mut hasher = Sha256::new();
     progress(state);
@@ -134,7 +138,7 @@ pub fn clone_verified_generation_with_control(
         state.keyspace = Some(space);
         copy_space(
             &snapshot,
-            &target,
+            &session,
             cancel,
             &mut state,
             &mut progress,
@@ -151,7 +155,7 @@ pub fn clone_verified_generation_with_control(
         });
     }
     ensure_not_cancelled(cancel)?;
-    target.database().persist(PersistMode::SyncAll)?;
+    state.native_writes = Some(session.finish()?);
     state.keyspace = None;
     state.durable = true;
     progress(state);
@@ -165,7 +169,7 @@ pub fn clone_verified_generation_with_control(
 
 fn copy_space(
     snapshot: &SourceReadSnapshot,
-    target: &SourceStore,
+    session: &SourceWriteSession,
     cancel: &AtomicBool,
     state: &mut SourceCloneProgress,
     progress: &mut impl FnMut(SourceCloneProgress),
@@ -173,37 +177,46 @@ fn copy_space(
 ) -> Result<()> {
     let space = state.keyspace.expect("copy keyspace is selected");
     let mut cursor = None;
-    loop {
-        ensure_not_cancelled(cancel)?;
-        let (page, bytes) = read_bounded_page(snapshot, space, cursor.as_deref(), cancel)?;
-        if page.is_empty() {
-            return Ok(());
-        }
-        if let Some(hasher) = hasher.as_deref_mut() {
-            for entry in &page {
-                hash_entry(hasher, entry, cancel)?;
+    session.run(
+        cancel,
+        || {
+            ensure_not_cancelled(cancel)?;
+            let (page, bytes) = read_bounded_page(snapshot, space, cursor.as_deref(), cancel)?;
+            if page.is_empty() {
+                return Ok(None);
             }
-        }
-        let count = page.len() as u64;
-        cursor = page.last().map(|entry| entry.key.clone());
-        let actions = page
-            .into_iter()
-            .map(|entry| WriteAction::Put {
-                keyspace: space,
-                key: entry.key,
-                value: entry.value,
-            })
-            .collect::<Vec<_>>();
-        target
-            .database()
-            .write_batch(&actions, PersistMode::Buffer)?;
-        state.records_copied = state
-            .records_copied
-            .checked_add(count)
-            .ok_or_else(overflow)?;
-        state.bytes_copied = state.bytes_copied.checked_add(bytes).ok_or_else(overflow)?;
-        progress(*state);
-    }
+            if let Some(hasher) = hasher.as_deref_mut() {
+                for entry in &page {
+                    hash_entry(hasher, entry, cancel)?;
+                }
+            }
+            let count = page.len() as u64;
+            cursor = page.last().map(|entry| entry.key.clone());
+            state.records_copied = state
+                .records_copied
+                .checked_add(count)
+                .ok_or_else(overflow)?;
+            state.bytes_copied = state.bytes_copied.checked_add(bytes).ok_or_else(overflow)?;
+            progress(*state);
+            Ok(Some(page))
+        },
+        |entry| {
+            use std::hash::{Hash, Hasher};
+            let mut hash = std::collections::hash_map::DefaultHasher::new();
+            entry.key.hash(&mut hash);
+            hash.finish()
+        },
+        |_, entries| {
+            Ok(entries
+                .into_iter()
+                .map(|entry| WriteAction::Put {
+                    keyspace: space,
+                    key: entry.key,
+                    value: entry.value,
+                })
+                .collect())
+        },
+    )
 }
 
 fn overflow() -> FjallStorageError {

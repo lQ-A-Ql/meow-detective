@@ -4,6 +4,14 @@ use std::path::PathBuf;
 pub enum FjallStorageError {
     #[error("concurrent transaction changed a record read by this operation")]
     WriteConflict,
+    #[error("a native write session is already active")]
+    WriteSessionBusy,
+    #[error("native write session failed; this generation cannot be published")]
+    WriteSessionFailed,
+    #[error("native write session configuration exceeds its resource limits")]
+    WriteSessionLimit,
+    #[error("native write worker terminated unexpectedly")]
+    WriteWorkerTerminated,
     #[error("database is locked: {path}")]
     StorageLocked { path: PathBuf },
     #[error("shared source store registry lock is poisoned")]

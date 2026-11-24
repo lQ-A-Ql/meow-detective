@@ -78,10 +78,13 @@ fn controlled_clone_copies_4096_entry_pages_in_stable_order_with_one_sync() {
     let counters = instrumentation::snapshot();
     instrumentation::disable();
     assert_eq!(counters.sync_all_persists, 1);
-    assert_eq!(counters.bytes_written, expected_bytes);
     assert!(counters.scan_entries >= expected_count);
     assert!(counters.bytes_read >= expected_bytes);
     let final_progress = updates.last().unwrap();
+    assert_eq!(
+        final_progress.native_writes.unwrap().encoded_bytes,
+        expected_bytes
+    );
     assert!(final_progress.durable);
     assert_eq!(final_progress.records_copied, expected_count);
     assert_eq!(final_progress.bytes_copied, expected_bytes);

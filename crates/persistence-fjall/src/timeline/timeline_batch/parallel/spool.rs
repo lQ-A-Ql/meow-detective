@@ -4,11 +4,37 @@ use super::{validate_replacement_record, SegmentLimits};
 use crate::{FjallStorageError, TimelineRecord, TimelineRecordStore, TimelineStreamError};
 use serde::{Deserialize, Serialize};
 use std::io::{BufReader, BufWriter, Seek, Write};
+use std::iter::Peekable;
 
 #[derive(Serialize, Deserialize)]
 pub(super) struct StagedRecord {
     pub record: TimelineRecord,
     pub write_bytes: u64,
+}
+
+pub(super) fn next_batch(
+    reader: &mut Peekable<impl Iterator<Item = Result<StagedRecord, FjallStorageError>>>,
+    limits: SegmentLimits,
+    byte_limit: u64,
+) -> Result<Option<(Vec<TimelineRecord>, u64)>, FjallStorageError> {
+    let mut records = Vec::new();
+    let mut bytes = 0u64;
+    while let Some(record) = reader.peek() {
+        let next_bytes = record
+            .as_ref()
+            .map_err(|error| FjallStorageError::Deserialization(error.to_string()))?
+            .write_bytes;
+        if !records.is_empty()
+            && (records.len() >= limits.max_records
+                || bytes.saturating_add(next_bytes) > byte_limit.min(limits.max_bytes))
+        {
+            break;
+        }
+        let record = reader.next().expect("peeked record exists")?;
+        bytes += record.write_bytes;
+        records.push(record.record);
+    }
+    Ok((!records.is_empty()).then_some((records, bytes)))
 }
 
 pub(super) struct RecordSpool {

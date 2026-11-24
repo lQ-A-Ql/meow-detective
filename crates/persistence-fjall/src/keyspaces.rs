@@ -19,7 +19,7 @@ pub const KEYSPACE_NAMES: [&str; 15] = [
     "recovery_indexes",
 ];
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum KeyspaceName {
     Meta,
     CatalogRecords,

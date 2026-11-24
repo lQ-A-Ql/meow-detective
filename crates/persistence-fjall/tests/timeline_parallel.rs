@@ -81,7 +81,7 @@ fn read_marker(
 }
 
 #[test]
-fn segmented_replace_keeps_records_counts_indexes_and_revision_per_segment() {
+fn parallel_replace_keeps_records_counts_indexes_and_publishes_one_revision() {
     let root = tempfile::tempdir().unwrap();
     let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
     let old: Vec<TimelineRecord> = (0..400).map(old_record).collect();
@@ -103,12 +103,14 @@ fn segmented_replace_keeps_records_counts_indexes_and_revision_per_segment() {
     }
     let mut calls = 0usize;
     let outcome = store
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             "source",
             "timeline.",
             "identity-segmented",
             PersistMode::SyncAll,
             limits,
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
             move || -> ProducerResult {
                 calls += 1;
                 if calls <= batches.len() {
@@ -122,7 +124,8 @@ fn segmented_replace_keeps_records_counts_indexes_and_revision_per_segment() {
 
     assert_eq!(outcome.inserted_records, 1205);
     assert_eq!(outcome.deleted_records, 400);
-    assert_eq!(outcome.segments, 6);
+    assert_eq!(outcome.segments, outcome.native_writes.batches);
+    assert_eq!(outcome.native_writes.workers_used, 8);
     assert!(outcome.max_segment_bytes > 0);
 
     let after = store.read_snapshot();
@@ -145,7 +148,7 @@ fn segmented_replace_keeps_records_counts_indexes_and_revision_per_segment() {
     assert!(store.get(&after, "source", "old-0000").unwrap().is_none());
     assert!(store.get(&after, "source", "new-0000").unwrap().is_some());
     assert!(store.get(&after, "source", "keep-0").unwrap().is_some());
-    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 6);
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
 
     let marker = read_marker(&after, "source").unwrap();
     assert_eq!(marker.status, TimelineProjectionState::Complete);
@@ -154,7 +157,7 @@ fn segmented_replace_keeps_records_counts_indexes_and_revision_per_segment() {
 }
 
 #[test]
-fn small_record_limit_splits_insert_segments_and_stays_consistent() {
+fn small_record_limit_bounds_parallel_batches_and_stays_consistent() {
     let root = tempfile::tempdir().unwrap();
     let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
     let before = store.read_snapshot();
@@ -168,12 +171,14 @@ fn small_record_limit_splits_insert_segments_and_stays_consistent() {
     let mut batches = [records];
     let mut calls = 0usize;
     let outcome = store
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             "source",
             "timeline.",
             "identity-small",
             PersistMode::SyncAll,
             limits,
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
             move || -> ProducerResult {
                 calls += 1;
                 if calls == 1 {
@@ -187,13 +192,13 @@ fn small_record_limit_splits_insert_segments_and_stays_consistent() {
 
     assert_eq!(outcome.inserted_records, 10);
     assert_eq!(outcome.deleted_records, 0);
-    assert_eq!(outcome.segments, 4);
+    assert!(outcome.segments >= 4);
     let after = store.read_snapshot();
     assert_eq!(
         store.count_by_time(&after, "source", None, None).unwrap(),
         10
     );
-    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 4);
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
     let marker = read_marker(&after, "source").unwrap();
     assert_eq!(marker.status, TimelineProjectionState::Complete);
     assert_eq!(marker.inserted_events, 10);
@@ -215,12 +220,14 @@ fn producer_failure_leaves_zero_effect_and_rerun_is_exact_and_idempotent() {
     let first_batch = vec![new_record(0), new_record(1)];
     let mut calls = 0usize;
     let error = store
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             "source",
             "timeline.",
             "identity-fail",
             PersistMode::SyncAll,
             limits,
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
             move || -> ProducerResult {
                 calls += 1;
                 match calls {
@@ -248,12 +255,14 @@ fn producer_failure_leaves_zero_effect_and_rerun_is_exact_and_idempotent() {
     let rerun: Vec<TimelineRecord> = (0..10).map(new_record).collect();
     let mut rerun_calls = 0usize;
     let outcome = store
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             "source",
             "timeline.",
             "identity-fail",
             PersistMode::SyncAll,
             SegmentLimits::default_limits(),
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
             move || -> ProducerResult {
                 rerun_calls += 1;
                 if rerun_calls == 1 {
@@ -278,12 +287,14 @@ fn producer_failure_leaves_zero_effect_and_rerun_is_exact_and_idempotent() {
     let second: Vec<TimelineRecord> = (0..10).map(new_record).collect();
     let mut second_calls = 0usize;
     store
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             "source",
             "timeline.",
             "identity-fail",
             PersistMode::SyncAll,
             SegmentLimits::default_limits(),
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
             move || -> ProducerResult {
                 second_calls += 1;
                 if second_calls == 1 {
@@ -311,12 +322,14 @@ fn empty_replacement_writes_complete_in_its_own_transaction() {
     let revision = store.cursor_revision(&before).unwrap();
 
     let outcome = store
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             "source",
             "timeline.",
             "identity-empty",
             PersistMode::SyncAll,
             SegmentLimits::default_limits(),
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
             || -> ProducerResult { Ok(None) },
         )
         .unwrap();
@@ -329,7 +342,7 @@ fn empty_replacement_writes_complete_in_its_own_transaction() {
         store.count_by_time(&after, "source", None, None).unwrap(),
         0
     );
-    assert_eq!(store.cursor_revision(&after).unwrap(), revision);
+    assert_eq!(store.cursor_revision(&after).unwrap(), revision + 1);
     let marker = read_marker(&after, "source").unwrap();
     assert_eq!(marker.status, TimelineProjectionState::Complete);
     assert_eq!(marker.inserted_events, 0);
@@ -342,12 +355,14 @@ fn invalid_replacement_identity_preserves_records_revision_and_marker() {
         let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
         let mut initial = Some(vec![old_record(0)]);
         store
-            .replace_by_parser_prefix_segmented(
+            .replace_by_parser_prefix_parallel(
                 "source",
                 "timeline.",
                 "published",
                 PersistMode::SyncAll,
                 SegmentLimits::default_limits(),
+                Default::default(),
+                &std::sync::atomic::AtomicBool::new(false),
                 || -> ProducerResult { Ok(initial.take()) },
             )
             .unwrap();
@@ -362,12 +377,14 @@ fn invalid_replacement_identity_preserves_records_revision_and_marker() {
         }
         let mut replacement = Some(vec![new_record(1), invalid]);
         assert!(store
-            .replace_by_parser_prefix_segmented(
+            .replace_by_parser_prefix_parallel(
                 "source",
                 "timeline.",
                 "replacement",
                 PersistMode::SyncAll,
                 SegmentLimits::default_limits(),
+                Default::default(),
+                &std::sync::atomic::AtomicBool::new(false),
                 || -> ProducerResult { Ok(replacement.take()) },
             )
             .is_err());
@@ -395,7 +412,7 @@ fn oversized_record_is_rejected_before_replacing_existing_projection() {
     let revision = store.cursor_revision(&store.read_snapshot()).unwrap();
     let mut replacement = Some(vec![new_record(0)]);
     assert!(store
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             "source",
             "timeline.",
             "oversized",
@@ -404,6 +421,8 @@ fn oversized_record_is_rejected_before_replacing_existing_projection() {
                 max_bytes: 1,
                 max_records: 1
             },
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
             || -> ProducerResult { Ok(replacement.take()) },
         )
         .is_err());

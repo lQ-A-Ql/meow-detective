@@ -36,6 +36,7 @@ impl SourceDatabase {
             .lifecycle
             .read()
             .map_err(|_| E::from(FjallStorageError::LockPoisoned))?;
+        self.ensure_regular_write().map_err(E::from)?;
         let transaction = self
             .inner
             .engine

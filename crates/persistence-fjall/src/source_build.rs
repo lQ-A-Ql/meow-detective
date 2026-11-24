@@ -136,6 +136,12 @@ pub struct PublishReceipt {
 
 pub fn seal_build(build_path: impl AsRef<Path>) -> Result<String> {
     let build_path = build_path.as_ref();
+    if build_path
+        .join(crate::database::NATIVE_WRITE_INCOMPLETE_FILE)
+        .exists()
+    {
+        return Err(FjallStorageError::WriteSessionFailed);
+    }
     if !build_path.is_dir() {
         return Err(FjallStorageError::InvalidBuildPath(
             build_path.display().to_string(),

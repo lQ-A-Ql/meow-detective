@@ -55,6 +55,7 @@ pub struct TimelineProjectionStats {
     pub workspace_engine_retained_bytes: u64,
     /// Number of committed write transactions (equals committed segments).
     pub commit_count: u64,
+    pub native_writes: persistence_source::fjall::NativeWriteReport,
 }
 
 pub fn project_and_store_file_activity(

@@ -123,6 +123,7 @@ fn write_manifest(
     manifest: &SourceGenerationManifest,
     cancel: &AtomicBool,
 ) -> Result<String> {
+    source.database().ensure_regular_write()?;
     let path = source.database().path();
     let manifest_path = path.join(SOURCE_GENERATION_MANIFEST_FILE);
     let seal_path = path.join(SOURCE_GENERATION_SEAL_FILE);
@@ -147,6 +148,7 @@ pub fn verify_source_generation_with_control(
     cancel: &AtomicBool,
     mut progress: impl FnMut(u64, u64),
 ) -> Result<SourceGenerationManifest> {
+    source.database().ensure_regular_write()?;
     ensure_not_cancelled(cancel)?;
     validate_identity(expected_source_id)?;
     let path = source.database().path();

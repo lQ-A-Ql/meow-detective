@@ -179,7 +179,7 @@ fn materialize_timeline(
     );
     match projection {
         Ok(projection) => {
-            record_timeline_subphases(ctx, &projection);
+            record_timeline_subphases(ctx, &projection)?;
             super::super::profile::emit_timed_phase_profile(
                 ctx,
                 ImportPhaseDto::Timeline,
@@ -329,14 +329,21 @@ pub(crate) fn write_deferred_marker(
 fn record_timeline_subphases(
     ctx: &ImportJobContext<'_>,
     projection: &timeline_projection::TimelineProjectionStats,
-) {
+) -> Result<(), CommandError> {
     use super::super::profile::Counters;
     use transport::dto::import_benchmark::{
         ImportBenchmarkPhaseDto as Phase, ImportBenchmarkStateDto as State,
     };
     let Some(profiler) = ctx.profiler.as_ref() else {
-        return;
+        return Ok(());
     };
+    profiler
+        .record_progress(&serde_json::json!({
+            "work":"nativeWrites",
+            "phase":"timeline",
+            "nativeWrites":projection.native_writes,
+        }))
+        .map_err(CommandError::from_typed_service_error)?;
     for (phase, elapsed, rows) in [
         (
             Phase::TimelineEvents,
@@ -373,6 +380,7 @@ fn record_timeline_subphases(
         );
     }
     record_timeline_write_timings(profiler, projection);
+    Ok(())
 }
 
 fn record_timeline_write_timings(

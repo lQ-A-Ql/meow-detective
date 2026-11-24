@@ -102,6 +102,7 @@ pub struct SegmentedReplaceOutcome {
     pub deleted_records: u64,
     pub segments: u64,
     pub max_segment_bytes: u64,
+    pub native_writes: crate::NativeWriteReport,
 }
 
 pub fn timeline_projection_state_key(source_id: &str) -> Result<Vec<u8>> {

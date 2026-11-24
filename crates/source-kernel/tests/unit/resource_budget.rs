@@ -102,7 +102,7 @@ fn waiting_for_resources_is_cancelled_and_does_not_leak_a_reservation() {
 fn retired_workspace_keeps_only_borrowed_bytes_charged_until_last_drop() {
     let root = ResourcePool::new(Resources {
         bytes: 1536 * MIB,
-        workers: 4,
+        workers: STORAGE_WORKERS,
         ..Default::default()
     });
     let job = root.workspace(&AtomicBool::new(false)).unwrap();
@@ -132,7 +132,7 @@ fn retired_workspace_keeps_only_borrowed_bytes_charged_until_last_drop() {
 fn nested_phase_cannot_wait_on_resources_it_already_holds() {
     let root = ResourcePool::new(Resources {
         bytes: 1536 * MIB,
-        workers: 4,
+        workers: STORAGE_WORKERS,
         ..Default::default()
     });
     let job = root.workspace(&AtomicBool::new(false)).unwrap();
@@ -166,7 +166,7 @@ fn two_maximum_e01_metadata_owners_leave_capacity_for_one_workspace() {
     let root = ResourcePool::new(Resources {
         bytes: 1536 * MIB,
         metadata: 516 * MIB,
-        workers: 4,
+        workers: STORAGE_WORKERS,
         ..Default::default()
     });
     let request = Resources {

@@ -146,6 +146,7 @@ pub(super) fn materialize(
         deleted_records: 0,
         segments: 0,
         max_segment_bytes: 0,
+        native_writes: Default::default(),
     });
     ensure_active(cancel)?;
     let commit_started = Instant::now();
@@ -190,6 +191,7 @@ fn projection_stats(
         workspace_max_segment_bytes: outcome.max_segment_bytes,
         workspace_engine_retained_bytes: estimate.engine_retained_bytes,
         commit_count: outcome.segments,
+        native_writes: outcome.native_writes,
     })
 }
 
@@ -287,12 +289,14 @@ fn stream_file_events(
     // being overwritten by a single measurement.
     let commit_started = Instant::now();
     let outcome = timeline
-        .replace_by_parser_prefix_segmented(
+        .replace_by_parser_prefix_parallel(
             source,
             "timeline.file_",
             identity,
             PersistMode::SyncAll,
             SegmentLimits::default_limits(),
+            persistence_source::fjall::WriteSessionConfig::default(),
+            cancel,
             next_batch,
         )
         .map_err(|error| match error {
