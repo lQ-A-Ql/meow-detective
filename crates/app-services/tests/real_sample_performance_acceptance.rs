@@ -35,6 +35,8 @@ mod chromium_metadata;
 mod input_diagnostic;
 #[path = "support/real_sample_query_checks.rs"]
 mod query_checks;
+#[path = "support/real_sample_warning_diagnostic.rs"]
+mod warning_diagnostic;
 
 #[test]
 #[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
@@ -58,6 +60,12 @@ fn retained_source_chromium_metadata() {
 #[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
 fn retained_source_input_diagnostic() {
     input_diagnostic::run();
+}
+
+#[test]
+#[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID, FORENSICS_PERF_OUTPUT and FORENSICS_DIAGNOSTIC_PATHS"]
+fn retained_source_warning_diagnostic() {
+    warning_diagnostic::run();
 }
 
 #[test]

@@ -328,6 +328,7 @@ dependencies = [
  "serde_json",
  "sha1",
  "sha2 0.10.9",
+ "sootmark-shell",
  "source-kernel",
  "source-reconstruction",
  "subtle",
