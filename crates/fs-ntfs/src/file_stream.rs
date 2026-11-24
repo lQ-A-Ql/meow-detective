@@ -28,11 +28,8 @@ impl NtfsReader {
             Err(error) => return Err(error),
             Ok(None) => {}
         }
-        let extents = self.collect_unnamed_data_extents_from_base(inode, &record)?;
-        Ok(extents.iter().all(|extent| match extent {
-            DataAttributeExtent::Resident { .. } => true,
-            DataAttributeExtent::NonResident { attr_flags, .. } => attr_flags & 0x0001 == 0,
-        }))
+        self.collect_unnamed_data_extents_from_base(inode, &record)?;
+        Ok(true)
     }
 
     /// Consume the filesystem reader and open one inode as a bounded stream.
@@ -48,17 +45,6 @@ impl NtfsReader {
             });
         }
         let extents = self.collect_unnamed_data_extents_from_base(inode, &record)?;
-        if extents.iter().any(|extent| {
-            matches!(
-                extent,
-                DataAttributeExtent::NonResident { attr_flags, .. } if attr_flags & 0x0001 != 0
-            )
-        }) {
-            return Err(io::Error::new(
-                io::ErrorKind::Unsupported,
-                "streaming compressed NTFS data is not supported",
-            ));
-        }
         let size = data_extents_declared_size(&extents, self.cluster_size)?;
         Ok(NtfsFileReader {
             filesystem: self,

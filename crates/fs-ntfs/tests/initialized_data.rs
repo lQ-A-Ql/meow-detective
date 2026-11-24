@@ -243,12 +243,42 @@ fn compressed_file_zeros_tail_after_decompression() {
     let mut oracle = vec![0; 6000];
     oracle[..5000].fill(b'A');
     assert_eq!(bytes, oracle);
+    assert_eq!(
+        reader.read_file_range_by_inode(6, 4090, 1100).unwrap(),
+        oracle[4090..5190]
+    );
+    assert_eq!(
+        reader.read_file_range_by_inode(6, 5990, 100).unwrap(),
+        vec![0; 10]
+    );
+    assert!(reader.supports_file_stream_by_inode(6).unwrap());
+    let (stream_reader, _stream_directory) = filesystem(&fixture);
+    let mut stream = stream_reader.into_file_stream_by_inode(6).unwrap();
+    stream.seek(SeekFrom::Start(4090)).unwrap();
+    let mut streamed = vec![0; 1100];
+    stream.read_exact(&mut streamed).unwrap();
+    assert_eq!(streamed, oracle[4090..5190]);
     // The original compressed bytes are still available through physical evidence reads.
     let mut source = reader.into_reader();
     source.seek(SeekFrom::Start(DATA_OFFSET as u64)).unwrap();
     let mut header = [0; 2];
     source.read_exact(&mut header).unwrap();
     assert_eq!(header, [0x03, 0xb0]);
+}
+
+#[cfg(windows)]
+#[test]
+fn corrupt_compressed_unit_fails_without_returning_encoded_bytes() {
+    let mut fixture = image(6000, 5000, false);
+    fixture[ATTRIBUTE_OFFSET + 12..ATTRIBUTE_OFFSET + 14].copy_from_slice(&1u16.to_le_bytes());
+    fixture[ATTRIBUTE_OFFSET + 24..ATTRIBUTE_OFFSET + 32].copy_from_slice(&15u64.to_le_bytes());
+    fixture[ATTRIBUTE_OFFSET + 34..ATTRIBUTE_OFFSET + 36].copy_from_slice(&4u16.to_le_bytes());
+    fixture[ATTRIBUTE_OFFSET + 64..ATTRIBUTE_OFFSET + 70]
+        .copy_from_slice(&[0x11, 1, 32, 0x01, 15, 0]);
+    fixture[DATA_OFFSET..DATA_OFFSET + 512].fill(0xff);
+    let (reader, _directory) = filesystem(&fixture);
+    assert!(reader.read_file_range_by_inode(6, 0, 32).is_err());
+    assert!(reader.open_file("mft:6").is_err());
 }
 
 #[test]
