@@ -107,11 +107,9 @@ fn input_fingerprint(work: &CapabilityWork) -> Result<String, PostImportError> {
         &work.case_root,
         &DataSourceId(work.row.data_source_id.clone()),
     )?;
-    let manifest = persistence_source::fjall::read_source_generation_manifest(
-        source.source_store(),
-        &work.row.data_source_id,
-    )
-    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    let manifest = source
+        .generation_manifest(&work.row.data_source_id)
+        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let mut digest = Sha256::new();
     digest.update(b"post-import-v2\0");
     digest.update(work.kind.wire().as_bytes());

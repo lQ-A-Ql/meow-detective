@@ -37,7 +37,7 @@
 | 15 | Artifact 删除未释放对象引用 | 已完成 | Artifact 删除和重复投影同步更新对象引用。 |
 | 16 | Source schema 检查晚于恢复状态写入 | 已完成 | 打开案件时先检查来源 schema，再进行恢复扫描。 |
 | 17 | 恢复诊断错误使用 operation 外键 | 已完成 | 写入恢复状态前校验 operation 归属。 |
-| 18 | Analysis 原生并发写入与封装边界 | 实施中 | 单写入者类型和旧规划入口已删除，乐观事务回归通过；原生 ingestion 接入中，至少 4 个线程同时原生写入作为通过条件，CPU >40% 为理想性能目标。 |
+| 18 | 原生并发写入与封装边界 | 并发验收通过，完整样本复测中 | `2ca3a852` 删除单写入者封装，`e3ff92d` 接入默认 8 个线程的原生 ingestion；524,288 条真实事件的原生调用峰值重叠 5，8 个线程全部参与，CPU 记录为性能观测。Catalog staging、timeline 和生成目录复制采用原生会话。 |
 | 19 | Source SQLite 残留指纹业务明细 | 已完成 | `forensic_fingerprints` 从 source migration 删除；导入、Catalog/Analysis staging 合并和 hash 更新不再写 source SQLite；旧 SQL detail fallback 已删除。 |
 | 20 | Linux 摘要冷加载重复遍历 Catalog、Artifact 和候选检查点 | 已完成 | 候选与 kernel catalog 在分析发现阶段随 Catalog 单次流式遍历记录到 source 控制元数据；Artifact 单次聚合生成 counts、首页和系统信息；Fjall Meta 按 Artifact revision 与分析检查点 revision 缓存静态摘要及分页。导入 finalize 预热 `offset=0, limit=200`，后续页使用 family-created 索引读取。真实检材冷进程读缓存 `1,697 ms`，Artifact `49,461`；原接口超过 MCP `30 s` 超时。 |
 
@@ -68,7 +68,7 @@
 | FJ-12-J | 缺失 generation、重新打开、取消、失败重试、删除和进程终止行为正确 | 已完成 | `source_detail_repo_fail_closed` 2 项、案件服务 32 项；Fjall process recovery 与 generation 测试 | PVE/Kubernetes 私有镜像未运行 |
 | FJ-12-K | 大 Catalog 的计数、排序、分页及导入缓存受界限约束 | 已完成 | Fjall 单页上限 8192（包含内部 lookahead）；文件浏览排序、跳转、根目录和子目录窗口上限 8192；Artifact 查询集合上限 100000、分页上限 1024；Timeline 报告、Correlation Artifact ID 和 FileRepo 全量查询均有界；分页与超限失败回归通过 | 无 |
 | FJ-12-L | 相关测试、Clippy、格式和架构门禁通过，文档及分批提交完整 | 已完成 | `app-services --lib` 1167 通过、16 忽略；`persistence-sqlite --lib` 140 通过、1 忽略；Fjall Catalog 8 项、文件浏览、Artifact 超限、source detail fail-closed 回归通过；格式、Clippy、模块规模、函数规模、测试布局和 SQL 边界门禁通过；修复按功能分批提交 | 私有 E01、PVE、Kubernetes 和真实掉电样本未执行 |
-| FJ-12-M | 分析输出由至少 4 个 worker 同时执行原生写入，SQLite 提交生命周期控制 | 实施中 | 既有测试覆盖 4 个线程写入 400 Artifact 与 400 Timeline 的结果一致性；验收记录原生调用重叠、默认 8 个线程、CPU、吞吐量、内存和发布一致性 | 原生 ingestion 并发与真实样本继续验证 |
+| FJ-12-M | 至少 4 个 worker 同时执行原生写入，SQLite 提交生命周期控制 | 并发通过 | 真实 524,288 条 timeline 事件、3,145,728 个操作，8 个线程全部参与，峰值重叠 5，原生会话 14.16 秒；只读句柄编译拒绝和页面只读回归通过 | 完整五样本矩阵复测中 |
 
 ## 当前验证
 

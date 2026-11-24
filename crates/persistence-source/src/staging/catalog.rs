@@ -1,7 +1,5 @@
 use crate::detail::{file_record, open_store_for_write};
-use persistence_fjall::{
-    CatalogEntryType, CatalogRecordStore, FileEntryRecord, PersistMode, ScanDirection,
-};
+use persistence_fjall::{CatalogEntryType, CatalogRecordStore, FileEntryRecord, ScanDirection};
 use persistence_sqlite::repositories::ntfs_staging_repo::NtfsStagingRepo;
 use persistence_sqlite::{DbError, DbResult};
 use rusqlite::{Connection, Row};
@@ -28,49 +26,45 @@ pub fn merge_staging_catalog(
     validate_staging(staging, source_id, partition)?;
     let repository = CatalogRecordStore::from_source_store((*store).clone());
     let root = partition_root(&repository, source_id, partition, partition_name)?;
-    let snapshot = repository.read_snapshot();
     let transaction = staging.unchecked_transaction()?;
     let mut statement = transaction.prepare(include_str!("catalog_staging.sql"))?;
     let mut rows = statement.query([&root.id])?;
-    let mut batch = Vec::with_capacity(PAGE_SIZE);
-    batch.push(root.clone());
+    let mut root_record = Some(root.clone());
     let mut merged = 0;
-    while let Some(row) = rows.next()? {
-        persistence_sqlite::read_operation::ensure_active()?;
-        let record = record(row, source_id, partition)?;
-        if let Some(previous) = repository
-            .get(&snapshot, source_id, &record.id)
-            .map_err(storage_error)?
-        {
-            if previous.partition_index != Some(partition) {
-                return Err(DbError::System(
-                    "catalog entry id conflicts with another partition".into(),
-                ));
+    let mut producer_error = None;
+    let outcome = repository.upsert_parallel(
+        source_id,
+        &std::sync::atomic::AtomicBool::new(false),
+        || {
+            let result = (|| -> DbResult<_> {
+                let mut batch = Vec::with_capacity(PAGE_SIZE);
+                if let Some(root) = root_record.take() {
+                    batch.push(root);
+                }
+                while batch.len() < PAGE_SIZE {
+                    let Some(row) = rows.next()? else {
+                        break;
+                    };
+                    persistence_sqlite::read_operation::ensure_active()?;
+                    batch.push(record(row, source_id, partition)?);
+                    merged += 1;
+                }
+                Ok((!batch.is_empty()).then_some(batch))
+            })();
+            match result {
+                Ok(batch) => Ok(batch),
+                Err(error) => {
+                    producer_error = Some(error);
+                    Err(persistence_fjall::FjallStorageError::Cancelled)
+                }
             }
-        }
-        batch.push(record);
-        merged += 1;
-        if batch.len() == PAGE_SIZE {
-            flush(main, &repository, &batch)?;
-            batch.clear();
-        }
+        },
+    );
+    if let Some(error) = producer_error {
+        return Err(error);
     }
-    flush(main, &repository, &batch)?;
-    store
-        .database()
-        .persist(PersistMode::SyncAll)
-        .map_err(storage_error)?;
+    outcome.map_err(storage_error)?;
     Ok(Some(merged))
-}
-
-fn flush(
-    _conn: &Connection,
-    catalog: &CatalogRecordStore,
-    records: &[FileEntryRecord],
-) -> DbResult<()> {
-    catalog
-        .upsert_batch(records, PersistMode::Buffer)
-        .map_err(storage_error)
 }
 
 fn validate_staging(staging: &Connection, source: &str, partition: u32) -> DbResult<()> {

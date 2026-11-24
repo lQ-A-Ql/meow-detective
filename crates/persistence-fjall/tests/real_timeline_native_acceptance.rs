@@ -1,5 +1,6 @@
 use persistence_fjall::{DatabaseConfig, PersistMode, SourceStore, TimelineRecordStore};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 use std::{path::PathBuf, time::Instant};
 
 #[test]
@@ -24,8 +25,11 @@ fn retained_timeline_parallel_acceptance() {
     let started = Instant::now();
     let mut rows = 0usize;
     let mut cursor = None;
+    let mut expected_digest = Sha256::new();
+    let mut expected_types = std::collections::BTreeMap::<String, u64>::new();
     let producer = || -> Result<_, std::io::Error> {
         if rows >= 524_288 {
+            eprintln!("NATIVE_WRITE_START {}", chrono::Utc::now().to_rfc3339());
             return Ok(None);
         }
         let page = original
@@ -33,6 +37,10 @@ fn retained_timeline_parallel_acceptance() {
             .unwrap();
         assert!(!page.records.is_empty());
         rows += page.records.len();
+        for record in &page.records {
+            expected_digest.update(serde_json::to_vec(record).unwrap());
+            *expected_types.entry(record.event_type.clone()).or_default() += 1;
+        }
         cursor = page.next_cursor;
         Ok(Some(page.records))
     };
@@ -48,6 +56,7 @@ fn retained_timeline_parallel_acceptance() {
             producer,
         )
         .unwrap();
+    eprintln!("NATIVE_WRITE_COMPLETE {}", chrono::Utc::now().to_rfc3339());
     let metrics = target.source_store().database().memory_metrics();
     let retained_versions = metrics
         .keyspaces
@@ -62,15 +71,7 @@ fn retained_timeline_parallel_acceptance() {
         .map(|entry| entry.retained_versions)
         .max()
         .unwrap();
-    let report = json!({"rows":rows,"elapsedMs":started.elapsed().as_millis(),
-        "segments":outcome.segments,"maxSegmentBytes":outcome.max_segment_bytes,
-        "writeBufferBytes":metrics.write_buffer_bytes,"retainedVersions":retained_versions,
-        "nativeWrites":outcome.native_writes});
-    std::fs::write(
-        output.join("memory.json"),
-        serde_json::to_vec_pretty(&report).unwrap(),
-    )
-    .unwrap();
+    let write_elapsed_ms = started.elapsed().as_millis();
     assert_eq!(outcome.inserted_records, 524_288);
     assert_eq!(outcome.native_writes.configured_workers, 8);
     assert!(outcome.native_writes.workers_used >= 4);
@@ -85,4 +86,39 @@ fn retained_timeline_parallel_acceptance() {
             .unwrap(),
         524_288
     );
+    let expected_digest = hex::encode(expected_digest.finalize());
+    let mut actual_digest = Sha256::new();
+    let snapshot = target.read_snapshot();
+    let mut cursor = None;
+    loop {
+        let page = target
+            .scan_by_source(&snapshot, &source, cursor.as_deref(), 4096)
+            .unwrap();
+        for record in page.records {
+            actual_digest.update(serde_json::to_vec(&record).unwrap());
+        }
+        cursor = page.next_cursor;
+        if cursor.is_none() {
+            break;
+        }
+    }
+    assert_eq!(hex::encode(actual_digest.finalize()), expected_digest);
+    for (kind, count) in &expected_types {
+        assert_eq!(
+            target
+                .count_by_type(&snapshot, &source, kind, None, None)
+                .unwrap(),
+            *count
+        );
+    }
+    let report = json!({"rows":rows,"elapsedMs":write_elapsed_ms,
+        "segments":outcome.segments,"maxSegmentBytes":outcome.max_segment_bytes,
+        "writeBufferBytes":metrics.write_buffer_bytes,"retainedVersions":retained_versions,
+        "nativeWrites":outcome.native_writes,
+        "recordDigest":expected_digest,"typeCounts":expected_types,"oraclesPassed":true});
+    std::fs::write(
+        output.join("memory.json"),
+        serde_json::to_vec_pretty(&report).unwrap(),
+    )
+    .unwrap();
 }

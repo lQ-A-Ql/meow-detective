@@ -109,3 +109,49 @@ fn concurrent_read_modify_write_returns_a_conflict_without_losing_updates() {
         Some(vec![1])
     );
 }
+
+#[test]
+fn a_range_read_conflicts_with_a_concurrent_insert_in_the_range() {
+    let directory = tempfile::tempdir().unwrap();
+    let database = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let (entered, ready) = mpsc::channel();
+    let (release, proceed) = mpsc::channel();
+    std::thread::scope(|scope| {
+        let database = &database;
+        let worker = scope.spawn(move || {
+            database.write_transaction(PersistMode::Buffer, |view| {
+                let entries =
+                    view.prefix(KeyspaceName::Meta, b"input/", crate::ScanDirection::Forward)?;
+                assert!(entries.is_empty());
+                entered.send(()).unwrap();
+                proceed.recv_timeout(Duration::from_secs(5)).unwrap();
+                Ok(vec![WriteAction::Put {
+                    keyspace: KeyspaceName::Meta,
+                    key: b"result".to_vec(),
+                    value: b"empty".to_vec(),
+                }])
+            })
+        });
+        ready.recv_timeout(Duration::from_secs(5)).unwrap();
+        database
+            .write_batch(
+                &[WriteAction::Put {
+                    keyspace: KeyspaceName::Meta,
+                    key: b"input/new".to_vec(),
+                    value: vec![1],
+                }],
+                PersistMode::Buffer,
+            )
+            .unwrap();
+        release.send(()).unwrap();
+        assert!(matches!(
+            worker.join().unwrap(),
+            Err(FjallStorageError::WriteConflict)
+        ));
+    });
+    assert!(database
+        .read_snapshot()
+        .get(KeyspaceName::Meta, b"result")
+        .unwrap()
+        .is_none());
+}

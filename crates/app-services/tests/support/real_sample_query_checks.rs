@@ -14,10 +14,7 @@ use app_services::timeline_service::{
 use app_services::{search_service, source_db};
 use chrono::{TimeZone, Utc};
 use domain::{CaseId, DataSourceId, FileEntryId};
-use persistence_source::fjall::{
-    instrumentation::ProcessMeasurement, ArtifactRecordStore, CatalogRecordStore,
-    TimelineRecordStore,
-};
+use persistence_source::fjall::instrumentation::ProcessMeasurement;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -77,24 +74,19 @@ fn source_states(connection: &Connection, root: &Path, case: &CaseId) -> Vec<Sta
         handle
             .require_projection_complete(&snapshot, &source.id.0)
             .unwrap();
-        let store = handle.source_store().clone();
-        let catalog = CatalogRecordStore::from_source_store(store.clone());
-        let timeline = TimelineRecordStore::from_source_store(store.clone());
-        let artifacts = ArtifactRecordStore::from_source_store(store);
         states.push((
             source.id.0.clone(),
-            catalog.count(&snapshot, Some(&source.id.0)).unwrap(),
-            catalog.file_count(&snapshot, &source.id.0).unwrap(),
-            timeline
-                .count_by_time(&snapshot, &source.id.0, None, None)
-                .unwrap(),
-            artifacts.count(&snapshot, Some(&source.id.0)).unwrap(),
-            catalog.cursor_revision(&snapshot).unwrap(),
-            timeline.cursor_revision(&snapshot).unwrap(),
-            artifacts.cursor_revision(&snapshot).unwrap(),
+            handle.catalog_count(&snapshot, &source.id.0).unwrap(),
+            handle.catalog_file_count(&snapshot, &source.id.0).unwrap(),
             handle
-                .source_store()
-                .database()
+                .timeline_count_by_time(&snapshot, &source.id.0, None, None)
+                .unwrap(),
+            handle.artifact_count(&snapshot, &source.id.0).unwrap(),
+            handle.catalog_cursor_revision(&snapshot).unwrap(),
+            handle.timeline_cursor_revision(&snapshot).unwrap(),
+            handle.artifact_cursor_revision(&snapshot).unwrap(),
+            handle
+                .read_handle()
                 .path()
                 .file_name()
                 .unwrap()
@@ -266,9 +258,8 @@ fn timeline(
         let handle =
             source_db::open_registered_fjall_source_read_only(root, &DataSourceId(state.0.clone()))
                 .unwrap();
-        let store = TimelineRecordStore::from_source_store(handle.source_store().clone());
-        expected_narrow += store
-            .count_by_time(&handle.snapshot(), &state.0, Some(begin), Some(end))
+        expected_narrow += handle
+            .timeline_count_by_time(&handle.snapshot(), &state.0, Some(begin), Some(end))
             .unwrap();
     }
     assert_eq!(narrow.total_events, expected_narrow);
@@ -397,16 +388,15 @@ fn header(
 ) -> Value {
     let handle = source_db::open_registered_fjall_source_read_only(root, source).unwrap();
     let snapshot = handle.snapshot();
-    let catalog = CatalogRecordStore::from_source_store(handle.source_store().clone());
-    if catalog.file_count(&snapshot, &source.0).unwrap() == 0 {
+    if handle.catalog_file_count(&snapshot, &source.0).unwrap() == 0 {
         return json!({"status": "empty", "reason": "source has no ordinary files"});
     }
     let mut after = None;
     let mut tried = 0;
     let mut failures = Vec::new();
     for _ in 0..32 {
-        let page = catalog
-            .list_files_by_path(
+        let page = handle
+            .catalog_files_by_path(
                 &snapshot,
                 &source.0,
                 after

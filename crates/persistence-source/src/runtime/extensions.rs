@@ -49,7 +49,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<PartitionPage, StorageRuntimeError> {
-        PartitionRecordStore::from_source_store(self.source_store().clone())
+        PartitionRecordStore::from_source_store(self.store().clone())
             .list_by_source(snapshot, source_id, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -59,7 +59,7 @@ impl ReadOnlySourceStorageHandle {
         snapshot: &SourceReadSnapshot,
         source_id: &str,
     ) -> Result<bool, StorageRuntimeError> {
-        TimelineRecordStore::from_source_store(self.source_store().clone())
+        TimelineRecordStore::from_source_store(self.store().clone())
             .counts_ready(snapshot, source_id)
             .map_err(StorageRuntimeError::Source)
     }
@@ -71,7 +71,7 @@ impl ReadOnlySourceStorageHandle {
         progress: impl FnMut(u64, u64),
     ) -> Result<persistence_fjall::SourceGenerationManifest, StorageRuntimeError> {
         persistence_fjall::verify_source_generation_with_control(
-            self.source_store(),
+            self.store(),
             source_id,
             cancel,
             progress,
@@ -136,7 +136,7 @@ impl ReadOnlySourceStorageHandle {
         start: Option<chrono::DateTime<chrono::Utc>>,
         end: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<u64, StorageRuntimeError> {
-        TimelineRecordStore::from_source_store(self.source_store().clone())
+        TimelineRecordStore::from_source_store(self.store().clone())
             .count_by_time(snapshot, source_id, start, end)
             .map_err(StorageRuntimeError::Source)
     }
@@ -149,7 +149,7 @@ impl ReadOnlySourceStorageHandle {
         start: Option<chrono::DateTime<chrono::Utc>>,
         end: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<u64, StorageRuntimeError> {
-        TimelineRecordStore::from_source_store(self.source_store().clone())
+        TimelineRecordStore::from_source_store(self.store().clone())
             .count_by_type(snapshot, source_id, event_type, start, end)
             .map_err(StorageRuntimeError::Source)
     }
@@ -163,7 +163,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<CatalogPage, StorageRuntimeError> {
-        CatalogRecordStore::from_source_store(self.source_store().clone())
+        CatalogRecordStore::from_source_store(self.store().clone())
             .list_directories_by_parent(snapshot, source_id, parent_id, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -175,7 +175,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<CatalogPage, StorageRuntimeError> {
-        CatalogRecordStore::from_source_store(self.source_store().clone())
+        CatalogRecordStore::from_source_store(self.store().clone())
             .list_orphan_directories(snapshot, source_id, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -185,7 +185,7 @@ impl ReadOnlySourceStorageHandle {
         source_id: &str,
         record_id: &str,
     ) -> Result<Option<ParserRecord>, StorageRuntimeError> {
-        ParserRecordStore::from_source_store(self.source_store().clone())
+        ParserRecordStore::from_source_store(self.store().clone())
             .get(snapshot, source_id, record_id)
             .map_err(StorageRuntimeError::Source)
     }
@@ -236,7 +236,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<ArtifactPage, StorageRuntimeError> {
-        ArtifactRecordStore::from_source_store(self.source_store().clone())
+        ArtifactRecordStore::from_source_store(self.store().clone())
             .list_by_source(snapshot, source_id, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -246,7 +246,7 @@ impl ReadOnlySourceStorageHandle {
         source_id: &str,
         artifact_id: &str,
     ) -> Result<Option<ArtifactRecord>, StorageRuntimeError> {
-        ArtifactRecordStore::from_source_store(self.source_store().clone())
+        ArtifactRecordStore::from_source_store(self.store().clone())
             .get(snapshot, source_id, artifact_id)
             .map_err(StorageRuntimeError::Source)
     }
@@ -254,7 +254,7 @@ impl ReadOnlySourceStorageHandle {
         &self,
         digest: &[u8; 32],
     ) -> Result<persistence_fjall::BatchReceiptState, StorageRuntimeError> {
-        self.source_store()
+        self.store()
             .database()
             .batch_receipt_state_for_digest(digest)
             .map_err(StorageRuntimeError::Source)
@@ -268,7 +268,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<ParserPage, StorageRuntimeError> {
-        ParserRecordStore::from_source_store(self.source_store().clone())
+        ParserRecordStore::from_source_store(self.store().clone())
             .list_by_family(snapshot, source_id, family, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -281,7 +281,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<ParserPage, StorageRuntimeError> {
-        ParserRecordStore::from_source_store(self.source_store().clone())
+        ParserRecordStore::from_source_store(self.store().clone())
             .list_by_kind(snapshot, source_id, kind, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -293,7 +293,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<ParserPage, StorageRuntimeError> {
-        ParserRecordStore::from_source_store(self.source_store().clone())
+        ParserRecordStore::from_source_store(self.store().clone())
             .list_by_field(snapshot, query, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -306,7 +306,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<ArtifactPage, StorageRuntimeError> {
-        ArtifactRecordStore::from_source_store(self.source_store().clone())
+        ArtifactRecordStore::from_source_store(self.store().clone())
             .list_by_type(snapshot, source_id, artifact_type, cursor, direction, limit)
             .map_err(StorageRuntimeError::Source)
     }
@@ -319,7 +319,7 @@ impl ReadOnlySourceStorageHandle {
         direction: ScanDirection,
         limit: usize,
     ) -> Result<ArtifactPage, StorageRuntimeError> {
-        ArtifactRecordStore::from_source_store(self.source_store().clone())
+        ArtifactRecordStore::from_source_store(self.store().clone())
             .list_by_source_object(
                 snapshot,
                 source_id,

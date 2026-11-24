@@ -5,6 +5,7 @@ mod artifact_root;
 mod extensions;
 mod open;
 pub mod partition_marker;
+mod read_metadata;
 mod registry;
 pub mod search_marker;
 mod source_counts;

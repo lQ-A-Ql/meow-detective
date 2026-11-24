@@ -178,8 +178,11 @@ impl<Mode> CaseStorageHandle<Mode> {
 }
 
 impl<Mode> SourceStorageHandle<Mode> {
-    pub fn source_store(&self) -> &SourceStore {
+    pub(super) fn store(&self) -> &SourceStore {
         self.source_store.as_ref()
+    }
+    pub fn read_handle(&self) -> persistence_fjall::SourceReadHandle {
+        self.source_store.database().read_handle()
     }
     fn new(
         source_root: &Path,
@@ -372,6 +375,9 @@ impl<Mode> SourceStorageHandle<Mode> {
 }
 
 impl SourceStorageHandle<ReadWrite> {
+    pub fn source_store(&self) -> &SourceStore {
+        self.store()
+    }
     pub fn persist(&self, mode: PersistMode) -> Result<(), StorageRuntimeError> {
         self.source_store
             .database()

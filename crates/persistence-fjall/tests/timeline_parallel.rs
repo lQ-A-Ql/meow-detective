@@ -431,3 +431,53 @@ fn oversized_record_is_rejected_before_replacing_existing_projection() {
     assert!(store.get(&after, "source", "old-0000").unwrap().is_some());
     assert!(read_marker(&after, "source").is_none());
 }
+
+#[test]
+fn repeated_identity_across_native_batches_replaces_every_old_index() {
+    let root = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut version = 0usize;
+    store
+        .replace_by_parser_prefix_parallel(
+            "source",
+            "timeline.",
+            "repeated-identity",
+            PersistMode::SyncAll,
+            SegmentLimits::default_limits(),
+            Default::default(),
+            &std::sync::atomic::AtomicBool::new(false),
+            || -> ProducerResult {
+                if version == 4 {
+                    return Ok(None);
+                }
+                let mut record = new_record(0);
+                record.title = "evidence description ".repeat(25_000);
+                record.timestamp = timestamp(100 + version as i64);
+                record.event_type = format!("TYPE_{version}");
+                version += 1;
+                Ok(Some(vec![record]))
+            },
+        )
+        .unwrap();
+    let snapshot = store.read_snapshot();
+    assert_eq!(
+        store
+            .count_by_time(&snapshot, "source", None, None)
+            .unwrap(),
+        1
+    );
+    for version in 0..3 {
+        assert_eq!(
+            store
+                .count_by_type(&snapshot, "source", &format!("TYPE_{version}"), None, None)
+                .unwrap(),
+            0
+        );
+    }
+    assert_eq!(
+        store
+            .count_by_type(&snapshot, "source", "TYPE_3", None, None)
+            .unwrap(),
+        1
+    );
+}

@@ -33,6 +33,7 @@ impl TimelineRecordStore {
         E: std::error::Error + 'static,
         F: FnMut() -> std::result::Result<Option<Vec<TimelineRecord>>, E>,
     {
+        config.validate()?;
         if source.is_empty()
             || prefix.is_empty()
             || identity.is_empty()

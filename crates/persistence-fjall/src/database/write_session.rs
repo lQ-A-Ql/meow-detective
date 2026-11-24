@@ -2,7 +2,9 @@ use super::*;
 use std::{sync::atomic::AtomicUsize, time::Instant};
 
 mod dispatch;
+mod input;
 mod metrics;
+pub use input::NativeWriteInput;
 pub(super) use metrics::NativeWriteMetrics;
 pub use metrics::NativeWriteReport;
 
@@ -21,6 +23,18 @@ impl Default for WriteSessionConfig {
     }
 }
 
+impl WriteSessionConfig {
+    pub(crate) fn validate(self) -> Result<()> {
+        if !(4..=64).contains(&self.workers)
+            || self.batch_bytes == 0
+            || self.batch_bytes.saturating_mul(self.workers * 2) > 256 * 1024 * 1024
+        {
+            return Err(FjallStorageError::WriteSessionLimit);
+        }
+        Ok(())
+    }
+}
+
 pub struct SourceWriteSession {
     pub(super) database: SourceDatabase,
     pub(super) config: WriteSessionConfig,
@@ -31,12 +45,7 @@ pub struct SourceWriteSession {
 
 impl SourceDatabase {
     pub fn begin_write_session(&self, config: WriteSessionConfig) -> Result<SourceWriteSession> {
-        if !(4..=64).contains(&config.workers)
-            || config.batch_bytes == 0
-            || config.batch_bytes.saturating_mul(config.workers * 2) > 256 * 1024 * 1024
-        {
-            return Err(FjallStorageError::WriteSessionLimit);
-        }
+        config.validate()?;
         let _permit = self
             .inner
             .lifecycle
@@ -61,7 +70,7 @@ impl SourceDatabase {
 }
 
 impl SourceWriteSession {
-    pub fn run<T: Send>(
+    pub fn run<T: NativeWriteInput>(
         &self,
         cancel: &AtomicBool,
         next_batch: impl FnMut() -> Result<Option<Vec<T>>>,

@@ -17,6 +17,7 @@ mod catalog_stream;
 mod file_feed;
 mod id_feed;
 mod metrics;
+mod parallel;
 mod partition_subtree;
 pub(super) use catalog_keys::{
     decode_record, directory_key, hash_key, index_write, orphan_key, parent_key, path_key,

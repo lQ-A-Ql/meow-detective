@@ -1,7 +1,7 @@
 use super::*;
 use crossbeam_channel::{bounded, Receiver, Sender};
 
-pub(super) fn run<T: Send>(
+pub(super) fn run<T: NativeWriteInput>(
     session: &SourceWriteSession,
     cancel: &AtomicBool,
     mut producer: impl FnMut() -> Result<Option<Vec<T>>>,
@@ -37,7 +37,14 @@ pub(super) fn run<T: Send>(
             let outcome = worker
                 .join()
                 .map_err(|_| FjallStorageError::WriteWorkerTerminated)?;
-            if result.is_ok() {
+            if result.is_ok()
+                || (outcome.is_err()
+                    && matches!(
+                        result,
+                        Err(FjallStorageError::WriteSessionFailed
+                            | FjallStorageError::WriteWorkerTerminated)
+                    ))
+            {
                 result = outcome;
             }
         }
@@ -49,7 +56,7 @@ pub(super) fn run<T: Send>(
     result
 }
 
-fn produce<T>(
+fn produce<T: NativeWriteInput>(
     session: &SourceWriteSession,
     cancel: &AtomicBool,
     senders: &[Sender<Vec<T>>],
@@ -59,9 +66,21 @@ fn produce<T>(
     while let Some(records) = producer()? {
         session.ensure_active(cancel)?;
         let mut groups = (0..senders.len()).map(|_| Vec::new()).collect::<Vec<_>>();
+        let mut bytes = vec![0usize; senders.len()];
         for record in records {
             let worker = (route(&record) % senders.len() as u64) as usize;
+            let weight = record.resident_bytes()?;
+            if weight > session.config.batch_bytes {
+                return Err(FjallStorageError::WriteSessionLimit);
+            }
+            if bytes[worker].saturating_add(weight) > session.config.batch_bytes / 3 {
+                senders[worker]
+                    .send(std::mem::take(&mut groups[worker]))
+                    .map_err(|_| FjallStorageError::WriteWorkerTerminated)?;
+                bytes[worker] = 0;
+            }
             groups[worker].push(record);
+            bytes[worker] += weight;
         }
         for (sender, group) in senders.iter().zip(groups) {
             if !group.is_empty() {
@@ -74,7 +93,7 @@ fn produce<T>(
     Ok(())
 }
 
-fn work<T>(
+fn work<T: NativeWriteInput>(
     session: &SourceWriteSession,
     cancel: &AtomicBool,
     worker: usize,
@@ -82,10 +101,27 @@ fn work<T>(
     encode: &impl Fn(&SourceReadHandle, Vec<T>) -> Result<Vec<WriteAction>>,
 ) -> Result<()> {
     let reader = session.database.read_handle();
+    let mut buffered = Vec::new();
+    let mut bytes = 0usize;
     for records in receiver {
         session.ensure_active(cancel)?;
-        let actions = encode(&reader, records)?;
-        session.ingest(worker, actions, cancel)?;
+        for record in records {
+            let weight = record.resident_bytes()?;
+            if !buffered.is_empty() && bytes.saturating_add(weight) > session.config.batch_bytes / 3
+            {
+                session.ingest(
+                    worker,
+                    encode(&reader, std::mem::take(&mut buffered))?,
+                    cancel,
+                )?;
+                bytes = 0;
+            }
+            bytes += weight;
+            buffered.push(record);
+        }
+    }
+    if !buffered.is_empty() {
+        session.ingest(worker, encode(&reader, buffered)?, cancel)?;
     }
     Ok(())
 }

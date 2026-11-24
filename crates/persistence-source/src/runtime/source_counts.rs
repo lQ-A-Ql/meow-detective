@@ -20,7 +20,7 @@ impl SourceStorageHandle<super::ReadOnly> {
         snapshot: &SourceReadSnapshot,
         source: &str,
     ) -> Result<u64, StorageRuntimeError> {
-        CatalogRecordStore::from_source_store(self.source_store().clone())
+        CatalogRecordStore::from_source_store(self.store().clone())
             .count(snapshot, Some(source))
             .map_err(Into::into)
     }
@@ -30,7 +30,7 @@ impl SourceStorageHandle<super::ReadOnly> {
         snapshot: &SourceReadSnapshot,
         source: &str,
     ) -> Result<u64, StorageRuntimeError> {
-        ArtifactRecordStore::from_source_store(self.source_store().clone())
+        ArtifactRecordStore::from_source_store(self.store().clone())
             .count(snapshot, Some(source))
             .map_err(Into::into)
     }
@@ -40,7 +40,7 @@ impl SourceStorageHandle<super::ReadOnly> {
         snapshot: &SourceReadSnapshot,
         source: &str,
     ) -> Result<Vec<(String, u64)>, StorageRuntimeError> {
-        let artifacts = ArtifactRecordStore::from_source_store(self.source_store().clone());
+        let artifacts = ArtifactRecordStore::from_source_store(self.store().clone());
         if !artifacts.type_counts_ready(snapshot, source)? {
             let first =
                 artifacts.list_by_source(snapshot, source, None, ScanDirection::Forward, 1)?;

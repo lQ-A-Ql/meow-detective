@@ -1,8 +1,6 @@
 use chrono::{DateTime, Utc};
 use domain::DataSourceId;
-use persistence_source::fjall::{
-    FacetSummary, FjallStorageError, SourceReadSnapshot, TimelineRecordStore,
-};
+use persistence_source::fjall::{FacetSummary, FjallStorageError, SourceReadSnapshot};
 use std::{collections::BTreeMap, path::Path};
 
 use super::epoch_to_datetime;
@@ -18,7 +16,7 @@ pub(super) struct FacetFilter<'a> {
 pub(super) struct NativeFacetSource {
     pub id: DataSourceId,
     pub bounds: Option<(DateTime<Utc>, DateTime<Utc>)>,
-    store: TimelineRecordStore,
+    store: persistence_source::runtime::ReadOnlySourceStorageHandle,
     snapshot: SourceReadSnapshot,
     summary: FacetSummary,
 }
@@ -36,10 +34,11 @@ impl NativeFacetSource {
             super::super::gate::skip_if_not_ready(error, &id.0)?;
             return Ok(None);
         }
-        let store = TimelineRecordStore::from_source_store(handle.source_store().clone());
+        let store = handle;
         let start = epoch_to_datetime("timeStart", filter.start)?;
         let end = epoch_to_datetime("timeEnd", filter.end)?;
-        let summary = store.facet_summary(&snapshot, &id.0, filter.event_type, start, end)?;
+        let summary =
+            store.timeline_facet_summary(&snapshot, &id.0, filter.event_type, start, end)?;
         let bounds = summary.min_timestamp.zip(summary.max_timestamp);
         if bounds.is_some_and(|(first, last)| first > last) {
             return Err(FjallStorageError::TimelineIndexCorrupt.into());
@@ -88,9 +87,12 @@ impl NativeFacetSource {
                 Ok(start..=end)
             })
             .collect::<Result<Vec<_>, FjallStorageError>>()?;
-        let counts =
-            self.store
-                .count_windows(&self.snapshot, &self.id.0, filter.event_type, &windows)?;
+        let counts = self.store.timeline_count_windows(
+            &self.snapshot,
+            &self.id.0,
+            filter.event_type,
+            &windows,
+        )?;
         let total = counts.iter().try_fold(0u64, |sum, count| {
             sum.checked_add(*count)
                 .ok_or(FjallStorageError::TimelineIndexCorrupt)

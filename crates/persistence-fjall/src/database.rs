@@ -24,7 +24,9 @@ mod write_stream;
 pub use memory_metrics::{DatabaseMemoryMetrics, KeyspaceMemoryMetrics};
 pub use read_view::SourceReadHandle;
 pub(crate) use read_view::TransactionReadView;
-pub use write_session::{NativeWriteReport, SourceWriteSession, WriteSessionConfig};
+pub use write_session::{
+    NativeWriteInput, NativeWriteReport, SourceWriteSession, WriteSessionConfig,
+};
 pub(crate) use write_stream::WriteStream;
 pub(crate) const NATIVE_WRITE_INCOMPLETE_FILE: &str = "native-write-incomplete";
 
