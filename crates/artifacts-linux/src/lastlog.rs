@@ -142,16 +142,13 @@ fn detect_layout(data: &[u8]) -> Result<Layout, crate::LinuxArtifactError> {
     })
 }
 
-/// Tally the leading complete slots (up to 8): all-zero slots are neutral,
+/// Tally the first eight nonempty complete slots: all-zero slots are neutral,
 /// non-empty slots count as plausible when the terminal line is printable
 /// ASCII and the timestamp is zero or sane.
 fn content_score(data: &[u8], layout: &Layout) -> (usize, usize) {
-    let sampled = (data.len() / layout.record_size).min(8);
     let mut non_empty = 0usize;
     let mut plausible = 0usize;
-    for index in 0..sampled {
-        let start = index * layout.record_size;
-        let slot = &data[start..start + layout.record_size];
+    for slot in data.chunks_exact(layout.record_size) {
         if slot.iter().all(|&byte| byte == 0) {
             continue;
         }
@@ -162,6 +159,9 @@ fn content_score(data: &[u8], layout: &Layout) -> (usize, usize) {
         let time_ok = raw_time == 0 || (0 < raw_time && raw_time <= MAX_SANE_TIMESTAMP);
         if printable && time_ok {
             plausible += 1;
+        }
+        if non_empty == 8 {
+            break;
         }
     }
     (non_empty, plausible)

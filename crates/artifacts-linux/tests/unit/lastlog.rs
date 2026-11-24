@@ -98,3 +98,13 @@ fn parse_lastlog_rejects_garbage() {
     let error = parse_lastlog(&data).expect_err("non-printable slot content must fail");
     assert!(error.to_string().contains("lastlog"));
 }
+
+#[test]
+fn parse_lastlog_finds_the_first_login_after_one_thousand_empty_uid_slots() {
+    let mut data = vec![0; 292 * 1000];
+    data.extend(build_slot_time32(1_700_000_000, "pts/1", "192.0.2.10"));
+    let records = parse_lastlog(&data).unwrap();
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].uid, 1000);
+    assert_eq!(records[0].line, "pts/1");
+}
