@@ -112,11 +112,10 @@ pub(super) fn prepare(
         let path = record.path.replace('\\', "/").to_ascii_lowercase();
         if !selected.contains(&record.data_source_id)
             || record.deleted
-            || !(path.contains("/systemd/")
-                || matches!(
-                    record.name.to_ascii_lowercase().as_str(),
-                    "lib" | "usr" | "local" | "etc" | "run" | "systemd"
-                ))
+            || !crate::analysis_service::candidates::preparation::is_systemd_dependency_path(
+                &path,
+                &record.name,
+            )
         {
             continue;
         }
@@ -284,7 +283,17 @@ fn compile_units(
                 if !seen.insert(unit.name.clone()) {
                     continue;
                 }
-                let Some(owner) = rows.get(&unit.unit_file) else {
+                let owner = std::iter::once(&unit.unit_file)
+                    .chain(unit.source_paths.iter())
+                    .filter_map(|path| rows.get(path))
+                    .find(|row| {
+                        super::linux::is_systemd_unit_path(
+                            &crate::analysis_service::candidates::normalize_evidence_path(
+                                &row.path,
+                            ),
+                        )
+                    });
+                let Some(owner) = owner else {
                     return Err(AnalysisServiceError::Extraction(
                         "systemd owner is outside source catalog".into(),
                     ));
@@ -320,7 +329,14 @@ fn compile_units(
                     .push((unit, references));
             }
             Err(error) => {
-                if let Some(owner) = rows.values().find(|row| row.name == name) {
+                if let Some(owner) = rows.values().find(|row| {
+                    row.name == name
+                        && super::linux::is_systemd_unit_path(
+                            &crate::analysis_service::candidates::normalize_evidence_path(
+                                &row.path,
+                            ),
+                        )
+                }) {
                     preload
                         .files
                         .entry(owner.file_id.clone())

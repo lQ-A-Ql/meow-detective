@@ -10,10 +10,11 @@ const ANDROID_PACKAGES_KEY: &str = "AndroidPackages";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
 pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.6";
 pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "1.3.10";
-pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.10";
+pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.11";
+pub(crate) const LINUX_LOGIN_EXTRACTOR_VERSION: &str = "1.3.4";
 pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "1.3.8";
-pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "1.3.9";
-pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "1.4.0";
+pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "1.3.10";
+pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "1.4.1";
 pub(crate) const IMAGE_METADATA_EXTRACTOR_VERSION: &str = "1.0.0";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
@@ -27,6 +28,8 @@ pub(crate) fn producer_version(producer: &str) -> &'static str {
         CONTAINERD_EXTRACTOR_VERSION
     } else if producer == "linux.os_release" {
         LINUX_SYSTEM_CONFIG_VERSION
+    } else if producer == "linux.lastlog" {
+        LINUX_LOGIN_EXTRACTOR_VERSION
     } else if matches!(
         producer,
         "email.eml_emlx" | "email.mbox" | "email.foxmail_box"
@@ -43,6 +46,7 @@ pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[
     super::ANALYSIS_EXTRACTOR_VERSION,
     REGISTRY_EXTRACTOR_VERSION,
     LINUX_SYSTEM_CONFIG_VERSION,
+    LINUX_LOGIN_EXTRACTOR_VERSION,
     EMAIL_EXTRACTOR_VERSION,
     BROWSER_EXTRACTOR_VERSION,
     WINDOWS_NATIVE_EXTRACTOR_VERSION,
@@ -72,6 +76,7 @@ impl AnalysisCapability {
         match self.key {
             "Registry" => REGISTRY_EXTRACTOR_VERSION,
             "LinuxSystemConfig" => LINUX_SYSTEM_CONFIG_VERSION,
+            "LinuxLogin" => LINUX_LOGIN_EXTRACTOR_VERSION,
             "Email" => EMAIL_EXTRACTOR_VERSION,
             "BrowserHistory" => BROWSER_EXTRACTOR_VERSION,
             "ImageMetadata" => IMAGE_METADATA_EXTRACTOR_VERSION,
@@ -248,7 +253,12 @@ pub(crate) fn select_capabilities(
         reject_retired_or_blank_key(key)?;
         if key == LINUX_UMBRELLA_KEY {
             ensure_platform_match(key, platform, DataSourcePlatform::Linux)?;
-            append_unique(&mut selected, LINUX_CAPABILITIES.iter().copied());
+            append_unique(
+                &mut selected,
+                LINUX_CAPABILITIES.iter().copied().filter(|capability| {
+                    capability.read_policy != CandidateReadPolicy::ImageStructure
+                }),
+            );
             continue;
         }
 

@@ -18,7 +18,7 @@ pub(super) fn record_preload_warnings(
         .find(|capability| capability.key == "BrowserHistory")
     {
         for warning in preloads.browser.warnings.iter().cloned() {
-            state.record_warning(*browser, warning);
+            state.record_informational_warning(*browser, warning);
         }
     }
     record_log_time_warnings(selected, &preloads.timezone_warnings, state);

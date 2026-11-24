@@ -24,6 +24,7 @@ type ChromeMaterials = (Option<Vec<u8>>, Option<Vec<u8>>);
 struct BrowserSourceScope<'a> {
     data_source_id: &'a str,
     partition: Option<usize>,
+    registry: &'a super::registry_preload::RegistryPreloadContext,
 }
 
 /// Per-analysis browser key context built from evidence hives and Protect files.
@@ -89,14 +90,6 @@ pub(super) fn prepare_browser_preload(
     }
 
     let mut context = BrowserPreloadContext::empty();
-    let mut shared_reader = |candidate: &EvidenceCandidate, limit: usize| {
-        if let Some(snapshot) = registry.snapshot(candidate) {
-            return Ok(CandidateSource::Bytes(
-                snapshot.bytes()[..snapshot.bytes().len().min(limit)].to_vec(),
-            ));
-        }
-        file_reader(candidate, limit)
-    };
     let scopes = roots
         .keys()
         .map(|(data_source_id, partition, _)| (data_source_id.clone(), *partition))
@@ -115,11 +108,12 @@ pub(super) fn prepare_browser_preload(
             BrowserSourceScope {
                 data_source_id: &data_source_id,
                 partition,
+                registry,
             },
             scoped_roots.clone(),
             cancel_token,
             manual_password,
-            &mut shared_reader,
+            file_reader,
             &mut context,
         ) {
             if matches!(error, AnalysisServiceError::Cancelled) {
@@ -159,8 +153,8 @@ fn prepare_source_context(
     let sam = catalog
         .suffix(data_source_id, "/windows/system32/config/sam")
         .ok_or_else(|| AnalysisServiceError::Other("SAM hive was not found".to_string()))?;
-    let system_bytes = read_locator(&system, cancel_token, file_reader)?;
-    let sam_bytes = read_locator(&sam, cancel_token, file_reader)?;
+    let system_bytes = read_registry_locator(&system, scope.registry, cancel_token, file_reader)?;
+    let sam_bytes = read_registry_locator(&sam, scope.registry, cancel_token, file_reader)?;
     let boot_key = extract_boot_key(&system_bytes).ok_or_else(|| {
         AnalysisServiceError::Other("SYSTEM BootKey could not be derived".to_string())
     })?;
@@ -176,6 +170,7 @@ fn prepare_source_context(
         &PrekeySeed {
             boot_key: &boot_key,
             user_nt_hashes: &user_nt_hashes,
+            registry: scope.registry,
         },
         cancel_token,
         file_reader,
@@ -371,6 +366,19 @@ pub(super) fn read_locator(
         ));
     }
     Ok(bytes)
+}
+
+pub(super) fn read_registry_locator(
+    locator: &EvidenceCandidate,
+    registry: &super::registry_preload::RegistryPreloadContext,
+    cancel_token: &AtomicBool,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+) -> Result<Vec<u8>, AnalysisServiceError> {
+    ensure_not_cancelled(cancel_token)?;
+    match registry.snapshot(locator) {
+        Some(snapshot) => Ok(snapshot.bytes().to_vec()),
+        None => read_locator(locator, cancel_token, file_reader),
+    }
 }
 
 fn browser_roots(candidates: &[EvidenceCandidate]) -> HashMap<(String, Option<usize>, String), ()> {

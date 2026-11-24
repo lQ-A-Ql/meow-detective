@@ -124,7 +124,7 @@ impl PreparationCatalog {
 }
 
 fn relevant(path: &str, name: &str) -> bool {
-    path.contains("/systemd/")
+    is_systemd_dependency_path(path, name)
         || path.contains("/microsoft/protect/")
         || path.contains("/crypto/systemkeys/")
         || [
@@ -145,6 +145,11 @@ fn relevant(path: &str, name: &str) -> bool {
         ]
         .iter()
         .any(|suffix| path.ends_with(suffix))
+}
+
+pub(crate) fn is_systemd_dependency_path(path: &str, name: &str) -> bool {
+    path.contains("/systemd/")
+        || path.contains("/dracut/modules.d/")
         || matches!(
             name.to_ascii_lowercase().as_str(),
             "lib" | "usr" | "local" | "etc" | "run" | "systemd"

@@ -80,6 +80,35 @@ fn unknown_capability_is_still_rejected() {
 }
 
 #[test]
+fn linux_host_artifacts_keep_image_analysis_explicitly_selectable() {
+    let host = select_capabilities(
+        DataSourcePlatform::Linux,
+        LINUX_CAPABILITIES,
+        &["LinuxArtifacts"],
+    )
+    .unwrap();
+    assert!(host
+        .iter()
+        .all(|capability| capability.key != "ImageMetadata"));
+    assert!(host
+        .iter()
+        .any(|capability| capability.key == "LinuxJournal"));
+    let explicit = select_capabilities(
+        DataSourcePlatform::Linux,
+        LINUX_CAPABILITIES,
+        &["LinuxArtifacts", "ImageMetadata"],
+    )
+    .unwrap();
+    assert_eq!(
+        explicit
+            .iter()
+            .filter(|capability| capability.key == "ImageMetadata")
+            .count(),
+        1
+    );
+}
+
+#[test]
 fn bolt_upgrade_invalidates_only_system_config_checkpoints_and_image_outputs() {
     assert_eq!(
         find_capability("LinuxSystemConfig")

@@ -2,7 +2,7 @@
 //! browser preload pipeline. All failures degrade to warnings so the base
 //! v10/v11 decryption path keeps working.
 
-use super::browser_preload::read_locator;
+use super::browser_preload::{read_locator, read_registry_locator};
 use super::candidate_processing::CandidateSource;
 use crate::analysis_service::candidates::{
     normalize_evidence_path, EvidenceCandidate, PreparationCatalog,
@@ -20,6 +20,7 @@ use std::sync::atomic::AtomicBool;
 pub(super) struct PrekeySeed<'a> {
     pub boot_key: &'a [u8; 16],
     pub user_nt_hashes: &'a [(String, [u8; 16])],
+    pub registry: &'a super::registry_preload::RegistryPreloadContext,
 }
 
 /// NT-hash prekeys plus the SID/hash pairs kept for TBAL cross-checking.
@@ -82,7 +83,8 @@ pub(super) fn extend_prekeys_from_lsa_secrets(
     let Some(security) = catalog.suffix(data_source_id, "/windows/system32/config/security") else {
         return Ok(());
     };
-    let security_bytes = read_locator(&security, cancel_token, file_reader)?;
+    let security_bytes =
+        read_registry_locator(&security, seed.registry, cancel_token, file_reader)?;
     match decrypt_lsa_secrets(&security_bytes, seed.boot_key) {
         Ok(secrets) => apply_lsa_secrets(&secrets, seed.user_nt_hashes, prekeys, warnings),
         Err(error) => warnings.push(format!(

@@ -56,6 +56,51 @@ fn owned_candidate_bytes_are_reused_without_a_second_content_copy() {
 }
 
 #[test]
+fn systemd_preparation_collects_dracut_symlink_targets_outside_systemd_directories() {
+    let connection = source_connection();
+    let root = tempfile::tempdir().unwrap();
+    let inputs = [
+        ("unit", "usr/lib/systemd/system/dracut-cmdline.service",
+            "../../dracut/modules.d/98systemd/dracut-cmdline.service", 0o120777),
+        ("target", "usr/lib/dracut/modules.d/98systemd/dracut-cmdline.service",
+            "[Unit]\nDescription=Dracut command line\n[Service]\nType=oneshot\nExecStart=/usr/bin/true\n", 0o100644),
+    ];
+    let mut paths = BTreeMap::new();
+    for (id, path, bytes, mode) in inputs {
+        let physical = root.path().join(id);
+        std::fs::write(&physical, bytes).unwrap();
+        let mut entry = file_entry(id, path, bytes.len() as u64, false);
+        entry.unix_mode = Some(mode);
+        insert_file(&connection, entry);
+        paths.insert(id.to_owned(), physical);
+    }
+    let mut progress = |_| {};
+    let result = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Linux,
+        &["LinuxSystemConfig"],
+        &AtomicBool::new(false),
+        &mut progress,
+        |candidate, _| {
+            std::fs::File::open(&paths[&candidate.file_id.0])
+                .map(|file| CandidateSource::Reader(Box::new(file)))
+                .map_err(|error| error.to_string())
+        },
+    )
+    .unwrap();
+    assert_eq!(result.retryable_failure_count, 0);
+    assert!(result
+        .dto
+        .warnings
+        .iter()
+        .all(|warning| !warning.contains("dangling")));
+    assert!(native_files(&connection)
+        .iter()
+        .any(|artifact| { artifact.title.contains("dracut-cmdline.service") }));
+}
+
+#[test]
 fn candidate_reader_reports_monotonic_byte_progress() {
     let candidate = EvidenceCandidate {
         file_id: FileEntryId("streamed-bytes".to_string()),
