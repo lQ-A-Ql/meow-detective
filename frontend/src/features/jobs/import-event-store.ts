@@ -6,6 +6,7 @@ import type {
   JobCancellation,
   PartialResult,
   PerformanceReport,
+  TaskProgress,
 } from '@/types/models';
 
 export interface ImportSignalSnapshot {
@@ -13,6 +14,7 @@ export interface ImportSignalSnapshot {
   activeJobId?: string;
   latestPhase?: ImportPhaseProgress;
   phasesByJob: Record<string, ImportPhaseProgress>;
+  tasksByJob: Record<string, TaskProgress>;
   cancellationsByJob: Record<string, JobCancellation>;
   latestCancellation?: JobCancellation;
   partialResults: PartialResult[];
@@ -23,6 +25,7 @@ export interface ImportSignalSnapshot {
 
 export const emptyImportSignals: ImportSignalSnapshot = {
   phasesByJob: {},
+  tasksByJob: {},
   cancellationsByJob: {},
   partialResults: [],
   cacheStatuses: [],
@@ -49,6 +52,17 @@ export function createImportEventStateStore(initialCaseId?: string) {
   const phaseTimes = new Map<string, number>();
   const cancellationTimes = new Map<string, number>();
   let unsubs: Array<() => void> = [];
+
+  function ingestTask(payload: TaskProgress) {
+    const state = api.getState();
+    if (state.caseId && payload.caseId !== state.caseId) return;
+    if (payload.seq <= (state.tasksByJob[payload.jobId]?.seq ?? -1)) return;
+    const tasksByJob = { ...state.tasksByJob };
+    delete tasksByJob[payload.jobId];
+    tasksByJob[payload.jobId] = payload;
+    if (Object.keys(tasksByJob).length > MAX_JOB_SIGNALS) delete tasksByJob[Object.keys(tasksByJob)[0]];
+    api.setState({ tasksByJob });
+  }
 
   function ingestPartial(eventTs: string, payload: PartialResult) {
     const state = api.getState();
@@ -142,6 +156,9 @@ export function createImportEventStateStore(initialCaseId?: string) {
   function connect() {
     if (unsubs.length) return;
     unsubs = [
+      subscribeToEvent<Partial<TaskProgress>>('job-progress', (event) => {
+        if (event.payload.seq !== undefined && event.payload.stages) ingestTask(event.payload as TaskProgress);
+      }),
       subscribeToEvent<ImportPhaseProgress>('import-phase-progress', (event) => ingestPhase(event.ts, event.payload)),
       subscribeToEvent<PartialResult>('import-partial-result', (event) => ingestPartial(event.ts, event.payload)),
       subscribeToEvent<JobCancellation>('job-cancellation', (event) => ingestCancellation(event.ts, event.payload)),
@@ -156,6 +173,7 @@ export function createImportEventStateStore(initialCaseId?: string) {
     connect,
     getSnapshot: api.getState,
     ingestPhase,
+    ingestTask,
     ingestPartial,
     ingestCancellation,
     ingestCache,

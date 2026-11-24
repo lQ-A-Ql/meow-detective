@@ -23,6 +23,7 @@ export * from './timeline';
 export * from './search';
 export * from './artifacts';
 export * from './jobs';
+export * from './taskProgress';
 export * from './reports';
 export * from './import';
 export * from './mcpHost';

@@ -3,21 +3,29 @@ import { Progress } from '@/app/components/ui/progress';
 import { Disclosure } from '@/app/components/ui/disclosure';
 import { getImportPhaseLabel, getImportPhaseStateLabel } from '@/features/jobs/import-event-state';
 import { ImportProgressMetrics } from '@/features/jobs/components/ImportProgressMetrics';
+import { TaskProgressContainer } from '@/features/jobs/containers/TaskProgressContainer';
 import { JobOutcomeBadges } from '@/features/jobs/components/JobOutcomeBadges';
 import { activeJobProgress } from '@/features/jobs/model/job-progress';
-import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
+import { taskForJob, taskStageLabel } from '@/features/jobs/model/task-progress';
+import type { ImportPhaseProgress, JobSnapshot, TaskProgress } from '@/types/models';
 
 interface JobStatusCardProps {
   job: JobSnapshot;
   phase?: ImportPhaseProgress;
+  task?: TaskProgress;
   tone: 'pending' | 'running' | 'completed' | 'failed' | 'warning' | 'cancelling' | 'cancelled';
 }
 
-export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
+export function JobStatusCard({ job, tone, phase, task }: JobStatusCardProps) {
+  task = taskForJob(job, task);
   const { t } = useTranslation();
   const className = cardClass(tone);
   const currentPhase = phase?.jobId === job.id ? phase : undefined;
-  const stage = currentPhase ? getImportPhaseLabel(currentPhase.phase) : job.name;
+  const stage = task
+    ? taskStageLabel(task, task.stage, t)
+    : currentPhase
+      ? getImportPhaseLabel(currentPhase.phase)
+      : job.name;
   const active = tone === 'running' || tone === 'cancelling' || tone === 'pending';
   const stateLabel =
     tone === 'cancelling'
@@ -34,16 +42,17 @@ export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
         >
           {job.name}
         </span>
-        {!currentPhase ? (
+        {!currentPhase && !task ? (
           <span className="min-w-0 truncate text-right text-forensics-muted-light">{job.detail}</span>
         ) : null}
       </div>
       <div className="mt-1 truncate opacity-80">
         {job.scope || (tone === 'failed' ? t('bottomDrawer.jobs.failedFallback') : '')}
       </div>
-      <JobOutcomeBadges job={job} />
+      {!task || task.kind === 'import' || task.kind === 'nestedImport' ? <JobOutcomeBadges job={job} /> : null}
       {tone === 'pending' ? <div role="status">{t('evidenceTask.states.queued')}</div> : null}
-      {currentPhase && active ? (
+      {task ? <TaskProgressContainer task={task} /> : null}
+      {currentPhase && active && !task ? (
         <>
           <div className="mt-2 text-forensics-text-secondary" role="status">
             {stage} · {stateLabel}
@@ -52,7 +61,9 @@ export function JobStatusCard({ job, tone, phase }: JobStatusCardProps) {
         </>
       ) : null}
       {tone === 'running' && job.currentPartition ? <PartitionProgress job={job} /> : null}
-      {active ? <OverallProgress job={job} stage={stage} value={activeJobProgress(job, currentPhase)} /> : null}
+      {active || task ? (
+        <OverallProgress job={job} stage={stage} value={activeJobProgress(job, currentPhase, task)} />
+      ) : null}
       {currentPhase?.detail ? (
         <Disclosure summary={t('taskProgress.diagnostics')}>{currentPhase.detail}</Disclosure>
       ) : null}

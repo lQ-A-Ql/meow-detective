@@ -1,5 +1,47 @@
 {
   "taskProgress": {
+    "work": {
+      "timelineIdentity": "校验文件目录",
+      "timelineWorkspace": "准备分析数据",
+      "timelineEvents": "构建时间线",
+      "timelineGraphPrepare": "整理关联数据",
+      "timelineGraph": "建立关联关系"
+    },
+    "kind": {
+      "import": "证据导入",
+      "nestedImport": "嵌套证据导入",
+      "analysis": "制品与痕迹提取",
+      "timeline": "时间线构建"
+    },
+    "stages": "任务阶段",
+    "elapsed": "已用时间",
+    "estimating": "正在估算当前步骤剩余时间",
+    "stageRemaining": "当前步骤预计剩余约 {{duration}}",
+    "timelineWork": "构建时间线",
+    "heartbeat": {
+      "waiting": "等待后台响应",
+      "unresponsive": "超过 30 秒未收到后台心跳，可查看诊断或取消任务"
+    },
+    "stage": {
+      "validate": "校验父证据",
+      "register": "登记范围来源",
+      "prepare": "准备证据",
+      "probe": "探测分区",
+      "enumerate": "读取文件目录",
+      "analyze": "分析证据",
+      "index": "建立检索与时间线",
+      "publish": "发布结果"
+    },
+    "state": {
+      "pending": "等待处理",
+      "running": "正在处理",
+      "completed": "已完成",
+      "skipped": "已跳过",
+      "cancelling": "正在取消",
+      "cancelled": "已取消",
+      "failed": "处理失败",
+      "partial": "部分完成"
+    },
     "additionalJobs": "查看另外 {{count}} 项任务",
     "items": "已处理条目",
     "data": "已处理数据",

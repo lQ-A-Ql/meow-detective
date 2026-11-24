@@ -10,6 +10,7 @@ import { BottomDrawerJobs } from '@/features/jobs/components/BottomDrawerJobs';
 import { BottomDrawerTrace } from '@/features/jobs/components/BottomDrawerTrace';
 import type { BottomDrawerModel } from '@/features/jobs/model/bottom-drawer-model';
 import { activeJobProgress } from '@/features/jobs/model/job-progress';
+import { TaskProgressContainer } from '@/features/jobs/containers/TaskProgressContainer';
 
 export interface BottomDrawerProps {
   model: BottomDrawerModel;
@@ -24,7 +25,7 @@ export function BottomDrawerView({
   const { t } = useTranslation();
   const { height, isResizing, onResizeStart } = resize;
   const { activeJob } = model;
-  const progress = activeJob ? activeJobProgress(activeJob, model.activePhase) : null;
+  const progress = activeJob ? activeJobProgress(activeJob, model.activePhase, model.activeTask) : null;
   const additionalJobs = model.runningJobs.length + model.cancellingJobs.length + model.pendingJobs.length - 1;
 
   return (
@@ -45,13 +46,18 @@ export function BottomDrawerView({
           }
         />
       ) : null}
-      <div className="grid h-8 grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 font-mono text-[11px] text-forensics-muted">
+      <div
+        className={`grid ${!model.drawerOpen && model.activeTask ? 'h-10' : 'h-8'} grid-cols-[minmax(0,1fr)_auto] items-center gap-2 px-4 font-mono text-[11px] text-forensics-muted`}
+      >
         <div className="flex min-w-0 items-center gap-3 overflow-hidden">
           <div className="flex min-w-0 flex-1 items-center gap-2">
             <Terminal size={12} className="shrink-0 text-forensics-muted-light" />
-            <span className="block truncate" title={model.headline}>
-              [{!model.drawerOpen && activeJob ? activeJob.name : t('bottomDrawer.jobs.title')}] {model.headline}
-            </span>
+            <div className="min-w-0">
+              <span className="block truncate" title={model.headline}>
+                [{!model.drawerOpen && activeJob ? activeJob.name : t('bottomDrawer.jobs.title')}] {model.headline}
+              </span>
+              {!model.drawerOpen && model.activeTask ? <TaskProgressContainer compact task={model.activeTask} /> : null}
+            </div>
           </div>
           <div className="hidden shrink-0 items-center gap-3 whitespace-nowrap border-l border-forensics-divider px-3 text-forensics-text-tertiary 2xl:flex">
             <span>

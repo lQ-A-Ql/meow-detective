@@ -35,25 +35,31 @@ export function BottomDrawerJobs({ model, analysisProgress }: BottomDrawerJobsPr
         {analysisProgress}
         <ImportStatusPanel importSignals={model.importSignals} evidenceHashStatus={model.evidenceHashStatus} />
         {model.runningJobs.map((job) => (
-          <JobStatusCard key={job.id} job={job} tone="running" phase={model.importSignals.phasesByJob[job.id]} />
+          <JobStatusCard
+            key={job.id}
+            job={job}
+            tone="running"
+            phase={model.importSignals.phasesByJob[job.id]}
+            task={model.importSignals.tasksByJob[job.id]}
+          />
         ))}
         {model.pendingJobs.map((job) => (
           <JobStatusCard key={job.id} job={job} tone="pending" />
         ))}
         {model.completedJobs.map((job) => (
-          <JobStatusCard key={job.id} job={job} tone="completed" />
+          <JobStatusCard key={job.id} job={job} tone="completed" task={model.importSignals.tasksByJob[job.id]} />
         ))}
         {model.failedJobs.map((job) => (
-          <JobStatusCard key={job.id} job={job} tone="failed" />
+          <JobStatusCard key={job.id} job={job} tone="failed" task={model.importSignals.tasksByJob[job.id]} />
         ))}
         {model.warningJobs.map((job) => (
-          <JobStatusCard key={job.id} job={job} tone="warning" />
+          <JobStatusCard key={job.id} job={job} tone="warning" task={model.importSignals.tasksByJob[job.id]} />
         ))}
         {model.cancellingJobs.map((job) => (
-          <JobStatusCard key={job.id} job={job} tone="cancelling" />
+          <JobStatusCard key={job.id} job={job} tone="cancelling" task={model.importSignals.tasksByJob[job.id]} />
         ))}
         {model.cancelledJobs.map((job) => (
-          <JobStatusCard key={job.id} job={job} tone="cancelled" />
+          <JobStatusCard key={job.id} job={job} tone="cancelled" task={model.importSignals.tasksByJob[job.id]} />
         ))}
       </div>
     </ScrollArea>

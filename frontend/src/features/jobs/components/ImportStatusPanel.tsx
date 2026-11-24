@@ -20,9 +20,10 @@ type ImportStatusPanelProps = Pick<BottomDrawerModel, 'importSignals' | 'evidenc
 export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportStatusPanelProps) {
   const { t } = useTranslation();
   const phase = importSignals.latestPhase;
+  const phaseVisible = phase && !importSignals.tasksByJob[phase.jobId];
   const progress = phase ? importPhaseProgress(phase) : null;
   const visible = Boolean(
-    importSignals.latestPhase ||
+    phaseVisible ||
     importSignals.latestCancellation ||
     importSignals.partialResults.length ||
     importSignals.cacheStatuses.length ||
@@ -37,15 +38,17 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
           <div className="text-[10px] font-light uppercase tracking-wider text-forensics-muted">
             {t('bottomDrawer.importSignals.title')}
           </div>
-          <div className="mt-1 font-light text-forensics-text">
-            {importSignals.latestPhase
-              ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} · ${getImportPhaseStateLabel(importSignals.latestPhase.state)}`
-              : importSignals.latestCancellation
-                ? `${t('bottomDrawer.labels.cancellation')} · ${getCacheStateLabel(importSignals.latestCancellation.state)}`
-                : t('bottomDrawer.importSignals.waiting')}
-          </div>
+          {phaseVisible || importSignals.latestCancellation ? (
+            <div className="mt-1 font-light text-forensics-text">
+              {importSignals.latestPhase
+                ? `${getImportPhaseLabel(importSignals.latestPhase.phase)} · ${getImportPhaseStateLabel(importSignals.latestPhase.state)}`
+                : importSignals.latestCancellation
+                  ? `${t('bottomDrawer.labels.cancellation')} · ${getCacheStateLabel(importSignals.latestCancellation.state)}`
+                  : t('bottomDrawer.importSignals.waiting')}
+            </div>
+          ) : null}
         </div>
-        {importSignals.latestPhase ? (
+        {phaseVisible ? (
           <div className="text-right">
             {progress === null ? null : (
               <div className="font-mono text-forensics-text">
@@ -57,7 +60,7 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
           </div>
         ) : null}
       </div>
-      {phase ? (
+      {phase && phaseVisible ? (
         <div className="mt-2 flex items-center gap-2">
           <Progress
             className="flex-1"
@@ -72,7 +75,7 @@ export function ImportStatusPanel({ importSignals, evidenceHashStatus }: ImportS
           />
         </div>
       ) : null}
-      {phase ? <ImportProgressMetrics metrics={phase.metrics} /> : null}
+      {phase && phaseVisible ? <ImportProgressMetrics metrics={phase.metrics} /> : null}
       {phase?.detail || importSignals.latestCancellation?.detail ? (
         <Disclosure summary={t('taskProgress.diagnostics')}>
           {importSignals.latestCancellation?.detail || phase?.detail}

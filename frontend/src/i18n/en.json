@@ -1,5 +1,47 @@
 {
   "taskProgress": {
+    "work": {
+      "timelineIdentity": "Validate file catalog",
+      "timelineWorkspace": "Prepare analysis data",
+      "timelineEvents": "Build timeline",
+      "timelineGraphPrepare": "Prepare relation data",
+      "timelineGraph": "Build relations"
+    },
+    "kind": {
+      "import": "Evidence import",
+      "nestedImport": "Nested evidence import",
+      "analysis": "Artifact extraction",
+      "timeline": "Timeline construction"
+    },
+    "stages": "Task stages",
+    "elapsed": "Elapsed",
+    "estimating": "Estimating remaining work time",
+    "stageRemaining": "Estimated remaining work time {{duration}}",
+    "timelineWork": "Build timeline",
+    "heartbeat": {
+      "waiting": "Waiting for the background task",
+      "unresponsive": "No heartbeat for over 30 seconds. View diagnostics or cancel the task."
+    },
+    "stage": {
+      "validate": "Validate parent evidence",
+      "register": "Register evidence range",
+      "prepare": "Prepare evidence",
+      "probe": "Probe partitions",
+      "enumerate": "Read file catalog",
+      "analyze": "Analyze evidence",
+      "index": "Build search and timeline",
+      "publish": "Publish results"
+    },
+    "state": {
+      "pending": "Waiting",
+      "running": "Processing",
+      "completed": "Completed",
+      "skipped": "Skipped",
+      "cancelling": "Cancelling",
+      "cancelled": "Cancelled",
+      "failed": "Failed",
+      "partial": "Partial"
+    },
     "additionalJobs": "View {{count}} additional tasks",
     "items": "Items processed",
     "data": "Data processed",

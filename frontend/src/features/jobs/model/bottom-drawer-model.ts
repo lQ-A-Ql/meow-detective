@@ -1,5 +1,6 @@
 import type { TFunction } from 'i18next';
 import { errorMessage, isApiErrorDto } from '@/lib/errors';
+import { mergeTaskJobs, taskStageLabel } from './task-progress';
 import {
   deriveEvidenceHashStatus,
   getImportPhaseLabel,
@@ -14,6 +15,7 @@ import type {
   JobSnapshot,
   TraceItem,
   WarningItem,
+  TaskProgress,
 } from '@/types/models';
 
 export type DrawerIssueSeverity = 'error' | 'warning';
@@ -38,6 +40,7 @@ export interface BottomDrawerModel {
   toggleDrawer: () => void;
   activeJob?: JobSnapshot;
   activePhase?: ImportPhaseProgress;
+  activeTask?: TaskProgress;
   runningJobs: JobSnapshot[];
   pendingJobs: JobSnapshot[];
   completedJobs: JobSnapshot[];
@@ -72,8 +75,9 @@ interface BottomDrawerModelInput {
 }
 
 export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDrawerModel {
-  const jobs = input.jobs ?? [];
+  const storedJobIds = new Set(input.jobs?.map((job) => job.id));
   const dataSources = input.dataSources ?? [];
+  const jobs = mergeTaskJobs(input.jobs ?? [], input.importSignals.tasksByJob, dataSources, input.t);
   const runningJobs = jobs.filter((job) => job.status === 'running');
   const pendingJobs = jobs.filter((job) => job.status === 'pending');
   const completedJobs = jobs.filter((job) => job.status === 'completed');
@@ -91,16 +95,17 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
   const importPhaseIssue = buildImportPhaseIssue(input.importSignals.latestPhase, input.t);
   const errorIssues = [
     ...queryIssues,
-    ...failedJobs.map((job) => buildFailedJobIssue(job, input.t)),
+    ...failedJobs.map((job) => buildFailedJobIssue(job, input.t, storedJobIds.has(job.id))),
     ...processingIssues.filter((issue) => issue.severity === 'error'),
     ...(importPhaseIssue ? [importPhaseIssue] : []),
   ];
   const warningIssues = [
     ...buildWarningIssues(input.warnings ?? []),
-    ...buildJobWarningIssues(jobs, input.t),
+    ...buildJobWarningIssues(jobs, input.t, storedJobIds),
     ...processingIssues.filter((issue) => issue.severity === 'warning'),
   ];
   const activeJob = runningJobs[0] ?? cancellingJobs[0] ?? pendingJobs[0];
+  const activeTask = activeJob ? input.importSignals.tasksByJob[activeJob.id] : undefined;
   const phase = activeJob ? input.importSignals.phasesByJob[activeJob.id] : input.importSignals.latestPhase;
   const cancellation = activeJob
     ? input.importSignals.cancellationsByJob[activeJob.id]
@@ -123,6 +128,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     toggleDrawer: input.toggleDrawer,
     activeJob,
     activePhase: phase,
+    activeTask,
     runningJobs,
     pendingJobs,
     completedJobs,
@@ -138,6 +144,7 @@ export function buildBottomDrawerModel(input: BottomDrawerModelInput): BottomDra
     importSignals: input.importSignals,
     trace: input.trace ?? [],
     headline:
+      (activeTask ? taskStageLabel(activeTask, activeTask.stage, input.t) : undefined) ||
       typedHeadline ||
       activeJob?.detail ||
       warningJobs[0]?.detail ||
@@ -178,13 +185,13 @@ function buildApiErrorMeta(apiError: ApiErrorDto | undefined, source: string, t:
   return meta;
 }
 
-function buildFailedJobIssue(job: JobSnapshot, t: TFunction): DrawerIssue {
+function buildFailedJobIssue(job: JobSnapshot, t: TFunction, countsAvailable: boolean): DrawerIssue {
   return {
     id: `job-${job.id}`,
     severity: 'error',
     title: job.name,
     detail: job.detail || t('bottomDrawer.jobs.failedFallback'),
-    meta: jobIssueMeta(job, t),
+    meta: jobIssueMeta(job, t, countsAvailable),
   };
 }
 
@@ -217,7 +224,7 @@ function buildWarningIssues(warnings: WarningItem[]): DrawerIssue[] {
   }));
 }
 
-function buildJobWarningIssues(jobs: JobSnapshot[], t: TFunction): DrawerIssue[] {
+function buildJobWarningIssues(jobs: JobSnapshot[], t: TFunction, storedJobIds: Set<string>): DrawerIssue[] {
   return jobs
     .filter((job) => job.status !== 'failed')
     .filter((job) => job.status === 'warning' || job.partial || job.warningCount > 0 || job.skippedCount > 0)
@@ -226,19 +233,23 @@ function buildJobWarningIssues(jobs: JobSnapshot[], t: TFunction): DrawerIssue[]
       severity: 'warning' as const,
       title: job.name,
       detail: job.detail || job.scope || t('bottomDrawer.issues.jobWarningFallback'),
-      meta: jobIssueMeta(job, t),
+      meta: jobIssueMeta(job, t, storedJobIds.has(job.id)),
     }));
 }
 
-function jobIssueMeta(job: JobSnapshot, t: TFunction): DrawerIssueMeta[] {
+function jobIssueMeta(job: JobSnapshot, t: TFunction, countsAvailable: boolean): DrawerIssueMeta[] {
   return [
     { label: t('bottomDrawer.issues.meta.jobId'), value: job.id },
     { label: t('bottomDrawer.issues.meta.status'), value: job.status },
     { label: t('bottomDrawer.issues.meta.progress'), value: `${job.progress}%` },
     ...(job.scope ? [{ label: t('bottomDrawer.issues.meta.scope'), value: job.scope }] : []),
-    { label: t('bottomDrawer.labels.failed'), value: job.failedCount.toString() },
-    { label: t('bottomDrawer.labels.warnings'), value: job.warningCount.toString() },
-    { label: t('bottomDrawer.labels.skipped'), value: job.skippedCount.toString() },
+    ...(countsAvailable
+      ? [
+          { label: t('bottomDrawer.labels.failed'), value: job.failedCount.toString() },
+          { label: t('bottomDrawer.labels.warnings'), value: job.warningCount.toString() },
+          { label: t('bottomDrawer.labels.skipped'), value: job.skippedCount.toString() },
+        ]
+      : []),
     ...(job.currentPartition
       ? [{ label: t('bottomDrawer.partitionProgress.title'), value: job.currentPartition }]
       : []),

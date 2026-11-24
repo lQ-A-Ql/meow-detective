@@ -125,6 +125,7 @@ describe('BottomDrawer jobs panel', () => {
     });
     mocks.importSignals.mockReturnValue({
       phasesByJob: {},
+      tasksByJob: {},
       cancellationsByJob: {},
       latestPhase: undefined,
       latestCancellation: undefined,
@@ -217,6 +218,7 @@ describe('BottomDrawer jobs panel', () => {
   it('shows typed import signals for partial freshness, cache state, cancellation, and report readiness', () => {
     mocks.importSignals.mockReturnValue({
       phasesByJob: {},
+      tasksByJob: {},
       cancellationsByJob: {},
       latestPhase: {
         phase: 'analyze',
@@ -277,6 +279,7 @@ describe('BottomDrawer jobs panel', () => {
   it('shows live warning/failed chips from import phase metrics', () => {
     mocks.importSignals.mockReturnValue({
       phasesByJob: {},
+      tasksByJob: {},
       cancellationsByJob: {},
       latestPhase: {
         phase: 'analyze',
@@ -400,6 +403,7 @@ describe('BottomDrawer jobs panel', () => {
   it('surfaces evidence hash caveats in the compact import signal panel', () => {
     mocks.importSignals.mockReturnValue({
       phasesByJob: {},
+      tasksByJob: {},
       cancellationsByJob: {},
       latestPhase: undefined,
       latestCancellation: undefined,
@@ -438,6 +442,7 @@ describe('BottomDrawer job status buckets', () => {
     });
     mocks.importSignals.mockReturnValue({
       phasesByJob: {},
+      tasksByJob: {},
       cancellationsByJob: {},
       latestPhase: undefined,
       latestCancellation: undefined,
@@ -506,6 +511,7 @@ describe('BottomDrawer manual toggle', () => {
     mocks.trace.mockReturnValue({ data: [] });
     mocks.importSignals.mockReturnValue({
       phasesByJob: {},
+      tasksByJob: {},
       cancellationsByJob: {},
       latestPhase: undefined,
       latestCancellation: undefined,

@@ -5,7 +5,7 @@ import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
 interface JobProgressPayload {
   jobId: string;
   progress: number;
-  detail: string;
+  detail?: string;
 }
 
 interface PartitionProgressPayload {
@@ -59,7 +59,7 @@ export function subscribeToJobSnapshotEvents(client: QueryClient) {
       updateJob(payload.jobId, ts, (job) => ({
         ...job,
         progress: Math.max(job.progress, payload.progress),
-        detail: payload.detail,
+        detail: payload.detail ?? job.detail,
       }));
     }),
     subscribeToEvent<ImportPhaseProgress>('import-phase-progress', ({ ts, payload }) => {
