@@ -146,32 +146,44 @@ fn streamed_artifact_deletion_removes_created_indexes_and_counts_atomically() {
 }
 
 #[test]
-fn concurrent_artifact_updates_keep_one_current_type_index() {
+fn concurrent_artifact_updates_report_conflicts_and_keep_current_indexes() {
     let root = tempfile::tempdir().unwrap();
     let store = ArtifactRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
-    std::thread::scope(|scope| {
+    let committed = std::thread::scope(|scope| {
+        let mut workers = Vec::new();
         for family in ["a", "b"] {
             let writer = store.clone();
-            scope.spawn(move || {
+            workers.push(scope.spawn(move || {
+                let mut committed = 0u64;
                 for value in 0..50 {
-                    writer
-                        .upsert(
-                            &ArtifactRecord {
-                                id: "shared".into(),
-                                data_source_id: "source".into(),
-                                artifact_type: family.into(),
-                                source_object_id: None,
-                                content_sha256: None,
-                                attrs: json!({"value":value}),
-                            },
-                            PersistMode::Buffer,
-                        )
-                        .unwrap();
+                    match writer.upsert(
+                        &ArtifactRecord {
+                            id: "shared".into(),
+                            data_source_id: "source".into(),
+                            artifact_type: family.into(),
+                            source_object_id: None,
+                            content_sha256: None,
+                            attrs: json!({"value":value}),
+                        },
+                        PersistMode::Buffer,
+                    ) {
+                        Ok(()) => committed += 1,
+                        Err(persistence_fjall::FjallStorageError::WriteConflict) => {}
+                        Err(error) => panic!("artifact update failed: {error}"),
+                    }
                 }
-            });
+                committed
+            }));
         }
+        workers
+            .into_iter()
+            .map(|worker| worker.join().unwrap())
+            .sum::<u64>()
     });
     let snapshot = store.read_snapshot();
+    assert!(committed > 0);
+    assert_eq!(store.cursor_revision(&snapshot).unwrap(), committed);
+    assert_eq!(store.count(&snapshot, Some("source")).unwrap(), 1);
     let expected = store.get(&snapshot, "source", "shared").unwrap().unwrap();
     let indexed = ["a", "b"]
         .into_iter()
