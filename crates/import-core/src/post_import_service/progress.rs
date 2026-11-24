@@ -58,9 +58,8 @@ impl CapabilityProgress {
     ) {
         use transport::dto::TaskProgressWorkDto as Step;
         let stage = match step {
-            Step::TimelineIdentity => Stage::Prepare,
-            Step::TimelineWorkspace | Step::TimelineEvents => Stage::Index,
-            Step::TimelineGraphPrepare | Step::TimelineGraph => Stage::Publish,
+            Step::TimelineIdentity | Step::TimelineWorkspace => Stage::Prepare,
+            Step::TimelineEvents | Step::TimelineGraphPrepare | Step::TimelineGraph => Stage::Index,
         };
         let mut previous = self.timeline_step.lock().unwrap();
         let mut reporter = self.reporter.lock().unwrap();
@@ -68,15 +67,10 @@ impl CapabilityProgress {
             if stage == Stage::Index {
                 emit(work, reporter.finish_stage(Stage::Prepare, false));
             }
-            if stage == Stage::Publish {
-                emit(work, reporter.finish_stage(Stage::Index, false));
-            }
             emit(work, reporter.start_work(stage, Some(step)));
             *previous = Some(step);
         }
-        if let Some(event) =
-            reporter.advance_work(done, total, Unit::Items, stage != Stage::Publish)
-        {
+        if let Some(event) = reporter.advance_work(done, total, Unit::Items, false) {
             emit(work, event);
         }
     }
@@ -86,6 +80,7 @@ impl CapabilityProgress {
         let stage = if work.kind == ExecutableCapability::Artifacts {
             Stage::Analyze
         } else {
+            emit(work, reporter.finish_stage(Stage::Prepare, false));
             Stage::Index
         };
         emit(work, reporter.finish_stage(stage, false));

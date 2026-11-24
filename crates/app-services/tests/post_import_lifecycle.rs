@@ -216,6 +216,19 @@ fn scoped_executor_completes_both_capabilities_after_real_directory_import() {
             assert!(progress
                 .iter()
                 .any(|event| event.kind == kind && event.work.is_some()));
+            let graph = progress
+                .iter()
+                .find(|event| {
+                    event.kind == kind
+                        && event.work == Some(transport::dto::TaskProgressWorkDto::TimelineGraph)
+                })
+                .expect("real timeline graph work event");
+            assert_eq!(graph.stage, transport::dto::TaskStageKeyDto::Index);
+            assert_eq!(
+                graph.mode,
+                transport::dto::TaskProgressModeDto::Indeterminate
+            );
+            assert!(graph.progress < 90);
         }
         assert_eq!(
             completed.data_source_id.as_deref(),
