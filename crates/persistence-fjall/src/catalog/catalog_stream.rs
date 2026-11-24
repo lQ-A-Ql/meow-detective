@@ -187,7 +187,7 @@ impl CatalogRecordStore {
         )?;
         writer.put(KeyspaceName::CatalogRecords, key, envelope.encode()?);
         let mut actions = Vec::new();
-        self.index_writes(&mut actions, record)?;
+        Self::index_writes(&mut actions, record)?;
         if record.entry_type == CatalogEntryType::Directory {
             if let Some(parent_id) = record.parent_id.as_deref() {
                 let parent_exists = parent_id == record.id

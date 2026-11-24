@@ -151,7 +151,7 @@ fn write_report(path: &Path, value: &Value) {
 fn run_sample(variable: &str, platform: DataSourcePlatform) {
     if std::env::var_os("FORENSICS_PROFILE_TRACE").is_some() {
         tracing_subscriber::fmt()
-            .with_env_filter("import_core::import_pipeline::fjall_projection=info")
+            .with_env_filter("error,import_core::import_pipeline::fjall_projection=info")
             .with_ansi(false)
             .with_writer(std::io::stderr)
             .init();

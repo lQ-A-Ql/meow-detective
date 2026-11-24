@@ -37,6 +37,42 @@ fn record(
 }
 
 #[test]
+fn parallel_catalog_batches_account_for_encoded_records_and_all_indexes() {
+    let root = tempfile::tempdir().unwrap();
+    let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut next = 0usize;
+    let parent = "catalog-directory/".repeat(12);
+    let report = store
+        .upsert_parallel("source", &std::sync::atomic::AtomicBool::new(false), || {
+            if next == 40_960 {
+                return Ok(None);
+            }
+            let records = (next..next + 512)
+                .map(|index| {
+                    let id = format!("catalog-record-{index:08}");
+                    let name = format!("file-{index}.txt");
+                    record("source", &id, None, &name, &format!("{parent}{name}"))
+                })
+                .collect();
+            next += 512;
+            Ok(Some(records))
+        })
+        .unwrap();
+    assert_eq!(report.workers_used, 8);
+    let snapshot = store.read_snapshot();
+    assert_eq!(store.count(&snapshot, Some("source")).unwrap(), 40_960);
+    assert_eq!(store.file_count(&snapshot, "source").unwrap(), 40_960);
+    for index in [0usize, 40_959] {
+        let path = format!("{parent}file-{index}.txt");
+        let page = store
+            .find_by_path(&snapshot, "source", &path, None, ScanDirection::Forward, 10)
+            .unwrap();
+        assert_eq!(page.records.len(), 1);
+        assert_eq!(page.records[0].id, format!("catalog-record-{index:08}"));
+    }
+}
+
+#[test]
 fn catalog_counts_and_binary_id_feed_follow_atomic_changes() {
     let root = tempfile::tempdir().unwrap();
     let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();

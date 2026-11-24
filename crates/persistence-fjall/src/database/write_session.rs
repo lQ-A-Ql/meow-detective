@@ -25,7 +25,7 @@ impl Default for WriteSessionConfig {
 
 impl WriteSessionConfig {
     pub(crate) fn validate(self) -> Result<()> {
-        if !(4..=64).contains(&self.workers)
+        if !(4..=16).contains(&self.workers)
             || self.batch_bytes == 0
             || self.batch_bytes.saturating_mul(self.workers * 2) > 256 * 1024 * 1024
         {
@@ -41,6 +41,7 @@ pub struct SourceWriteSession {
     pub(super) metrics: NativeWriteMetrics,
     started: Instant,
     completed: bool,
+    dispatch_active: AtomicBool,
 }
 
 impl SourceDatabase {
@@ -65,6 +66,7 @@ impl SourceDatabase {
             metrics: NativeWriteMetrics::default(),
             started: Instant::now(),
             completed: false,
+            dispatch_active: AtomicBool::new(false),
         })
     }
 }
@@ -77,6 +79,10 @@ impl SourceWriteSession {
         route: impl Fn(&T) -> u64,
         encode: impl Fn(&SourceReadHandle, Vec<T>) -> Result<Vec<WriteAction>> + Sync,
     ) -> Result<()> {
+        self.dispatch_active
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .map_err(|_| FjallStorageError::WriteSessionBusy)?;
+        let _dispatch = DispatchPermit(&self.dispatch_active);
         dispatch::run(self, cancel, next_batch, route, encode)
     }
 
@@ -118,6 +124,14 @@ impl SourceWriteSession {
             .inner
             .session_failed
             .store(true, Ordering::Release);
+    }
+}
+
+struct DispatchPermit<'a>(&'a AtomicBool);
+
+impl Drop for DispatchPermit<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::Release);
     }
 }
 

@@ -98,7 +98,7 @@ pub(super) fn materialize(
         required_bytes = estimate.required_bytes,
         configured_bytes = policy.reservation_bytes()?,
         engine_retained_bytes = estimate.engine_retained_bytes,
-        "Timeline projection workspace planned (constant segment plan)"
+        "Timeline projection parallel workspace planned"
     );
     drop(store);
     let mut generation = super::progress::prepare_generation(conn, &source, cancel, progress)?;
@@ -284,9 +284,6 @@ fn stream_file_events(
             }
         }
     };
-    // The segmented host owns cutting commits; the producer only pages records.
-    // Commit wall time accumulates across every committed segment instead of
-    // being overwritten by a single measurement.
     let commit_started = Instant::now();
     let outcome = timeline
         .replace_by_parser_prefix_parallel(

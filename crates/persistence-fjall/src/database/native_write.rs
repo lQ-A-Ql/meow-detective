@@ -17,7 +17,10 @@ impl SourceWriteSession {
             .map_err(|_| FjallStorageError::LockPoisoned)?;
         let bytes = actions.iter().map(action_bytes).sum::<usize>();
         if bytes > self.config.batch_bytes {
-            return Err(FjallStorageError::WriteSessionLimit);
+            return Err(FjallStorageError::WriteBatchLimit {
+                bytes,
+                limit: self.config.batch_bytes,
+            });
         }
         let immutable = actions
             .iter()
@@ -29,6 +32,7 @@ impl SourceWriteSession {
         }
         let mut hasher = Sha256::new();
         let count = actions.len();
+        let database = &self.database.inner;
         let mut grouped = BTreeMap::<KeyspaceName, BTreeMap<Vec<u8>, Option<Vec<u8>>>>::new();
         for action in actions {
             hash_action(&mut hasher, &action);
@@ -50,12 +54,7 @@ impl SourceWriteSession {
         }
         for (name, entries) in grouped {
             self.ensure_active(cancel)?;
-            let keyspace = self
-                .database
-                .inner
-                .keyspaces
-                .get(&name)
-                .expect("configured keyspace");
+            let keyspace = database.keyspaces.get(&name).expect("configured keyspace");
             let mut ingestion = keyspace.start_ingestion()?;
             for (key, value) in entries {
                 self.ensure_active(cancel)?;
@@ -73,7 +72,7 @@ impl SourceWriteSession {
             );
         }
         let digest: [u8; 32] = hasher.finalize().into();
-        let mut receipt = self.database.inner.engine.inner().batch();
+        let mut receipt = database.engine.inner().batch();
         receipt.insert(
             self.database
                 .inner

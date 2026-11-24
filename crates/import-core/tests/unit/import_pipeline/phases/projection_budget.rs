@@ -28,9 +28,9 @@ fn policy_128mib() -> TimelineProjectionPolicy {
     }
 }
 
-fn policy_384mib() -> TimelineProjectionPolicy {
+fn policy_768mib() -> TimelineProjectionPolicy {
     TimelineProjectionPolicy {
-        workspace_kib: 384 * 1024,
+        workspace_kib: 768 * 1024,
     }
 }
 
@@ -129,7 +129,7 @@ fn estimate_is_decoupled_from_catalog_size() {
     assert_eq!(
         first.engine_retained_bytes,
         160 * 1024 * 1024,
-        "engine retained stays at the calibrated constant pending measurement"
+        "engine allowance is independent of catalog cardinality"
     );
 }
 
@@ -376,7 +376,7 @@ fn large_input_rejects_insufficient_workspace_before_projection_writes() {
 
 #[test]
 fn sufficient_workspace_executes_large_input_and_completed_input_needs_no_rewrite() {
-    let policy = policy_384mib();
+    let policy = policy_768mib();
     let pool = pool(policy.reservation_bytes().unwrap());
     let fixture = fixture(20_000);
     let cancel = AtomicBool::new(false);

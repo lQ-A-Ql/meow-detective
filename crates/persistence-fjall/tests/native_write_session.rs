@@ -39,6 +39,13 @@ fn eight_workers_execute_overlapping_native_ingestion_calls_and_reopen() {
     let report = session.finish().unwrap();
     assert_eq!(report.configured_workers, 8);
     assert_eq!(report.workers_used, 8);
+    assert!(report.worker_native_calls[..8]
+        .iter()
+        .all(|calls| *calls > 0));
+    assert_eq!(
+        report.worker_native_calls.iter().sum::<u64>(),
+        report.native_calls
+    );
     assert!(report.peak_native_calls >= 4, "{report:?}");
     assert_eq!(report.actions, 65536);
     drop(database);

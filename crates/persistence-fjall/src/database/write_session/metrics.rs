@@ -7,6 +7,7 @@ use std::time::Duration;
 pub struct NativeWriteReport {
     pub configured_workers: usize,
     pub workers_used: u32,
+    pub worker_native_calls: [u64; 16],
     pub peak_native_calls: usize,
     pub native_calls: u64,
     pub batches: u64,
@@ -20,7 +21,7 @@ pub struct NativeWriteReport {
 pub(in crate::database) struct NativeWriteMetrics {
     active: AtomicUsize,
     peak: AtomicUsize,
-    workers: AtomicU64,
+    workers: [AtomicU64; 16],
     calls: AtomicU64,
     pub(in crate::database) batches: AtomicU64,
     pub(in crate::database) actions: AtomicU64,
@@ -32,7 +33,7 @@ pub(in crate::database) struct NativeCall<'a>(&'a NativeWriteMetrics);
 
 impl NativeWriteMetrics {
     pub(in crate::database) fn enter(&self, worker: usize) -> NativeCall<'_> {
-        self.workers.fetch_or(1u64 << worker, Ordering::Relaxed);
+        self.workers[worker].fetch_add(1, Ordering::Relaxed);
         let active = self.active.fetch_add(1, Ordering::AcqRel) + 1;
         self.peak.fetch_max(active, Ordering::Relaxed);
         self.calls.fetch_add(1, Ordering::Relaxed);
@@ -42,7 +43,14 @@ impl NativeWriteMetrics {
     pub(super) fn report(&self, workers: usize, elapsed: Duration) -> NativeWriteReport {
         NativeWriteReport {
             configured_workers: workers,
-            workers_used: self.workers.load(Ordering::Relaxed).count_ones(),
+            workers_used: self
+                .workers
+                .iter()
+                .filter(|calls| calls.load(Ordering::Relaxed) > 0)
+                .count() as u32,
+            worker_native_calls: std::array::from_fn(|index| {
+                self.workers[index].load(Ordering::Relaxed)
+            }),
             peak_native_calls: self.peak.load(Ordering::Relaxed),
             native_calls: self.calls.load(Ordering::Relaxed),
             batches: self.batches.load(Ordering::Relaxed),

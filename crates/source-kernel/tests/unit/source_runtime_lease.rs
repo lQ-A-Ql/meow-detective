@@ -204,7 +204,7 @@ fn bound_workspace_pool_carries_reader_allocation_until_reader_drops() {
     let lease = SourcePublicationLease::acquire("case", "source", factory.clone());
     let root = ResourcePool::new(Resources {
         bytes: 1536 * MIB,
-        workers: 4,
+        workers: crate::resource_budget::STORAGE_WORKERS,
         ..Default::default()
     });
     let workspace = root.workspace(&AtomicBool::new(false)).unwrap();

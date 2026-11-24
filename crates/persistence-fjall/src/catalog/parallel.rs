@@ -77,7 +77,7 @@ impl CatalogRecordStore {
                 )?
                 .encode()?,
             });
-            self.index_writes(&mut actions, &record)?;
+            Self::index_writes(&mut actions, &record)?;
             actions.push(WriteAction::Delete {
                 keyspace: KeyspaceName::Tombstones,
                 key: tombstone_key(source, &id)?,
@@ -159,4 +159,27 @@ impl CatalogRecordStore {
             })?;
         Ok(())
     }
+}
+
+pub(crate) fn encoded_record_bytes(record: &FileEntryRecord) -> Result<usize> {
+    let mut actions = Vec::new();
+    CatalogRecordStore::index_writes(&mut actions, record)?;
+    let envelope = VersionedEnvelope::from_serializable(
+        super::RECORD_KIND,
+        super::SCHEMA_VERSION,
+        &record.id,
+        &record.data_source_id,
+        1,
+        record,
+    )?;
+    let mut bytes = envelope.encode()?.len()
+        + record_key(&record.data_source_id, &record.id)?.len()
+        + tombstone_key(&record.data_source_id, &record.id)?.len();
+    for action in actions {
+        match action {
+            WriteAction::Put { key, value, .. } => bytes += key.len() + value.len(),
+            WriteAction::Delete { key, .. } => bytes += key.len(),
+        }
+    }
+    Ok(bytes)
 }

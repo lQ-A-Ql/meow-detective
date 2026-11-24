@@ -192,7 +192,7 @@ fn scoped_raw_reader_survives_workspace_and_factory_then_returns_its_bytes() {
     let runtime = runtime(&temp);
     let root = ResourcePool::new(Resources {
         bytes: 1536 * MIB,
-        workers: 4,
+        workers: crate::resource_budget::STORAGE_WORKERS,
         ..Default::default()
     });
     let workspace = root
@@ -234,7 +234,7 @@ fn factory_e01_plan_is_reused_inside_workspace_without_metadata_reparse() {
     );
     let root = ResourcePool::new(Resources {
         bytes: 1536 * MIB,
-        workers: 4,
+        workers: crate::resource_budget::STORAGE_WORKERS,
         ..Default::default()
     });
     let workspace = root

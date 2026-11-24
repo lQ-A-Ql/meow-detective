@@ -10,6 +10,8 @@ pub enum FjallStorageError {
     WriteSessionFailed,
     #[error("native write session configuration exceeds its resource limits")]
     WriteSessionLimit,
+    #[error("native write batch requires {bytes} bytes, limit is {limit}")]
+    WriteBatchLimit { bytes: usize, limit: usize },
     #[error("native write worker terminated unexpectedly")]
     WriteWorkerTerminated,
     #[error("database is locked: {path}")]

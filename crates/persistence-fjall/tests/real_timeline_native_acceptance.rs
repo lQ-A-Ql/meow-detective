@@ -16,6 +16,13 @@ fn retained_timeline_parallel_acceptance() {
         .unwrap();
     assert!(output.starts_with(workspace));
     let source = std::env::var("FORENSICS_ANALYSIS_SOURCE_ID").unwrap();
+    let config = match std::env::var_os("FORENSICS_NATIVE_WRITERS") {
+        Some(workers) => persistence_fjall::WriteSessionConfig {
+            workers: workers.to_str().unwrap().parse().unwrap(),
+            ..Default::default()
+        },
+        None => persistence_fjall::WriteSessionConfig::default(),
+    };
     let original = TimelineRecordStore::from_source_store(
         SourceStore::open(generation, DatabaseConfig::default()).unwrap(),
     );
@@ -51,7 +58,7 @@ fn retained_timeline_parallel_acceptance() {
             "retained-evidence-memory",
             PersistMode::Buffer,
             persistence_fjall::SegmentLimits::default_limits(),
-            Default::default(),
+            config,
             &std::sync::atomic::AtomicBool::new(false),
             producer,
         )
@@ -73,9 +80,18 @@ fn retained_timeline_parallel_acceptance() {
         .unwrap();
     let write_elapsed_ms = started.elapsed().as_millis();
     assert_eq!(outcome.inserted_records, 524_288);
-    assert_eq!(outcome.native_writes.configured_workers, 8);
+    assert_eq!(outcome.native_writes.configured_workers, config.workers);
     assert!(outcome.native_writes.workers_used >= 4);
     assert!(outcome.native_writes.peak_native_calls >= 4);
+    assert_eq!(
+        outcome
+            .native_writes
+            .worker_native_calls
+            .iter()
+            .filter(|calls| **calls > 0)
+            .count(),
+        config.workers
+    );
     assert!(
         retained_versions <= 4,
         "obsolete versions must be reclaimable"

@@ -136,7 +136,7 @@ fn stream_record_update(
         key: record_key(&updated.data_source_id, &updated.id)?,
         value: envelope.encode()?,
     });
-    repository.index_writes(&mut actions, updated)?;
+    CatalogRecordStore::index_writes(&mut actions, updated)?;
     if updated.entry_type == super::CatalogEntryType::Directory {
         if let Some(parent_id) = updated.parent_id.as_deref() {
             let parent_exists = parent_id == updated.id

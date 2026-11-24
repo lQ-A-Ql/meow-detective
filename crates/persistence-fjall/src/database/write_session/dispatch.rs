@@ -69,9 +69,12 @@ fn produce<T: NativeWriteInput>(
         let mut bytes = vec![0usize; senders.len()];
         for record in records {
             let worker = (route(&record) % senders.len() as u64) as usize;
-            let weight = record.resident_bytes()?;
+            let weight = record.budget_bytes()?;
             if weight > session.config.batch_bytes {
-                return Err(FjallStorageError::WriteSessionLimit);
+                return Err(FjallStorageError::WriteBatchLimit {
+                    bytes: weight,
+                    limit: session.config.batch_bytes,
+                });
             }
             if bytes[worker].saturating_add(weight) > session.config.batch_bytes / 3 {
                 senders[worker]
@@ -106,7 +109,7 @@ fn work<T: NativeWriteInput>(
     for records in receiver {
         session.ensure_active(cancel)?;
         for record in records {
-            let weight = record.resident_bytes()?;
+            let weight = record.budget_bytes()?;
             if !buffered.is_empty() && bytes.saturating_add(weight) > session.config.batch_bytes / 3
             {
                 session.ingest(

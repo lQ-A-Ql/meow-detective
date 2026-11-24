@@ -74,7 +74,7 @@ impl CatalogRecordStore {
                 key,
                 value: envelope.encode()?,
             });
-            self.index_writes(&mut actions, record)?;
+            Self::index_writes(&mut actions, record)?;
             if record.entry_type == super::CatalogEntryType::Directory {
                 if let Some(parent_id) = record.parent_id.as_deref() {
                     let parent_exists = batch_ids

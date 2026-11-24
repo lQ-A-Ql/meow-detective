@@ -47,13 +47,13 @@ pub struct TimelineProjectionStats {
     pub workspace_projected_events: u64,
     /// Legacy plan artifact field; constant plan leaves it at zero.
     pub workspace_graph_events: u64,
-    /// Segments committed by the segmented replace (delete + insert transactions).
+    /// Native ingestion batches completed during delete and insert work.
     pub workspace_segments: u64,
     /// Largest committed segment payload in bytes.
     pub workspace_max_segment_bytes: u64,
-    /// Constant engine-retained plan allowance (pending calibration).
+    /// Engine metadata allowance in the bounded parallel workspace.
     pub workspace_engine_retained_bytes: u64,
-    /// Number of committed write transactions (equals committed segments).
+    /// Number of completed native write batches.
     pub commit_count: u64,
     pub native_writes: persistence_source::fjall::NativeWriteReport,
 }

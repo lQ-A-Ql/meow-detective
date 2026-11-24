@@ -18,6 +18,7 @@ mod file_feed;
 mod id_feed;
 mod metrics;
 mod parallel;
+pub(crate) use parallel::encoded_record_bytes;
 mod partition_subtree;
 pub(super) use catalog_keys::{
     decode_record, directory_key, hash_key, index_write, orphan_key, parent_key, path_key,
@@ -334,7 +335,7 @@ impl CatalogRecordStore {
         Ok(Some(decode_record(envelope)?))
     }
 
-    fn index_writes(&self, actions: &mut Vec<WriteAction>, record: &FileEntryRecord) -> Result<()> {
+    fn index_writes(actions: &mut Vec<WriteAction>, record: &FileEntryRecord) -> Result<()> {
         let record_key = record_key(&record.data_source_id, &record.id)?;
         actions.push(index_write(
             id_feed::key(&record.data_source_id, &record.id)?,

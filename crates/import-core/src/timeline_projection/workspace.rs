@@ -5,37 +5,25 @@ use timeline::TimelineProjectionPolicy;
 const MIB: u64 = 1024 * 1024;
 
 /// Fixed base working set: bounded read buffers, SQLite scratch, and
-/// per-invocation bookkeeping outside the segmented engine writes.
+/// per-invocation bookkeeping outside native ingestion.
 const BASE_WORKSPACE_BYTES: u64 = 64 * MIB;
 /// Bounded SQLite graph-writer cache inside the base workspace allowance.
 pub(super) const GRAPH_SQLITE_CACHE_KIB: i64 = 32 * 1024;
 
-/// Engine-retained budget held as a constant pending calibration (待实测校准):
-/// segmented-commit retention has not been measured yet, so this value is not
-/// derived from catalog/event counts. Replace with a measured constant once a
-/// segmented-commit benchmark lands; do not tune it from case size in the
-/// meantime.
+/// Shared engine metadata allowance alongside the separately bounded worker buffers.
 const ENGINE_RETAINED_BYTES: u64 = 160 * MIB;
 
-/// One in-flight insert segment bounded by `SegmentLimits::default_limits()`
-/// (64 MiB / 100 000 records).
-const SEGMENT_BYTES: u64 = 64 * MIB;
+/// Eight application workers, each with bounded input, encoded data and queue slots.
+const NATIVE_WORKER_BUFFER_BYTES: u64 = 256 * MIB;
 
-/// Count-delta map, revision bump, and per-segment bookkeeping allowance.
+/// Count aggregation, revision publication and batch bookkeeping.
 const COUNT_ALLOWANCE_BYTES: u64 = 8 * MIB;
 
 /// Graph projection row/edge buffer allowance kept separate from the file-event
-/// segmented path.
+/// native ingestion.
 const GRAPH_ALLOWANCE_BYTES: u64 = 32 * MIB;
 
-/// Per-record container allocation inside one segment.
-const SEGMENT_RECORD_CONTAINER_BYTES: u64 =
-    std::mem::size_of::<persistence_source::fjall::TimelineRecord>() as u64;
-const SEGMENT_MAX_RECORDS: u64 = 100_000;
-
-/// Constant segment plan. The estimate is intentionally decoupled from the
-/// catalog/event count so a large case cannot be rejected before a single write;
-/// capacity admission compares this fixed plan against the policy cap.
+/// Bounded parallel-write workspace independent of catalog cardinality.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WorkspaceEstimate {
     pub projected_events: u64,
@@ -47,15 +35,11 @@ pub(crate) struct WorkspaceEstimate {
     pub engine_retained_bytes: u64,
 }
 
-/// Fixed plan bytes: BASE + ENGINE_RETAINED + SEGMENT + segment container +
-/// COUNT_ALLOWANCE + GRAPH_ALLOWANCE. Compile-time constant so the plan never
-/// depends on how many files or events the case holds.
+/// Admission covers the engine, all worker buffers, count aggregation and graph buffers.
 pub const fn plan_required_bytes() -> u64 {
-    let segment_container = SEGMENT_RECORD_CONTAINER_BYTES * SEGMENT_MAX_RECORDS;
     BASE_WORKSPACE_BYTES
         + ENGINE_RETAINED_BYTES
-        + SEGMENT_BYTES
-        + segment_container
+        + NATIVE_WORKER_BUFFER_BYTES
         + COUNT_ALLOWANCE_BYTES
         + GRAPH_ALLOWANCE_BYTES
 }
