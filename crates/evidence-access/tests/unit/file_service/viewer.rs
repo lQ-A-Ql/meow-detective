@@ -1496,6 +1496,35 @@ fn raw_ntfs_mid_file_range_uses_ntfs_range_reader_without_materialize() {
 }
 
 #[test]
+fn ntfs_record_range_rejects_unreadable_inode_even_when_another_path_exists() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("source.raw");
+    write_large_ntfs_raw_fixture(&path, b"ACTIVE", 0).unwrap();
+    let descriptor = PreviewDescriptor {
+        case_id: "case".into(),
+        file_id: "mft:1:9".into(),
+        source_kind: "raw".into(),
+        source_path: path.display().to_string(),
+        partition_index: Some(1),
+        filesystem_kind: Some("NTFS".into()),
+        path: "[P1]/large.bin".into(),
+        mime: None,
+        size: 6,
+        entry_size: 6,
+        data_source_id: "source".into(),
+        partition_candidates: vec![PreviewPartitionCandidate {
+            partition_index: 1,
+            filesystem_kind: "NTFS".into(),
+            offset: 0,
+            lvm_identity: None,
+        }],
+        entry_modified_at: None,
+        ceph_fs: None,
+    };
+    assert!(read_file_bytes_for_descriptor(&descriptor, 0, 6).is_err());
+}
+
+#[test]
 fn bitlocker_ntfs_range_uses_inode_without_materializing_large_file() {
     let dir = tempfile::TempDir::new().unwrap();
     let raw_path = dir.path().join("bitlocker_plaintext_ntfs.raw");

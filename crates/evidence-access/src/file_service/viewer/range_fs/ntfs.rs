@@ -4,7 +4,10 @@ use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::Connection;
 
 use crate::file_service::{
-    viewer::{image_open::LvmPoolRequestCache, PreviewDescriptor, PreviewPartitionCandidate},
+    viewer::{
+        image_open::LvmPoolRequestCache, mft_file_locator_from_entry_id, PreviewDescriptor,
+        PreviewPartitionCandidate,
+    },
     FileServiceError,
 };
 
@@ -92,6 +95,20 @@ fn read_paths(
     length: usize,
     reasons: &mut Vec<String>,
 ) -> Result<Option<Vec<u8>>, FileServiceError> {
+    if let Some((partition, inode)) = paths
+        .iter()
+        .find_map(|path| mft_file_locator_from_entry_id(path))
+    {
+        if partition != candidate.partition_index {
+            return Err(FileServiceError::security(
+                "MFT file identifier does not match the routed partition",
+            ));
+        }
+        return fs
+            .read_file_range_by_inode(inode, offset, length)
+            .map(Some)
+            .map_err(FileServiceError::Io);
+    }
     for path in paths {
         match fs.read_file_range(path, offset, length) {
             Ok(bytes) => return Ok(Some(bytes)),
