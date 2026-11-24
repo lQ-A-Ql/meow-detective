@@ -336,7 +336,14 @@ fn mirror_projection_records(
         tracing::debug!(source_id, "Skipping Fjall catalog mirror");
     }
     if include_analysis {
+        let started = Instant::now();
         projections::mirror_timeline(source_connection, source, source_id)?;
+        tracing::info!(
+            source_id,
+            elapsed_ms = started.elapsed().as_millis(),
+            "Fjall timeline mirror completed"
+        );
+        let started = Instant::now();
         projections::mirror_artifacts(
             case_connection,
             case_root,
@@ -345,8 +352,19 @@ fn mirror_projection_records(
             source,
             source_id,
         )?;
+        tracing::info!(
+            source_id,
+            elapsed_ms = started.elapsed().as_millis(),
+            "Fjall artifact mirror completed"
+        );
+        let started = Instant::now();
         records::mirror_linux_parser_record(source_connection, source, source_id)?;
         records::mirror_parser_tables(source_connection, source, source_id)?;
+        tracing::info!(
+            source_id,
+            elapsed_ms = started.elapsed().as_millis(),
+            "Fjall parser mirror completed"
+        );
     }
     if include_catalog {
         mirror_namespace_locators(source_connection, source, source_id)?;

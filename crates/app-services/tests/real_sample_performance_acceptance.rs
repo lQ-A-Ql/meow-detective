@@ -31,6 +31,8 @@ use transport::dto::{
 mod analysis_diagnostic;
 #[path = "support/real_sample_chromium_metadata.rs"]
 mod chromium_metadata;
+#[path = "support/real_sample_input_diagnostic.rs"]
+mod input_diagnostic;
 #[path = "support/real_sample_query_checks.rs"]
 mod query_checks;
 
@@ -50,6 +52,12 @@ fn retained_source_registry_metadata() {
 #[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
 fn retained_source_chromium_metadata() {
     chromium_metadata::run();
+}
+
+#[test]
+#[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
+fn retained_source_input_diagnostic() {
+    input_diagnostic::run();
 }
 
 #[test]
@@ -141,6 +149,13 @@ fn write_report(path: &Path, value: &Value) {
 }
 
 fn run_sample(variable: &str, platform: DataSourcePlatform) {
+    if std::env::var_os("FORENSICS_PROFILE_TRACE").is_some() {
+        tracing_subscriber::fmt()
+            .with_env_filter("import_core::import_pipeline::fjall_projection=info")
+            .with_ansi(false)
+            .with_writer(std::io::stderr)
+            .init();
+    }
     let fixture = fs::canonicalize(PathBuf::from(
         std::env::var_os(variable).expect("set explicit E01 fixture"),
     ))
