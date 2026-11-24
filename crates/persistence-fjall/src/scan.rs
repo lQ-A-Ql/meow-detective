@@ -4,7 +4,6 @@ use crate::{
     instrumentation::record_scan,
     keyspaces::KeyspaceName,
 };
-use fjall::Readable;
 use std::ops::Bound;
 
 const MAX_SCAN_PAGE_ENTRIES: usize = 8_192;
@@ -239,7 +238,7 @@ impl SourceReadSnapshot {
         Ok(entries)
     }
 
-    fn keyspace(&self, keyspace: KeyspaceName) -> &fjall::SingleWriterTxKeyspace {
+    fn keyspace(&self, keyspace: KeyspaceName) -> &fjall::Keyspace {
         self.keyspaces
             .get(&keyspace)
             .expect("configured keyspace is present")

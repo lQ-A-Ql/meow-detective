@@ -179,7 +179,7 @@ impl ArtifactRecordStore {
         let mut deleted = 0usize;
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| {
+            .write_transaction(mode, |snapshot| {
                 let mut actions = Vec::new();
                 let mut deltas = crate::record_metrics::CountDeltas::new();
                 let mut type_deltas = type_counts::TypeCountDeltas::new();

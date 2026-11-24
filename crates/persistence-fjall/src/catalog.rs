@@ -114,7 +114,7 @@ impl CatalogRecordStore {
         let mut deleted = false;
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| {
+            .write_transaction(mode, |snapshot| {
                 let key = record_key(source_id, record_id)?;
                 let Some(previous) = self.read_record(snapshot, &key, source_id, record_id)? else {
                     return Ok(Vec::new());

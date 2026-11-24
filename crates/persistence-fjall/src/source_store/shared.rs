@@ -1,6 +1,6 @@
 use super::SourceStore;
 use crate::{
-    database::{DatabaseState, SingleWriterTxDatabase},
+    database::{DatabaseState, SourceDatabase},
     DatabaseConfig, FjallStorageError, Result,
 };
 use std::{
@@ -71,7 +71,7 @@ pub fn open_shared_source_store(
     registry.stores.retain(|_, store| store.strong_count() > 0);
     if let Some(store) = registry.stores.get(&resolved).and_then(Weak::upgrade) {
         return Ok(Arc::new(SourceStore {
-            database: SingleWriterTxDatabase { inner: store },
+            database: SourceDatabase { inner: store },
         }));
     }
     std::fs::create_dir_all(&resolved)?;
@@ -80,7 +80,7 @@ pub fn open_shared_source_store(
     registry.stores.retain(|_, store| store.strong_count() > 0);
     if let Some(store) = registry.stores.get(&path).and_then(Weak::upgrade) {
         return Ok(Arc::new(SourceStore {
-            database: SingleWriterTxDatabase { inner: store },
+            database: SourceDatabase { inner: store },
         }));
     }
     let store = Arc::new(SourceStore::open(&path, config)?);

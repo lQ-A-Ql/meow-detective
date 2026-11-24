@@ -16,7 +16,7 @@ impl ArtifactRecordStore {
         let mut deleted = 0;
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| {
+            .write_transaction(mode, |snapshot| {
                 let mut actions = Vec::new();
                 for id in ids.iter().collect::<BTreeSet<_>>() {
                     let Some(record) = self.get(snapshot, source_id, id)? else {

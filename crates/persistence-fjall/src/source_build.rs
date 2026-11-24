@@ -1,5 +1,5 @@
 use crate::{
-    database::{DatabaseConfig, PersistMode, SingleWriterTxDatabase},
+    database::{DatabaseConfig, PersistMode, SourceDatabase},
     errors::{FjallStorageError, Result},
 };
 use sha2::{Digest, Sha256};
@@ -74,7 +74,7 @@ impl SourceBuildLayout {
 
 pub struct SourceBuild {
     layout: SourceBuildLayout,
-    database: Option<SingleWriterTxDatabase>,
+    database: Option<SourceDatabase>,
 }
 
 impl SourceBuild {
@@ -86,19 +86,16 @@ impl SourceBuild {
         })
     }
 
-    pub fn open_database(&mut self, config: DatabaseConfig) -> Result<&SingleWriterTxDatabase> {
+    pub fn open_database(&mut self, config: DatabaseConfig) -> Result<&SourceDatabase> {
         if self.database.is_none() {
-            self.database = Some(SingleWriterTxDatabase::open(
-                self.layout.build_path(),
-                config,
-            )?);
+            self.database = Some(SourceDatabase::open(self.layout.build_path(), config)?);
         }
         self.database
             .as_ref()
             .ok_or_else(|| FjallStorageError::InvalidBuildPath("database was not opened".into()))
     }
 
-    pub fn database(&self) -> Option<&SingleWriterTxDatabase> {
+    pub fn database(&self) -> Option<&SourceDatabase> {
         self.database.as_ref()
     }
 

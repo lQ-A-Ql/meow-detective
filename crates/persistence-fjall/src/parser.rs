@@ -90,7 +90,7 @@ impl ParserRecordStore {
         let mut deleted = false;
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| {
+            .write_transaction(mode, |snapshot| {
                 let Some(previous) = self.get(snapshot, source_id, id)? else {
                     return Ok(Vec::new());
                 };

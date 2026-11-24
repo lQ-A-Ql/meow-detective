@@ -4,6 +4,9 @@ use crate::{
 };
 use std::{sync::mpsc, time::Duration};
 
+#[path = "database_transactions.rs"]
+mod transactions;
+
 #[test]
 fn sealing_and_concurrent_immutable_write_share_one_exclusive_boundary() {
     let directory =

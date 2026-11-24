@@ -16,7 +16,7 @@ impl ArtifactRecordStore {
         }
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| self.upsert_actions(snapshot, records))?;
+            .write_transaction(mode, |snapshot| self.upsert_actions(snapshot, records))?;
         Ok(())
     }
 

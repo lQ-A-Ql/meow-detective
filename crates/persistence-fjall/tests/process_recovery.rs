@@ -1,6 +1,6 @@
 use persistence_fjall::{
     publish_build, seal_build, verify_sealed, DatabaseConfig, KeyPart, PersistMode,
-    SingleWriterTxDatabase, SourceBuildLayout, WriteAction,
+    SourceBuildLayout, SourceDatabase, WriteAction,
 };
 use std::{fs, path::PathBuf, process::Command};
 
@@ -50,8 +50,7 @@ fn child_process_termination_matrix_reopens_each_durable_boundary() {
         assert_eq!(status.code(), Some(90), "node={node}");
         match node {
             "batch_commit" | "sync_data" | "sync_all" => {
-                let database =
-                    SingleWriterTxDatabase::open(&path, DatabaseConfig::default()).unwrap();
+                let database = SourceDatabase::open(&path, DatabaseConfig::default()).unwrap();
                 let snapshot = database.read_snapshot();
                 let key =
                     persistence_fjall::encode_key("matrix", &[KeyPart::Text(node.to_owned())])
@@ -110,7 +109,7 @@ fn run_matrix_child_if_requested() {
     let path = PathBuf::from(std::env::var("FJALL_PROCESS_RECOVERY_PATH").unwrap());
     match node.as_str() {
         "batch_commit" => {
-            let database = SingleWriterTxDatabase::open(&path, DatabaseConfig::default()).unwrap();
+            let database = SourceDatabase::open(&path, DatabaseConfig::default()).unwrap();
             database
                 .write_batch(
                     &[WriteAction::Put {
@@ -127,7 +126,7 @@ fn run_matrix_child_if_requested() {
                 .unwrap();
         }
         "sync_data" | "sync_all" => {
-            let database = SingleWriterTxDatabase::open(&path, DatabaseConfig::default()).unwrap();
+            let database = SourceDatabase::open(&path, DatabaseConfig::default()).unwrap();
             database
                 .write_batch(
                     &[WriteAction::Put {
@@ -205,7 +204,7 @@ fn run_matrix_child_if_requested() {
 fn child_process_terminates_after_batch_and_parent_reopens_receipt() {
     let path = workspace();
     if std::env::var_os("FJALL_PROCESS_RECOVERY_CHILD").is_some() {
-        let database = SingleWriterTxDatabase::open(&path, DatabaseConfig::default()).unwrap();
+        let database = SourceDatabase::open(&path, DatabaseConfig::default()).unwrap();
         database
             .write_batch(
                 &[WriteAction::Put {
@@ -231,7 +230,7 @@ fn child_process_terminates_after_batch_and_parent_reopens_receipt() {
         .status()
         .unwrap();
     assert_eq!(status.code(), Some(99));
-    let database = SingleWriterTxDatabase::open(&path, DatabaseConfig::default()).unwrap();
+    let database = SourceDatabase::open(&path, DatabaseConfig::default()).unwrap();
     let snapshot = database.read_snapshot();
     let key = persistence_fjall::encode_key("process", &[KeyPart::Text("batch".into())]).unwrap();
     assert_eq!(

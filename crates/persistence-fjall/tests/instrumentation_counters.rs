@@ -1,6 +1,6 @@
 use persistence_fjall::{
     instrumentation::{self, StorageCounters},
-    DatabaseConfig, KeyspaceName, PersistMode, ScanDirection, SingleWriterTxDatabase, WriteAction,
+    DatabaseConfig, KeyspaceName, PersistMode, ScanDirection, SourceDatabase, WriteAction,
 };
 
 #[test]
@@ -10,8 +10,7 @@ fn counters_report_storage_work_only_while_enabled() {
     // open below is the only database_open seen in this test.
     instrumentation::reset();
     let directory = tempfile::tempdir().unwrap();
-    let database =
-        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let database = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
     let actions = vec![
         WriteAction::Put {
             keyspace: KeyspaceName::CatalogRecords,

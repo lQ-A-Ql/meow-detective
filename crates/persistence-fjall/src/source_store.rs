@@ -1,7 +1,7 @@
 use crate::{
     codec::VersionedEnvelope,
     database::{
-        DatabaseConfig, PersistMode, SingleWriterTxDatabase, SourceReadSnapshot, WriteAction,
+        DatabaseConfig, PersistMode, SourceDatabase, SourceReadSnapshot, WriteAction,
         WriteBatchReceipt,
     },
     errors::Result,
@@ -19,15 +19,15 @@ pub use shared::{
 
 #[derive(Clone)]
 pub struct SourceStore {
-    database: SingleWriterTxDatabase,
+    database: SourceDatabase,
 }
 impl SourceStore {
     pub fn open(path: impl AsRef<Path>, config: DatabaseConfig) -> Result<Self> {
         Ok(Self {
-            database: SingleWriterTxDatabase::open(path, config)?,
+            database: SourceDatabase::open(path, config)?,
         })
     }
-    pub fn database(&self) -> &SingleWriterTxDatabase {
+    pub fn database(&self) -> &SourceDatabase {
         &self.database
     }
 

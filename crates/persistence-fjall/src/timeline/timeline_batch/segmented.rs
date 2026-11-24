@@ -184,11 +184,10 @@ fn commit_delete_segment(
     records: Vec<TimelineRecord>,
     mode: PersistMode,
 ) -> Result<()> {
-    let snapshot = store.source_store.database().read_snapshot();
     store
         .source_store
         .database()
-        .write_streamed_with_snapshot(mode, &snapshot, |snap, writer| {
+        .write_streamed(mode, |snap, writer| {
             let mut count_deltas = HashMap::new();
             let mut count_policies = BTreeMap::new();
             for record in &records {
@@ -317,11 +316,10 @@ fn commit_insert_segment(
             None,
         )
     });
-    let snapshot = store.source_store.database().read_snapshot();
-    store.source_store.database().write_streamed_with_snapshot(
-        mode,
-        &snapshot,
-        |snap, writer| {
+    store
+        .source_store
+        .database()
+        .write_streamed(mode, |snap, writer| {
             let mut count_deltas = HashMap::new();
             let mut count_policies = BTreeMap::new();
             for record in &records {
@@ -333,8 +331,7 @@ fn commit_insert_segment(
                 writer.put(KeyspaceName::Meta, key, envelope.encode()?);
             }
             Ok::<(), FjallStorageError>(())
-        },
-    )?;
+        })?;
     Ok(CommittedSegment {
         count,
         bytes: segment_bytes,

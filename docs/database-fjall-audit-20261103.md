@@ -10,7 +10,7 @@
 - Source SQLite 只保存来源身份、Fjall 代际、导入/分析作业、候选检查点、发布回执和恢复控制，不建立 `file_entries`、`artifacts`、`timeline_events`、`forensic_fingerprints`。
 - Catalog、Artifact、Timeline 记录由该来源的 Fjall generation 保存。
 - Android facts 与 packages 由该来源的 `android` parser family 保存；重分析通过一个 Fjall 事务替换整个 family，查询校验当前 generation，保留事实来源优先级与字段归属。
-- Analysis worker 使用 Fjall 原生 `Database::batch` 写入记录与索引，当前封装由 `immutable_gate` 保护写入过程。并发写入调整采用原生 ingestion 和乐观事务，设计见 [Fjall 原生并发写入封装](fjall-native-concurrent-write-design.md)。
+- 来源存储使用 `SourceDatabase` 和 Fjall 原生乐观事务，共享生命周期许可允许并发准备，封存取得独占许可。批量写入接入原生 ingestion，设计见 [Fjall 原生并发写入封装](fjall-native-concurrent-write-design.md)。
 - Artifact/Timeline 的共享计数与 revision 在 worker 全部结束后汇总一次；SQLite 仅在候选检查点全部准备后提交生命周期控制事务。
 - 文件枚举和分析 worker 使用独立 staging SQLite；staging 表不属于已发布 source 或案件数据库。
 - Source 身份存在时，Fjall generation 缺失会返回错误。只读请求不会创建 generation；显式导入初始化可以创建 build generation。
@@ -37,7 +37,7 @@
 | 15 | Artifact 删除未释放对象引用 | 已完成 | Artifact 删除和重复投影同步更新对象引用。 |
 | 16 | Source schema 检查晚于恢复状态写入 | 已完成 | 打开案件时先检查来源 schema，再进行恢复扫描。 |
 | 17 | 恢复诊断错误使用 operation 外键 | 已完成 | 写入恢复状态前校验 operation 归属。 |
-| 18 | Analysis 原生并发写入与封装边界 | 设计完成，实施待验收 | 默认 8 个应用写入线程，至少 4 个同时进入原生写入；真实写入 CPU >40%；原生 ingestion 构建，乐观事务处理读取后修改，统一生成目录发布。 |
+| 18 | Analysis 原生并发写入与封装边界 | 实施中 | 单写入者类型和旧规划入口已删除，乐观事务回归通过；原生 ingestion 接入中，至少 4 个线程同时原生写入作为通过条件，CPU >40% 为理想性能目标。 |
 | 19 | Source SQLite 残留指纹业务明细 | 已完成 | `forensic_fingerprints` 从 source migration 删除；导入、Catalog/Analysis staging 合并和 hash 更新不再写 source SQLite；旧 SQL detail fallback 已删除。 |
 | 20 | Linux 摘要冷加载重复遍历 Catalog、Artifact 和候选检查点 | 已完成 | 候选与 kernel catalog 在分析发现阶段随 Catalog 单次流式遍历记录到 source 控制元数据；Artifact 单次聚合生成 counts、首页和系统信息；Fjall Meta 按 Artifact revision 与分析检查点 revision 缓存静态摘要及分页。导入 finalize 预热 `offset=0, limit=200`，后续页使用 family-created 索引读取。真实检材冷进程读缓存 `1,697 ms`，Artifact `49,461`；原接口超过 MCP `30 s` 超时。 |
 
@@ -68,7 +68,7 @@
 | FJ-12-J | 缺失 generation、重新打开、取消、失败重试、删除和进程终止行为正确 | 已完成 | `source_detail_repo_fail_closed` 2 项、案件服务 32 项；Fjall process recovery 与 generation 测试 | PVE/Kubernetes 私有镜像未运行 |
 | FJ-12-K | 大 Catalog 的计数、排序、分页及导入缓存受界限约束 | 已完成 | Fjall 单页上限 8192（包含内部 lookahead）；文件浏览排序、跳转、根目录和子目录窗口上限 8192；Artifact 查询集合上限 100000、分页上限 1024；Timeline 报告、Correlation Artifact ID 和 FileRepo 全量查询均有界；分页与超限失败回归通过 | 无 |
 | FJ-12-L | 相关测试、Clippy、格式和架构门禁通过，文档及分批提交完整 | 已完成 | `app-services --lib` 1167 通过、16 忽略；`persistence-sqlite --lib` 140 通过、1 忽略；Fjall Catalog 8 项、文件浏览、Artifact 超限、source detail fail-closed 回归通过；格式、Clippy、模块规模、函数规模、测试布局和 SQL 边界门禁通过；修复按功能分批提交 | 私有 E01、PVE、Kubernetes 和真实掉电样本未执行 |
-| FJ-12-M | 分析输出由至少 4 个 worker 同时执行原生写入，SQLite 提交生命周期控制 | 实施待验收 | 既有测试覆盖 4 个线程写入 400 Artifact 与 400 Timeline 的结果一致性；新验收记录原生调用重叠、默认 8 个线程、真实 CPU >40%、吞吐量、内存和发布一致性 | FCW-01 至 FCW-10 需要实施并执行 |
+| FJ-12-M | 分析输出由至少 4 个 worker 同时执行原生写入，SQLite 提交生命周期控制 | 实施中 | 既有测试覆盖 4 个线程写入 400 Artifact 与 400 Timeline 的结果一致性；验收记录原生调用重叠、默认 8 个线程、CPU、吞吐量、内存和发布一致性 | 原生 ingestion 并发与真实样本继续验证 |
 
 ## 当前验证
 

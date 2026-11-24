@@ -1,4 +1,4 @@
-use super::SingleWriterTxDatabase;
+use super::SourceDatabase;
 use crate::KeyspaceName;
 use fjall::AbstractTree;
 
@@ -19,7 +19,7 @@ pub struct DatabaseMemoryMetrics {
     pub keyspaces: Vec<KeyspaceMemoryMetrics>,
 }
 
-impl SingleWriterTxDatabase {
+impl SourceDatabase {
     pub fn memory_metrics(&self) -> DatabaseMemoryMetrics {
         let engine = self.inner.engine.inner();
         let mut keyspaces = self
@@ -27,7 +27,7 @@ impl SingleWriterTxDatabase {
             .keyspaces
             .iter()
             .map(|(name, keyspace)| {
-                let tree = &keyspace.inner().tree;
+                let tree = &keyspace.tree;
                 KeyspaceMemoryMetrics {
                     keyspace: *name,
                     active_memtable_bytes: tree.active_memtable().size(),

@@ -23,7 +23,7 @@ impl TimelineRecordStore {
         }
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| {
+            .write_transaction(mode, |snapshot| {
                 self.mutation_actions(snapshot, records, &[])
             })?;
         Ok(())

@@ -142,7 +142,7 @@ impl TimelineRecordStore {
         let mut deleted = 0usize;
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| {
+            .write_transaction(mode, |snapshot| {
                 let mut actions = Vec::new();
                 let mut count_deltas = HashMap::new();
                 let counts_ready = timeline_count::counts_ready(snapshot, source_id)?;

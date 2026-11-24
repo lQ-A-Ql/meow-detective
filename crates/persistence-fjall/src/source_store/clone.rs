@@ -3,7 +3,6 @@ use crate::{
     DatabaseConfig, FjallStorageError, KeyspaceName, PersistMode, Result, SnapshotEntry,
     SourceReadSnapshot, WriteAction,
 };
-use fjall::Readable;
 use std::{
     ops::Bound,
     path::Path,

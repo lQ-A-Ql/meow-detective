@@ -1,5 +1,5 @@
 use crate::errors::{FjallStorageError, Result};
-use fjall::{KeyspaceCreateOptions, SingleWriterTxKeyspace};
+use fjall::{Keyspace, KeyspaceCreateOptions};
 
 pub const KEYSPACE_NAMES: [&str; 15] = [
     "meta",
@@ -61,13 +61,15 @@ impl KeyspaceName {
 }
 
 pub(crate) fn open_keyspaces(
-    database: &fjall::SingleWriterTxDatabase,
-) -> Result<Vec<(KeyspaceName, SingleWriterTxKeyspace)>> {
+    database: &fjall::OptimisticTxDatabase,
+) -> Result<Vec<(KeyspaceName, Keyspace)>> {
     KEYSPACE_NAMES
         .iter()
         .enumerate()
         .map(|(index, name)| {
-            let keyspace = database.keyspace(name, KeyspaceCreateOptions::default)?;
+            let keyspace = database
+                .inner()
+                .keyspace(name, KeyspaceCreateOptions::default)?;
             let keyspace_name = match index {
                 0 => KeyspaceName::Meta,
                 1 => KeyspaceName::CatalogRecords,

@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 #[derive(Debug, thiserror::Error)]
 pub enum FjallStorageError {
+    #[error("concurrent transaction changed a record read by this operation")]
+    WriteConflict,
     #[error("database is locked: {path}")]
     StorageLocked { path: PathBuf },
     #[error("shared source store registry lock is poisoned")]

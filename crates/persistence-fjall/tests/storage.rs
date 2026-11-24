@@ -1,8 +1,8 @@
 use persistence_fjall::{
     decode_key, encode_key, publish_build, scan_recovery_consistency, seal_build, verify_sealed,
     BatchReceiptState, DatabaseConfig, FjallStorageError, KeyPart, KeyspaceName, PersistMode,
-    RecoveryScan, RecoveryState, ScanBounds, ScanDirection, SingleWriterTxDatabase, SourceBuild,
-    SourceBuildLayout, SourceStore, VersionedEnvelope, WriteAction,
+    RecoveryScan, RecoveryState, ScanBounds, ScanDirection, SourceBuild, SourceBuildLayout,
+    SourceDatabase, SourceStore, VersionedEnvelope, WriteAction,
 };
 use serde::{Deserialize, Serialize};
 
@@ -55,8 +55,7 @@ fn envelope_round_trips_payload_and_rejects_tampering() {
 #[test]
 fn database_commits_across_keyspaces_and_reopens() {
     let directory = tempfile::tempdir().unwrap();
-    let database =
-        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let database = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
     let actions = vec![
         WriteAction::Put {
             keyspace: KeyspaceName::Meta,
@@ -94,8 +93,7 @@ fn database_commits_across_keyspaces_and_reopens() {
     );
     drop(snapshot);
     drop(database);
-    let reopened =
-        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let reopened = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
     assert_eq!(
         reopened
             .read_snapshot()
@@ -111,8 +109,7 @@ fn recovery_scan_reports_batch_receipt_and_sealed_state() {
     let layout = SourceBuildLayout::new(directory.path(), "source-1", "attempt-1").unwrap();
     let build = SourceBuild::create(layout.clone()).unwrap();
     build.write_file("record", b"same").unwrap();
-    let database =
-        SingleWriterTxDatabase::open(layout.build_path(), DatabaseConfig::default()).unwrap();
+    let database = SourceDatabase::open(layout.build_path(), DatabaseConfig::default()).unwrap();
     let receipt = database
         .write_batch(
             &[WriteAction::Put {
@@ -227,9 +224,8 @@ fn shared_source_lifetime_includes_repository_clones_and_snapshots() {
 #[test]
 fn second_open_is_reported_as_storage_locked() {
     let directory = tempfile::tempdir().unwrap();
-    let _database =
-        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
-    let error = match SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()) {
+    let _database = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let error = match SourceDatabase::open(directory.path(), DatabaseConfig::default()) {
         Ok(_) => panic!("second database handle unexpectedly opened"),
         Err(error) => error,
     };
@@ -349,8 +345,7 @@ fn case_source_layout_uses_dedicated_source_directory_and_stable_names() {
 #[test]
 fn snapshot_prefix_and_range_return_ordered_copies() {
     let directory = tempfile::tempdir().unwrap();
-    let database =
-        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let database = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
     let actions = [
         (b"file/a".to_vec(), b"a".to_vec()),
         (b"file/b".to_vec(), b"b".to_vec()),
@@ -413,8 +408,7 @@ fn snapshot_prefix_and_range_return_ordered_copies() {
 #[test]
 fn keyset_cursor_is_exclusive_and_supports_both_directions() {
     let directory = tempfile::tempdir().unwrap();
-    let database =
-        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let database = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
     let actions = [b"item/1", b"item/2", b"item/3", b"item/4"]
         .into_iter()
         .map(|key| WriteAction::Put {
@@ -454,8 +448,7 @@ fn keyset_cursor_is_exclusive_and_supports_both_directions() {
 #[test]
 fn keyset_cursor_must_belong_to_the_requested_prefix() {
     let directory = tempfile::tempdir().unwrap();
-    let database =
-        SingleWriterTxDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
+    let database = SourceDatabase::open(directory.path(), DatabaseConfig::default()).unwrap();
     database
         .write_batch(
             &[WriteAction::Put {

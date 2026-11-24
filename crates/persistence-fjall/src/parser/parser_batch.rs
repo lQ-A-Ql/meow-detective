@@ -33,7 +33,7 @@ impl ParserRecordStore {
         }
         self.source_store
             .database()
-            .write_planned(mode, |snapshot| {
+            .write_transaction(mode, |snapshot| {
                 let mut actions = Vec::with_capacity(records.len().saturating_mul(4));
                 let mut ids = std::collections::HashSet::with_capacity(records.len());
                 for record in records {
