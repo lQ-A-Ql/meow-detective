@@ -97,5 +97,6 @@ pub(super) fn finish_import_outcome(
             ctx.counts.is_partial(),
         )
         .map_err(CommandError::from_service_error)?;
+    ctx.task_stage(transport::dto::TaskStageKeyDto::Publish, true);
     Ok(message)
 }

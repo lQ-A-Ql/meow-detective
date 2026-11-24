@@ -146,6 +146,13 @@ fn real_linux_import_records_and_persists_source_facts_stage_timings() {
         assert!(!final_task.cancellable);
         assert!(final_task.eta_seconds.is_none());
         assert!(tasks.windows(2).all(|events| events[0].seq < events[1].seq));
+        assert!(tasks.iter().any(|event| {
+            event.state == transport::dto::TaskProgressStateDto::Running
+                && event.stages.iter().any(|stage| {
+                    stage.key == transport::dto::TaskStageKeyDto::Publish
+                        && stage.state == transport::dto::TaskProgressStateDto::Completed
+                })
+        }));
         drop(tasks);
         let sources = DataSourceRepo::new(connection).find_by_case(&active.meta.id)?;
         assert_eq!(sources.len(), 1);
