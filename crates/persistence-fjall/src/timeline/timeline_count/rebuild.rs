@@ -74,13 +74,7 @@ fn collect_counts(
     progress(processed);
     loop {
         ensure_not_cancelled(cancel)?;
-        let page = store.list_by_source(
-            snapshot,
-            source_id,
-            cursor.as_deref(),
-            ScanDirection::Forward,
-            PAGE_SIZE,
-        )?;
+        let page = store.scan_by_source(snapshot, source_id, cursor.as_deref(), PAGE_SIZE)?;
         for record in page.records {
             ensure_not_cancelled(cancel)?;
             if record.data_source_id != source_id {

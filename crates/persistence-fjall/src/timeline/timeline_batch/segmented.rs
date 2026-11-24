@@ -17,7 +17,7 @@ use crate::{
         timeline_projection_marker_envelope, SegmentLimits, SegmentedReplaceOutcome,
         TimelineProjectionState, TimelineProjectionStatePayload,
     },
-    ScanDirection, TimelineStreamError,
+    TimelineStreamError,
 };
 use std::collections::{BTreeMap, HashMap};
 mod spool;
@@ -149,11 +149,10 @@ fn delete_prefix_segmented(
     let mut segments = 0u64;
     let mut cursor: Option<Vec<u8>> = None;
     loop {
-        let page = store.list_by_source(
+        let page = store.scan_by_source(
             snapshot,
             source_id,
             cursor.as_deref(),
-            ScanDirection::Forward,
             DELETE_SEGMENT_MAX_RECORDS,
         )?;
         let matching: Vec<TimelineRecord> = page

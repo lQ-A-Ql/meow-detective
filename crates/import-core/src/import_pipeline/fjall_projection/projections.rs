@@ -132,13 +132,7 @@ pub(super) fn mirror_timeline(
     let mut cursor = None;
     loop {
         let page = records
-            .list_by_source(
-                &snapshot,
-                source_id,
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                PAGE_SIZE,
-            )
+            .scan_by_source(&snapshot, source_id, cursor.as_deref(), PAGE_SIZE)
             .map_err(|error| CommandError::internal(error.to_string()))?;
         source
             .timeline_upsert_batch(&page.records, PersistMode::Buffer)

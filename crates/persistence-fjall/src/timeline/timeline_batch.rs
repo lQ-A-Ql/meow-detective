@@ -225,13 +225,7 @@ impl TimelineRecordStore {
         let mut cursor = None;
         let mut deleted = false;
         loop {
-            let page = self.list_by_source(
-                snapshot,
-                source_id,
-                cursor.as_deref(),
-                crate::ScanDirection::Forward,
-                512,
-            )?;
+            let page = self.scan_by_source(snapshot, source_id, cursor.as_deref(), 512)?;
             for record in page.records {
                 if !record
                     .parser_id
