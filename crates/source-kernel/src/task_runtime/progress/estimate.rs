@@ -8,6 +8,7 @@ pub(super) struct StageEstimate {
     samples: u32,
     unit: Option<TaskProgressUnitDto>,
     previous_eta: Option<u64>,
+    eta_updated: Option<Instant>,
 }
 
 impl StageEstimate {
@@ -18,6 +19,7 @@ impl StageEstimate {
             samples: 0,
             unit: None,
             previous_eta: None,
+            eta_updated: None,
         }
     }
 
@@ -53,6 +55,12 @@ impl StageEstimate {
         if !rate.is_finite() || rate <= 0.0 {
             return (None, None);
         }
+        if self
+            .eta_updated
+            .is_some_and(|updated| updated.elapsed() < Duration::from_secs(1))
+        {
+            return (Some(rate), self.previous_eta);
+        }
         let eta = self
             .bar
             .length()
@@ -66,6 +74,7 @@ impl StageEstimate {
                     )
                 });
                 self.previous_eta = Some(bounded);
+                self.eta_updated = Some(Instant::now());
                 bounded
             });
         (Some(rate), eta)

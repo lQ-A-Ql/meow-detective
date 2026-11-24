@@ -51,6 +51,14 @@ impl<'a> ObservedImportSink<'a> {
         self.emit(&progress);
     }
 
+    pub fn catalog_only(&self) {
+        let mut reporter = self.reporter.lock().unwrap();
+        self.emit(&reporter.finish_stage(Stage::Analyze, true));
+        if !self.nested {
+            self.emit(&reporter.finish_stage(Stage::Index, true));
+        }
+    }
+
     fn stage_for_phase(&self, phase: &ImportPhaseDto) -> Stage {
         match phase {
             ImportPhaseDto::Queued | ImportPhaseDto::Attach => {

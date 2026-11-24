@@ -67,3 +67,27 @@ fn eta_requires_real_elapsed_work_samples_and_resets_at_the_next_stage() {
     assert!(next.rate.is_none());
     assert!(next.eta_seconds.is_none());
 }
+
+#[test]
+fn independent_timeline_and_artifact_plans_have_weighted_work_and_publication() {
+    for analysis in [false, true] {
+        let mut reporter = TaskProgressReporter::for_capability("job", "case", "source", analysis);
+        let event = reporter.finish_stage(Stage::Prepare, false);
+        assert_eq!(
+            event.stages.iter().map(|stage| stage.weight).sum::<u32>(),
+            100
+        );
+        assert_eq!(event.data_source_id.as_deref(), Some("source"));
+        reporter.start(if analysis {
+            Stage::Analyze
+        } else {
+            Stage::Index
+        });
+        reporter.advance(50, Some(100), Unit::Items);
+        let working = reporter.heartbeat(false);
+        assert_eq!(working.progress, if analysis { 55 } else { 60 });
+        let partial = reporter.finish(State::Partial);
+        assert_eq!(partial.mode, Mode::Determinate);
+        assert!(partial.progress < 100);
+    }
+}

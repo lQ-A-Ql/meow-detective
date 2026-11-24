@@ -23,6 +23,16 @@ pub enum TaskProgressStateDto {
     Cancelling,
     Cancelled,
     Failed,
+    Partial,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskProgressKindDto {
+    Import,
+    NestedImport,
+    Analysis,
+    Timeline,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +63,9 @@ pub struct TaskStageProgressDto {
 pub struct TaskProgressDto {
     pub job_id: String,
     pub case_id: String,
+    pub kind: TaskProgressKindDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_source_id: Option<String>,
     pub seq: u64,
     pub state: TaskProgressStateDto,
     pub progress: u32,
@@ -69,7 +82,7 @@ pub struct TaskProgressDto {
     pub heartbeat: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rate: Option<f64>,
-    /// Remaining time for the current stage's known work.
+    /// Remaining time for the current work counter's known total.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub eta_seconds: Option<u64>,
     pub cancellable: bool,

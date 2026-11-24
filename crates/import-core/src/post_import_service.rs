@@ -9,6 +9,7 @@ mod artifacts;
 mod enqueue;
 mod events;
 mod execution;
+mod progress;
 mod wait;
 
 pub use enqueue::{cancel_capability, enqueue_case_pending, retry_capability};
@@ -127,6 +128,7 @@ struct CapabilityWork {
     events: Option<Arc<dyn ApplicationEventSink>>,
     timeline: Arc<dyn TimelineProjectionExecutor>,
     case_projections: Arc<dyn CaseProjectionPublisher>,
+    progress: progress::CapabilityProgress,
 }
 
 pub struct CapabilityOutcome {

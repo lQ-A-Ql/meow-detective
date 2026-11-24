@@ -13,7 +13,7 @@ use domain::{DataSourceId, DataSourcePlatform};
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
 use std::sync::{
     atomic::{AtomicBool, Ordering},
-    mpsc, Arc,
+    mpsc, Arc, Mutex,
 };
 use std::time::Duration;
 use transport::dto::{CapabilityKindDto, CapabilityStateDto, TimelineProjectionStateDto};
@@ -22,6 +22,19 @@ struct ImportedCase {
     _root: tempfile::TempDir,
     case: app_services::active_case::ActiveCase,
     source: DataSourceId,
+}
+
+#[derive(Default)]
+struct ProgressEvents(Mutex<Vec<transport::events::EventEnvelope<serde_json::Value>>>);
+
+impl post_import_service::ApplicationEventSink for ProgressEvents {
+    fn emit(
+        &self,
+        event: &transport::events::EventEnvelope<serde_json::Value>,
+    ) -> std::io::Result<()> {
+        self.0.lock().unwrap().push(event.clone());
+        Ok(())
+    }
 }
 
 fn import_directory() -> ImportedCase {
@@ -133,7 +146,9 @@ fn detached_catalog_is_ready_while_timeline_and_artifacts_are_queued() {
 #[test]
 fn scoped_executor_completes_both_capabilities_after_real_directory_import() {
     let fixture = import_directory();
-    let runtime = runtime();
+    let mut runtime = runtime();
+    let events = Arc::new(ProgressEvents::default());
+    runtime.events = Some(events.clone());
     assert_eq!(
         post_import_service::enqueue_case_pending(
             &runtime,
@@ -172,6 +187,36 @@ fn scoped_executor_completes_both_capabilities_after_real_directory_import() {
         .unwrap()
             > 0
     );
+    let progress = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| event.payload.get("stages").is_some())
+        .map(|event| {
+            serde_json::from_value::<transport::dto::TaskProgressDto>(event.payload.clone())
+                .unwrap()
+        })
+        .collect::<Vec<_>>();
+    for kind in [
+        transport::dto::TaskProgressKindDto::Analysis,
+        transport::dto::TaskProgressKindDto::Timeline,
+    ] {
+        let completed = progress
+            .iter()
+            .filter(|event| event.kind == kind)
+            .last()
+            .unwrap();
+        assert_eq!(
+            completed.state,
+            transport::dto::TaskProgressStateDto::Completed
+        );
+        assert_eq!(completed.progress, 100);
+        assert_eq!(
+            completed.data_source_id.as_deref(),
+            Some(fixture.source.0.as_str())
+        );
+    }
 }
 
 #[test]

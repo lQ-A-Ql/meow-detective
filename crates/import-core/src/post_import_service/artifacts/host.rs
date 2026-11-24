@@ -38,6 +38,7 @@ pub(super) fn run(
             ),
         },
         |progress| {
+            work.progress.analysis(work, &progress);
             if last_progress.elapsed() >= Duration::from_millis(250) && event_error.is_none() {
                 last_progress = Instant::now();
                 if let Err(error) = events::progress(

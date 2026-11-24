@@ -1,8 +1,9 @@
 use std::time::{Duration, Instant};
 
 use transport::dto::{
-    TaskProgressDto, TaskProgressModeDto as Mode, TaskProgressStateDto as State,
-    TaskProgressUnitDto as Unit, TaskStageKeyDto as Stage, TaskStageProgressDto,
+    TaskProgressDto, TaskProgressKindDto as Kind, TaskProgressModeDto as Mode,
+    TaskProgressStateDto as State, TaskProgressUnitDto as Unit, TaskStageKeyDto as Stage,
+    TaskStageProgressDto,
 };
 
 mod estimate;
@@ -40,10 +41,17 @@ impl TaskProgressReporter {
                 (Stage::Publish, 5),
             ]
         };
+        let first_stage = plan[0].0;
         Self {
             snapshot: TaskProgressDto {
                 job_id: job.into(),
                 case_id: case.into(),
+                kind: if nested {
+                    Kind::NestedImport
+                } else {
+                    Kind::Import
+                },
+                data_source_id: None,
                 seq: 0,
                 state: State::Running,
                 progress: 0,
@@ -54,7 +62,11 @@ impl TaskProgressReporter {
                     .map(|(key, weight)| TaskStageProgressDto {
                         key,
                         weight,
-                        state: State::Pending,
+                        state: if key == first_stage {
+                            State::Running
+                        } else {
+                            State::Pending
+                        },
                     })
                     .collect(),
                 completed_units: 0,
@@ -73,6 +85,37 @@ impl TaskProgressReporter {
             estimate: StageEstimate::new(),
             last_emit: None,
         }
+    }
+
+    pub fn for_capability(job: &str, case: &str, source: &str, analysis: bool) -> Self {
+        let mut reporter = Self::new(job, case, false);
+        reporter.snapshot.kind = if analysis {
+            Kind::Analysis
+        } else {
+            Kind::Timeline
+        };
+        reporter.snapshot.data_source_id = Some(source.into());
+        reporter.snapshot.stages = if analysis {
+            vec![
+                (Stage::Prepare, 20),
+                (Stage::Analyze, 70),
+                (Stage::Publish, 10),
+            ]
+        } else {
+            vec![
+                (Stage::Prepare, 30),
+                (Stage::Index, 60),
+                (Stage::Publish, 10),
+            ]
+        }
+        .into_iter()
+        .map(|(key, weight)| TaskStageProgressDto {
+            key,
+            weight,
+            state: State::Pending,
+        })
+        .collect();
+        reporter
     }
 
     pub fn start(&mut self, stage: Stage) -> TaskProgressDto {

@@ -37,6 +37,18 @@ pub(super) fn run(work: CapabilityWork, cancel: Arc<AtomicBool>) -> Result<(), P
         }
         CapabilityClaimOutcome::Busy | CapabilityClaimOutcome::Superseded => return Ok(()),
     };
+    super::progress::observe(&work, &cancel, || {
+        complete_attempt(&work, &conn, &cancel, &attempt, &input)
+    })
+}
+
+fn complete_attempt(
+    work: &CapabilityWork,
+    conn: &rusqlite::Connection,
+    cancel: &Arc<AtomicBool>,
+    attempt: &persistence_sqlite::repositories::capability_execution_repo::CapabilityExecutionAttempt,
+    input: &str,
+) -> Result<&'static str, PostImportError> {
     let mut outcome = if let Err(error) = events::status(work.events.as_deref(), &attempt.row) {
         tracing::error!(error = %error, "post-import status publication failed");
         CapabilityOutcome::failed("EVENT_PUBLICATION_FAILED")
@@ -46,18 +58,18 @@ pub(super) fn run(work: CapabilityWork, cancel: Arc<AtomicBool>) -> Result<(), P
         match work.kind {
             ExecutableCapability::Timeline => {
                 work.timeline.project(super::TimelineProjectionRequest {
-                    conn: &conn,
+                    conn,
                     case_root: &work.case_root,
                     case_id: &CaseId(work.row.case_id.clone()),
                     source_id: &work.row.data_source_id,
-                    cancel: &cancel,
+                    cancel,
                 })
             }
-            ExecutableCapability::Artifacts => super::artifacts::run(&work, &conn, &cancel),
+            ExecutableCapability::Artifacts => super::artifacts::run(work, conn, cancel),
         }
     };
     if outcome.state == "ready" {
-        match input_fingerprint(&work) {
+        match input_fingerprint(work) {
             Ok(current) if current == input => {}
             Ok(_) => outcome = CapabilityOutcome::failed("SOURCE_CHANGED"),
             Err(error) => {
@@ -71,17 +83,20 @@ pub(super) fn run(work: CapabilityWork, cancel: Arc<AtomicBool>) -> Result<(), P
         detail: outcome.detail.as_deref(),
         error_code: outcome.error_code,
     };
-    if let Some(row) = CapabilityExecutionRepo::new(&conn).complete(&attempt, update)? {
+    if outcome.state == "ready" {
+        work.progress.publish(work);
+    }
+    if let Some(row) = CapabilityExecutionRepo::new(conn).complete(attempt, update)? {
         if !cancel.load(Ordering::Acquire) {
             work.case_projections
                 .request(&row.case_id, &work.case_root)?;
         }
         events::status(work.events.as_deref(), &row)?;
         if row.state == "ready" && work.kind == ExecutableCapability::Timeline {
-            events::timeline_updated(&work, outcome.timeline_events)?;
+            events::timeline_updated(work, outcome.timeline_events)?;
         }
     }
-    Ok(())
+    Ok(outcome.state)
 }
 
 fn input_fingerprint(work: &CapabilityWork) -> Result<String, PostImportError> {

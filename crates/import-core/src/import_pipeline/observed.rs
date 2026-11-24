@@ -50,6 +50,9 @@ pub(super) fn execute_import_job_internal(
         );
         drop(stop);
         worker.join().expect("import heartbeat worker");
+        if result.is_ok() && post_import_mode == PostImportMode::Detached {
+            observer.catalog_only();
+        }
         let state = match &result {
             Ok(_) => State::Completed,
             Err(error) if error.category == "cancelled" => State::Cancelled,

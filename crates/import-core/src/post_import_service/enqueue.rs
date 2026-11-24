@@ -86,6 +86,7 @@ pub(super) fn enqueue(
     let cancel = Arc::new(AtomicBool::new(false));
     let task_cancel = Arc::clone(&cancel);
     let work = CapabilityWork {
+        progress: super::progress::CapabilityProgress::new(&task_id, &row, kind),
         row: row.clone(),
         case_root: root.to_path_buf(),
         kind,
