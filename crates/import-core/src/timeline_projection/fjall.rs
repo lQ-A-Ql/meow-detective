@@ -8,6 +8,7 @@ use persistence_source::fjall::{
     CatalogRecordStore, PersistMode, ScanDirection, SegmentLimits, SegmentedReplaceOutcome,
     TimelineRecord, TimelineRecordStore,
 };
+use persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo;
 use rusqlite::Connection;
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -77,10 +78,7 @@ pub(super) fn materialize(
         .ok_or_else(|| TimelineProjectionError::Other("source generation is missing".into()))?;
     let source = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| TimelineProjectionError::Other("source identity is missing".into()))?;
-    let meta =
-        persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo::new(
-            conn,
-        );
+    let meta = TimelineProjectionRepo::new(conn);
     meta.ensure_meta_table()?;
     let started = Instant::now();
     let file_done = meta.is_done(FILE_PROJECTION_KEY, identity)?;
@@ -110,10 +108,7 @@ pub(super) fn materialize(
         .map_err(|error| TimelineProjectionError::Other(error.to_string()))?;
     let store = persistence_source::detail::require_source_store(&transaction)?;
     let timeline = TimelineRecordStore::from_source_store((*store).clone());
-    let meta =
-        persistence_sqlite::repositories::timeline_projection_repo::TimelineProjectionRepo::new(
-            &transaction,
-        );
+    let meta = TimelineProjectionRepo::new(&transaction);
     let mut timings = TimelineWriteTimings::default();
     let outcome = if file_done {
         None
@@ -153,7 +148,9 @@ pub(super) fn materialize(
         max_segment_bytes: 0,
     });
     ensure_active(cancel)?;
+    let commit_started = Instant::now();
     transaction.commit()?;
+    timings.graph_commit += commit_started.elapsed();
     generation.commit();
     projection_stats(
         outcome,
@@ -251,7 +248,7 @@ fn stream_file_events(
     }
     let mut cursor = None;
     let mut complete = false;
-    let mut next_batch = || {
+    let next_batch = move || {
         if complete {
             return Ok(None);
         }
@@ -296,7 +293,7 @@ fn stream_file_events(
             identity,
             PersistMode::SyncAll,
             SegmentLimits::default_limits(),
-            &mut next_batch,
+            next_batch,
         )
         .map_err(|error| match error {
             persistence_source::fjall::TimelineStreamError::Storage(error) => {

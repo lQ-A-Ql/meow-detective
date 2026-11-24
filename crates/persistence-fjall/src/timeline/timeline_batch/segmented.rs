@@ -63,6 +63,7 @@ where
     let (deleted_records, delete_segments) =
         delete_prefix_segmented(store, &snapshot, source_id, prefix, mode)
             .map_err(TimelineStreamError::Storage)?;
+    drop(snapshot);
     let summary = insert_staged(store, source_id, identity, mode, limits, &mut staged)
         .map_err(TimelineStreamError::Storage)?;
 
