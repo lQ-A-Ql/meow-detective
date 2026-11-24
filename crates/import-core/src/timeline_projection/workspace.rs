@@ -7,6 +7,8 @@ const MIB: u64 = 1024 * 1024;
 /// Fixed base working set: bounded read buffers, SQLite scratch, and
 /// per-invocation bookkeeping outside the segmented engine writes.
 const BASE_WORKSPACE_BYTES: u64 = 64 * MIB;
+/// Bounded SQLite graph-writer cache inside the base workspace allowance.
+pub(super) const GRAPH_SQLITE_CACHE_KIB: i64 = 32 * 1024;
 
 /// Engine-retained budget held as a constant pending calibration (待实测校准):
 /// segmented-commit retention has not been measured yet, so this value is not

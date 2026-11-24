@@ -8,7 +8,10 @@ use timeline::TimelineProjectionPolicy;
 
 mod error;
 mod fjall;
+mod graph;
+mod progress;
 mod timing;
+pub use progress::{TimelineProgressCallback, TimelineWork};
 pub(crate) mod workspace;
 
 pub use error::TimelineProjectionError;
@@ -88,16 +91,20 @@ pub fn materialize_file_activity_with_policy(
     cancel_token: &AtomicBool,
     policy: TimelineProjectionPolicy,
 ) -> Result<TimelineProjectionStats, TimelineProjectionError> {
+    materialize_file_activity_with_progress(conn, platform, cancel_token, policy, None)
+}
+
+pub fn materialize_file_activity_with_progress(
+    conn: &Connection,
+    platform: DataSourcePlatform,
+    cancel_token: &AtomicBool,
+    policy: TimelineProjectionPolicy,
+    progress: Option<&TimelineProgressCallback<'_>>,
+) -> Result<TimelineProjectionStats, TimelineProjectionError> {
     policy.validate()?;
     ensure_not_cancelled(cancel_token)?;
-    let identity = projection_fjall::identity(conn, platform, cancel_token)?;
-    materialize_file_activity_with_identity_and_policy(
-        conn,
-        platform,
-        cancel_token,
-        &identity,
-        policy,
-    )
+    let identity = projection_fjall::identity(conn, platform, cancel_token, progress)?;
+    projection_fjall::materialize(conn, platform, cancel_token, &identity, policy, progress)
 }
 
 pub fn materialize_file_activity_with_identity(
@@ -129,7 +136,7 @@ pub fn materialize_file_activity_with_identity_and_policy(
             "timeline projection input identity must not be empty".into(),
         ));
     }
-    projection_fjall::materialize(conn, platform, cancel_token, input_identity, policy)
+    projection_fjall::materialize(conn, platform, cancel_token, input_identity, policy, None)
 }
 
 pub fn materialize_file_activity_unknown(

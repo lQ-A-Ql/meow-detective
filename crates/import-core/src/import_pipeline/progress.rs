@@ -18,6 +18,7 @@ pub(super) struct ObservedImportSink<'a> {
     downstream: Option<&'a dyn ImportEventSink>,
     reporter: Mutex<TaskProgressReporter>,
     categories: Mutex<BTreeMap<String, (u64, u64)>>,
+    timeline_step: Mutex<Option<transport::dto::TaskProgressWorkDto>>,
     nested: bool,
 }
 
@@ -27,6 +28,7 @@ impl<'a> ObservedImportSink<'a> {
             downstream: sink,
             reporter: Mutex::new(TaskProgressReporter::new(job, case, nested)),
             categories: Mutex::new(BTreeMap::new()),
+            timeline_step: Mutex::new(None),
             nested,
         }
     }
@@ -78,7 +80,6 @@ impl<'a> ObservedImportSink<'a> {
             ImportPhaseDto::Enumerate | ImportPhaseDto::MergeEnumeration => Stage::Enumerate,
             ImportPhaseDto::Analyze
             | ImportPhaseDto::MergeAnalysis
-            | ImportPhaseDto::BuildIndexes
             | ImportPhaseDto::Timeline
             | ImportPhaseDto::HashEvidence => {
                 if self.nested {
@@ -88,12 +89,34 @@ impl<'a> ObservedImportSink<'a> {
                 }
             }
             ImportPhaseDto::PostReady => Stage::Analyze,
+            ImportPhaseDto::BuildIndexes => Stage::Enumerate,
             ImportPhaseDto::Checkpoint | ImportPhaseDto::Finalize => Stage::Publish,
         }
     }
 }
 
 impl ImportEventSink for ObservedImportSink<'_> {
+    fn timeline_work(
+        &self,
+        work: transport::dto::TaskProgressWorkDto,
+        done: u64,
+        total: Option<u64>,
+    ) {
+        let mut previous = self.timeline_step.lock().unwrap();
+        let stage = if self.nested {
+            Stage::Analyze
+        } else {
+            Stage::Index
+        };
+        let mut reporter = self.reporter.lock().unwrap();
+        if *previous != Some(work) {
+            *previous = Some(work);
+            self.emit(&reporter.start_work(stage, Some(work)));
+        }
+        if let Some(event) = reporter.advance_work(done, total, Unit::Items, false) {
+            self.emit(&event);
+        }
+    }
     fn task_progress(&self, progress: &TaskProgressDto) {
         self.emit(progress);
     }

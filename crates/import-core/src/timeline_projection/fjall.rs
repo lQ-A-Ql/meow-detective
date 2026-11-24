@@ -1,13 +1,13 @@
+use super::progress::{TimelineProgressCallback, TimelineWork};
 use super::{
     TimelineProjectionError, TimelineProjectionStats, TimelineWriteTimings, FILE_PROJECTION_KEY,
     GRAPH_PROJECTION_KEY,
 };
-use domain::{DataSourcePlatform, EdgeType, GraphEdge, GraphNode, NodeType};
+use domain::DataSourcePlatform;
 use persistence_source::fjall::{
     CatalogRecordStore, PersistMode, ScanDirection, SegmentLimits, SegmentedReplaceOutcome,
     TimelineRecord, TimelineRecordStore,
 };
-use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use rusqlite::Connection;
 use std::{
     sync::atomic::{AtomicBool, Ordering},
@@ -18,6 +18,7 @@ pub(super) fn identity(
     conn: &Connection,
     platform: DataSourcePlatform,
     cancel: &AtomicBool,
+    progress: Option<&TimelineProgressCallback<'_>>,
 ) -> Result<String, TimelineProjectionError> {
     use sha2::Digest;
     let store = persistence_source::detail::open_store(conn)?
@@ -29,6 +30,11 @@ pub(super) fn identity(
     let mut hasher = sha2::Sha256::new();
     hasher.update(platform.as_storage_str());
     let mut cursor = None;
+    let total = catalog.count(&snapshot, Some(&source))?;
+    let mut processed = 0;
+    if let Some(progress) = progress {
+        progress(TimelineWork::TimelineIdentity, 0, Some(total));
+    }
     loop {
         ensure_active(cancel)?;
         let page = catalog.list_all(
@@ -38,12 +44,16 @@ pub(super) fn identity(
             ScanDirection::Forward,
             512,
         )?;
+        processed += page.records.len() as u64;
         for record in page.records {
             ensure_active(cancel)?;
             let bytes = serde_json::to_vec(&record)
                 .map_err(|error| TimelineProjectionError::Other(error.to_string()))?;
             hasher.update((bytes.len() as u64).to_be_bytes());
             hasher.update(bytes);
+        }
+        if let Some(progress) = progress {
+            progress(TimelineWork::TimelineIdentity, processed, Some(total));
         }
         cursor = page.next_cursor;
         if cursor.is_none() {
@@ -61,6 +71,7 @@ pub(super) fn materialize(
     cancel: &AtomicBool,
     identity: &str,
     policy: timeline::TimelineProjectionPolicy,
+    progress: Option<&TimelineProgressCallback<'_>>,
 ) -> Result<TimelineProjectionStats, TimelineProjectionError> {
     let store = persistence_source::detail::open_store(conn)?
         .ok_or_else(|| TimelineProjectionError::Other("source generation is missing".into()))?;
@@ -92,15 +103,7 @@ pub(super) fn materialize(
         "Timeline projection workspace planned (constant segment plan)"
     );
     drop(store);
-    let mut generation = analysis_core::analysis_service::stage_source_generation(
-        conn, &source, cancel,
-    )
-    .map_err(|error| match error {
-        analysis_core::analysis_service::AnalysisServiceError::Cancelled => {
-            TimelineProjectionError::Cancelled
-        }
-        other => TimelineProjectionError::Other(other.to_string()),
-    })?;
+    let mut generation = super::progress::prepare_generation(conn, &source, cancel, progress)?;
     let transaction = conn.unchecked_transaction()?;
     generation
         .bind(&transaction)
@@ -118,11 +121,14 @@ pub(super) fn materialize(
         let outcome = stream_file_events(
             &timeline,
             CatalogRecordStore::from_source_store((*store).clone()),
-            &source,
-            platform,
-            cancel,
-            identity,
-            &mut timings,
+            FileEventStream {
+                source: &source,
+                platform,
+                cancel,
+                identity,
+                timings: &mut timings,
+                progress,
+            },
         )?;
         meta.mark_done(FILE_PROJECTION_KEY, outcome.inserted_records, identity)?;
         Some(outcome)
@@ -130,7 +136,14 @@ pub(super) fn materialize(
     let events_elapsed_ms = started.elapsed().as_millis();
     let graph_started = Instant::now();
     if !graph_done {
-        project_graph(&transaction, &timeline, &source, cancel, &mut timings)?;
+        super::graph::project(
+            &transaction,
+            &timeline,
+            &source,
+            cancel,
+            &mut timings,
+            progress,
+        )?;
         meta.mark_done(GRAPH_PROJECTION_KEY, 0, identity)?;
     }
     let outcome = outcome.unwrap_or(SegmentedReplaceOutcome {
@@ -208,16 +221,34 @@ fn attach_identity(error: TimelineProjectionError, identity: &str) -> TimelinePr
     }
 }
 
+struct FileEventStream<'a> {
+    source: &'a str,
+    platform: DataSourcePlatform,
+    cancel: &'a AtomicBool,
+    identity: &'a str,
+    timings: &'a mut TimelineWriteTimings,
+    progress: Option<&'a TimelineProgressCallback<'a>>,
+}
+
 fn stream_file_events(
     timeline: &TimelineRecordStore,
     catalog: CatalogRecordStore,
-    source: &str,
-    platform: DataSourcePlatform,
-    cancel: &AtomicBool,
-    identity: &str,
-    timings: &mut TimelineWriteTimings,
+    request: FileEventStream<'_>,
 ) -> Result<SegmentedReplaceOutcome, TimelineProjectionError> {
+    let FileEventStream {
+        source,
+        platform,
+        cancel,
+        identity,
+        timings,
+        progress,
+    } = request;
     let snapshot = catalog.read_snapshot();
+    let total = catalog.count(&snapshot, Some(source))?;
+    let mut processed = 0;
+    if let Some(progress) = progress {
+        progress(TimelineWork::TimelineEvents, 0, Some(total));
+    }
     let mut cursor = None;
     let mut complete = false;
     let mut next_batch = || {
@@ -234,10 +265,14 @@ fn stream_file_events(
                 512,
             )?;
             let mut events = Vec::new();
+            processed += page.records.len() as u64;
             for record in page.records {
                 if eligible(&record, platform) {
                     events.extend(file_events_for_record(record, source, platform));
                 }
+            }
+            if let Some(progress) = progress {
+                progress(TimelineWork::TimelineEvents, processed, Some(total));
             }
             cursor = page.next_cursor;
             if !events.is_empty() {
@@ -329,73 +364,6 @@ pub(super) fn eligible(
     ]
     .iter()
     .any(|prefix| path.trim_start_matches('/').starts_with(prefix))
-}
-
-fn project_graph(
-    conn: &Connection,
-    timeline: &TimelineRecordStore,
-    source: &str,
-    cancel: &AtomicBool,
-    timings: &mut TimelineWriteTimings,
-) -> Result<(), TimelineProjectionError> {
-    let case_id: String = conn.query_row(
-        "SELECT case_id FROM data_sources WHERE id = ?1",
-        [source],
-        |row| row.get(0),
-    )?;
-    let created = chrono::Utc::now().to_rfc3339();
-    conn.execute("DELETE FROM graph_edges WHERE source_id IN (SELECT id FROM graph_nodes WHERE case_id = ?1 AND node_type = 'timeline_event')",[&case_id])?;
-    conn.execute(
-        "DELETE FROM graph_nodes WHERE case_id = ?1 AND node_type = 'timeline_event'",
-        [&case_id],
-    )?;
-    let graph = GraphRepo::new(conn);
-    let snapshot = timeline.read_snapshot();
-    let mut cursor = None;
-    loop {
-        ensure_active(cancel)?;
-        let page = timeline.list_by_source(
-            &snapshot,
-            source,
-            cursor.as_deref(),
-            ScanDirection::Forward,
-            512,
-        )?;
-        timings.graph_buffer_rows = timings.graph_buffer_rows.max(page.records.len() as u64);
-        let mut nodes = Vec::with_capacity(page.records.len());
-        let mut edges = Vec::with_capacity(page.records.len());
-        for event in page.records {
-            nodes.push(GraphNode {
-                id: event.id.clone(),
-                case_id: case_id.clone(),
-                node_type: NodeType::TimelineEvent,
-                label: event.title,
-                summary: event.event_type.clone(),
-                tags: Vec::new(),
-                created_at: created.clone(),
-            });
-            if !event.source_object_id.is_empty() {
-                edges.push(GraphEdge {
-                    id: format!("references:{}:{}", event.id, event.source_object_id),
-                    case_id: case_id.clone(),
-                    source_id: event.id,
-                    target_id: event.source_object_id,
-                    edge_type: EdgeType::References,
-                    confidence: event.confidence.map(f64::from),
-                    provenance: Some(format!("timeline:{}", event.event_type)),
-                    created_at: created.clone(),
-                });
-            }
-        }
-        graph.insert_nodes_in_transaction(&nodes)?;
-        graph.insert_edges_in_transaction(&edges)?;
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            break;
-        }
-    }
-    ensure_active(cancel)?;
-    Ok(())
 }
 
 fn ensure_active(cancel: &AtomicBool) -> Result<(), TimelineProjectionError> {

@@ -2,8 +2,8 @@ use std::time::{Duration, Instant};
 
 use transport::dto::{
     TaskProgressDto, TaskProgressKindDto as Kind, TaskProgressModeDto as Mode,
-    TaskProgressStateDto as State, TaskProgressUnitDto as Unit, TaskStageKeyDto as Stage,
-    TaskStageProgressDto,
+    TaskProgressStateDto as State, TaskProgressUnitDto as Unit, TaskProgressWorkDto,
+    TaskStageKeyDto as Stage, TaskStageProgressDto,
 };
 
 mod estimate;
@@ -16,6 +16,7 @@ pub struct TaskProgressReporter {
     stage_started: Instant,
     estimate: StageEstimate,
     last_emit: Option<Instant>,
+    counts_cover_stage: bool,
 }
 
 impl TaskProgressReporter {
@@ -57,6 +58,7 @@ impl TaskProgressReporter {
                 progress: 0,
                 mode: Mode::Indeterminate,
                 stage: plan[0].0,
+                work: None,
                 stages: plan
                     .into_iter()
                     .map(|(key, weight)| TaskStageProgressDto {
@@ -84,6 +86,7 @@ impl TaskProgressReporter {
             stage_started: Instant::now(),
             estimate: StageEstimate::new(),
             last_emit: None,
+            counts_cover_stage: false,
         }
     }
 
@@ -119,14 +122,28 @@ impl TaskProgressReporter {
     }
 
     pub fn start(&mut self, stage: Stage) -> TaskProgressDto {
+        self.start_work(stage, None)
+    }
+
+    pub fn start_work(
+        &mut self,
+        stage: Stage,
+        work: Option<TaskProgressWorkDto>,
+    ) -> TaskProgressDto {
         if self.snapshot.stage != stage {
-            self.stage_started = Instant::now();
-            self.estimate = StageEstimate::new();
-            self.snapshot.completed_units = 0;
-            self.snapshot.total_units = None;
-            self.snapshot.rate = None;
-            self.snapshot.eta_seconds = None;
+            let previous = self.stage_mut(self.snapshot.stage);
+            if previous.state == State::Running {
+                previous.state = State::Pending;
+            }
         }
+        self.stage_started = Instant::now();
+        self.estimate = StageEstimate::new();
+        self.snapshot.completed_units = 0;
+        self.snapshot.total_units = None;
+        self.snapshot.rate = None;
+        self.snapshot.eta_seconds = None;
+        self.snapshot.work = work;
+        self.counts_cover_stage = false;
         self.snapshot.stage = stage;
         self.snapshot.mode = Mode::Indeterminate;
         self.stage_mut(stage).state = State::Running;
@@ -162,11 +179,22 @@ impl TaskProgressReporter {
         total: Option<u64>,
         unit: Unit,
     ) -> Option<TaskProgressDto> {
+        self.advance_work(completed, total, unit, true)
+    }
+
+    pub fn advance_work(
+        &mut self,
+        completed: u64,
+        total: Option<u64>,
+        unit: Unit,
+        covers_stage: bool,
+    ) -> Option<TaskProgressDto> {
+        self.counts_cover_stage = covers_stage;
         self.estimate.record(completed, total, unit);
         self.snapshot.completed_units = completed;
         self.snapshot.total_units = total;
         self.snapshot.unit = unit;
-        self.snapshot.mode = if total.is_some_and(|total| total > 0) {
+        self.snapshot.mode = if covers_stage && total.is_some_and(|total| total > 0) {
             Mode::Estimated
         } else {
             Mode::Indeterminate
@@ -244,7 +272,7 @@ impl TaskProgressReporter {
             .map_or(0.0, |total| {
                 (self.snapshot.completed_units as f64 / total as f64).min(1.0)
             });
-        let active = if current.state == State::Running {
+        let active = if current.state == State::Running && self.counts_cover_stage {
             (current.weight as f64 * fraction) as u32
         } else {
             0

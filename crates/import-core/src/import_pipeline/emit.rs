@@ -14,6 +14,14 @@ pub trait ImportEventSink: Sync {
 
     fn task_stage(&self, _stage: transport::dto::TaskStageKeyDto, _complete: bool) {}
 
+    fn timeline_work(
+        &self,
+        _work: transport::dto::TaskProgressWorkDto,
+        _done: u64,
+        _total: Option<u64>,
+    ) {
+    }
+
     fn job_progress(&self, job_id: &str, progress: u32, detail: &str);
 
     fn partition_progress(

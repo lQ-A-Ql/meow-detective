@@ -18,6 +18,7 @@ use transport::events::EventTopic;
 pub(super) struct CapabilityProgress {
     reporter: Mutex<TaskProgressReporter>,
     categories: Mutex<BTreeMap<String, (u64, u64)>>,
+    timeline_step: Mutex<Option<transport::dto::TaskProgressWorkDto>>,
 }
 
 impl CapabilityProgress {
@@ -30,6 +31,7 @@ impl CapabilityProgress {
                 kind == ExecutableCapability::Artifacts,
             )),
             categories: Mutex::new(BTreeMap::new()),
+            timeline_step: Mutex::new(None),
         }
     }
 
@@ -43,6 +45,38 @@ impl CapabilityProgress {
         let total = categories.values().map(|(_, total)| *total).sum();
         let mut reporter = self.reporter.lock().unwrap();
         if let Some(event) = reporter.observe(Stage::Analyze, done, Some(total), Unit::Items) {
+            emit(work, event);
+        }
+    }
+
+    pub fn timeline(
+        &self,
+        work: &CapabilityWork,
+        step: transport::dto::TaskProgressWorkDto,
+        done: u64,
+        total: Option<u64>,
+    ) {
+        use transport::dto::TaskProgressWorkDto as Step;
+        let stage = match step {
+            Step::TimelineIdentity => Stage::Prepare,
+            Step::TimelineWorkspace | Step::TimelineEvents => Stage::Index,
+            Step::TimelineGraphPrepare | Step::TimelineGraph => Stage::Publish,
+        };
+        let mut previous = self.timeline_step.lock().unwrap();
+        let mut reporter = self.reporter.lock().unwrap();
+        if *previous != Some(step) {
+            if stage == Stage::Index {
+                emit(work, reporter.finish_stage(Stage::Prepare, false));
+            }
+            if stage == Stage::Publish {
+                emit(work, reporter.finish_stage(Stage::Index, false));
+            }
+            emit(work, reporter.start_work(stage, Some(step)));
+            *previous = Some(step);
+        }
+        if let Some(event) =
+            reporter.advance_work(done, total, Unit::Items, stage != Stage::Publish)
+        {
             emit(work, event);
         }
     }
@@ -77,13 +111,10 @@ pub(super) fn observe(
     {
         let mut reporter = work.progress.reporter.lock().unwrap();
         emit(work, reporter.start(Stage::Prepare));
-        emit(work, reporter.finish_stage(Stage::Prepare, false));
-        let stage = if work.kind == ExecutableCapability::Artifacts {
-            Stage::Analyze
-        } else {
-            Stage::Index
-        };
-        emit(work, reporter.start(stage));
+        if work.kind == ExecutableCapability::Artifacts {
+            emit(work, reporter.finish_stage(Stage::Prepare, false));
+            emit(work, reporter.start(Stage::Analyze));
+        }
     }
     std::thread::scope(|scope| {
         let (stop, receiver) = std::sync::mpsc::channel::<()>();

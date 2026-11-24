@@ -21,6 +21,15 @@ fn weighted_progress_counts_only_completed_stages_and_current_work() {
     assert_eq!(reporter.heartbeat(false).progress, 26);
     assert_eq!(reporter.finish_stage(Stage::Enumerate, false).progress, 45);
     reporter.start(Stage::Analyze);
+    assert!(
+        reporter
+            .heartbeat(false)
+            .stages
+            .iter()
+            .filter(|stage| stage.state == State::Running)
+            .count()
+            <= 1
+    );
     assert_eq!(reporter.heartbeat(false).mode, Mode::Indeterminate);
     let cancelled = reporter.finish(State::Cancelled);
     assert_eq!(cancelled.progress, 45);
@@ -62,6 +71,8 @@ fn eta_requires_real_elapsed_work_samples_and_resets_at_the_next_stage() {
     let estimated = reporter.heartbeat(false);
     assert!(estimated.rate.is_some_and(|rate| rate > 0.0));
     assert!(estimated.eta_seconds.is_some_and(|remaining| remaining > 0));
+    reporter.advance(40, None, Unit::Items);
+    assert!(reporter.heartbeat(false).eta_seconds.is_none());
     reporter.start(Stage::Analyze);
     let next = reporter.heartbeat(false);
     assert!(next.rate.is_none());
@@ -86,6 +97,22 @@ fn independent_timeline_and_artifact_plans_have_weighted_work_and_publication() 
         reporter.advance(50, Some(100), Unit::Items);
         let working = reporter.heartbeat(false);
         assert_eq!(working.progress, if analysis { 55 } else { 60 });
+        reporter.start(Stage::Publish);
+        reporter.start(if analysis {
+            Stage::Analyze
+        } else {
+            Stage::Index
+        });
+        let resumed = reporter.heartbeat(false);
+        assert_eq!(
+            resumed
+                .stages
+                .iter()
+                .find(|stage| stage.key == Stage::Publish)
+                .unwrap()
+                .state,
+            State::Pending
+        );
         let partial = reporter.finish(State::Partial);
         assert_eq!(partial.mode, Mode::Determinate);
         assert!(partial.progress < 100);

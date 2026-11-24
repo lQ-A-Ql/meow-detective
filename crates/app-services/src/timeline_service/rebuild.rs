@@ -6,7 +6,6 @@
 //! (case_id, source_id) returns `RebuildInProgress` without executing.
 
 use domain::{CaseId, DataSourceId};
-use import_core::timeline_projection::materialize_file_activity_with_policy;
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use std::{
@@ -64,6 +63,26 @@ pub fn rebuild_timeline_projection(
     policy: TimelineProjectionPolicy,
     cancel: &AtomicBool,
 ) -> Result<TimelineProjectionStatusDto, TimelineServiceError> {
+    rebuild_timeline_projection_with_progress(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+        policy,
+        cancel,
+        None,
+    )
+}
+
+pub fn rebuild_timeline_projection_with_progress(
+    case_conn: &Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source_id: Option<&str>,
+    policy: TimelineProjectionPolicy,
+    cancel: &AtomicBool,
+    progress: Option<&import_core::timeline_projection::TimelineProgressCallback<'_>>,
+) -> Result<TimelineProjectionStatusDto, TimelineServiceError> {
     let target = data_source_id.map(|raw| DataSourceId(raw.to_owned()));
     let _guard = acquire_rebuild_guard(case_id, target.as_ref())?;
     let repo = DataSourceRepo::new(case_conn);
@@ -85,7 +104,13 @@ pub fn rebuild_timeline_projection(
             },
             Some(cancel),
         )?;
-        materialize_file_activity_with_policy(&ready.connection, ready.platform, cancel, policy)?;
+        import_core::timeline_projection::materialize_file_activity_with_progress(
+            &ready.connection,
+            ready.platform,
+            cancel,
+            policy,
+            progress,
+        )?;
         rebuilt = true;
     }
     if let Some(target) = &target {

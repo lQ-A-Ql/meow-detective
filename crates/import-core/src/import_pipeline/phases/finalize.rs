@@ -161,11 +161,16 @@ fn materialize_timeline(
                 ctx.profiler.as_ref(),
                 transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Timeline,
                 || {
-                    timeline_projection::materialize_file_activity_with_policy(
+                    timeline_projection::materialize_file_activity_with_progress(
                         source_conn,
                         ctx.import_config.platform,
                         ctx.options.cancel_token.as_ref(),
                         ctx.options.projection_policy,
+                        Some(&|work, done, total| {
+                            if let Some(sink) = ctx.event_sink() {
+                                sink.timeline_work(work, done, total);
+                            }
+                        }),
                     )
                 },
             )

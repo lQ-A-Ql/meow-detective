@@ -88,7 +88,16 @@ pub fn stage_source_generation(
     source_id: &str,
     cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<StagedSourceGeneration, AnalysisServiceError> {
-    native_output::begin_streaming(conn, source_id, &[], cancel, |_| {}, |_| {})?
+    stage_source_generation_with_progress(conn, source_id, cancel, |_| {})
+}
+
+pub fn stage_source_generation_with_progress(
+    conn: &rusqlite::Connection,
+    source_id: &str,
+    cancel: &std::sync::atomic::AtomicBool,
+    progress: impl FnMut(persistence_source::fjall::SourceCloneProgress),
+) -> Result<StagedSourceGeneration, AnalysisServiceError> {
+    native_output::begin_streaming(conn, source_id, &[], cancel, progress, |_| {})?
         .seal(cancel, |_, _| {})
 }
 

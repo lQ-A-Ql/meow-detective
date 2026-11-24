@@ -41,6 +41,7 @@ pub struct TimelineProjectionRequest<'a> {
     pub case_id: &'a domain::CaseId,
     pub source_id: &'a str,
     pub cancel: &'a std::sync::atomic::AtomicBool,
+    pub progress: Option<&'a crate::timeline_projection::TimelineProgressCallback<'a>>,
 }
 
 pub trait TimelineProjectionExecutor: Send + Sync {

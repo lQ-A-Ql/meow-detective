@@ -1,5 +1,5 @@
 use crate::timeline_service::{
-    rebuild_timeline_projection, TimelineProjectionPolicy, TimelineServiceError,
+    rebuild_timeline_projection_with_progress, TimelineProjectionPolicy, TimelineServiceError,
 };
 use import_core::post_import_service::{
     CapabilityOutcome, TimelineProjectionExecutor, TimelineProjectionRequest,
@@ -10,13 +10,14 @@ pub(super) struct SourceTimelineProjection;
 
 impl TimelineProjectionExecutor for SourceTimelineProjection {
     fn project(&self, request: TimelineProjectionRequest<'_>) -> CapabilityOutcome {
-        let result = rebuild_timeline_projection(
+        let result = rebuild_timeline_projection_with_progress(
             request.conn,
             request.case_root,
             request.case_id,
             Some(request.source_id),
             TimelineProjectionPolicy::default(),
             request.cancel,
+            request.progress,
         );
         match result {
             Ok(status) => match status

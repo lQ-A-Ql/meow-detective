@@ -30,5 +30,7 @@ pub use query::{
     count_timeline_events_for_case, get_timeline_event_by_id, get_timeline_event_by_id_for_case,
     query_timeline, query_timeline_filtered, TimelineQuery,
 };
-pub use rebuild::{acquire_rebuild_guard, rebuild_timeline_projection};
+pub use rebuild::{
+    acquire_rebuild_guard, rebuild_timeline_projection, rebuild_timeline_projection_with_progress,
+};
 pub use timeline::TimelineProjectionPolicy;

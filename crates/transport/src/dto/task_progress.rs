@@ -37,6 +37,16 @@ pub enum TaskProgressKindDto {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum TaskProgressWorkDto {
+    TimelineIdentity,
+    TimelineWorkspace,
+    TimelineEvents,
+    TimelineGraphPrepare,
+    TimelineGraph,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum TaskProgressModeDto {
     Determinate,
     Estimated,
@@ -71,6 +81,8 @@ pub struct TaskProgressDto {
     pub progress: u32,
     pub mode: TaskProgressModeDto,
     pub stage: TaskStageKeyDto,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub work: Option<TaskProgressWorkDto>,
     pub stages: Vec<TaskStageProgressDto>,
     pub completed_units: u64,
     #[serde(skip_serializing_if = "Option::is_none")]

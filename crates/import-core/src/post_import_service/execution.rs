@@ -63,6 +63,9 @@ fn complete_attempt(
                     case_id: &CaseId(work.row.case_id.clone()),
                     source_id: &work.row.data_source_id,
                     cancel,
+                    progress: Some(&|step, done, total| {
+                        work.progress.timeline(work, step, done, total)
+                    }),
                 })
             }
             ExecutableCapability::Artifacts => super::artifacts::run(work, conn, cancel),

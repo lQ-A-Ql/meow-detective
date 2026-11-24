@@ -28,6 +28,10 @@ impl StageEstimate {
             *self = Self::new();
             self.unit = Some(unit);
         }
+        if self.bar.length() != total {
+            self.previous_eta = None;
+            self.eta_updated = None;
+        }
         if let Some(total) = total {
             self.bar.set_length(total);
         } else {
