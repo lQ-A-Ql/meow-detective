@@ -1,8 +1,5 @@
 use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
-use persistence_source::fjall::{
-    encode_key, DatabaseConfig, KeyPart, KeyspaceName, ScanDirection, SourceStore, TimelineRecord,
-    TimelineRecordStore, VersionedEnvelope,
-};
+use persistence_source::fjall::{DatabaseConfig, SourceStore, TimelineRecordStore};
 use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use serde_json::json;
 use std::{path::PathBuf, time::Instant};
@@ -54,13 +51,7 @@ fn retained_timeline_graph_diagnostic() {
     for page_index in 0..128 {
         let read_started = Instant::now();
         let page = timeline
-            .list_by_source(
-                &snapshot,
-                &source,
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                512,
-            )
+            .scan_by_source(&snapshot, &source, cursor.as_deref(), 512)
             .unwrap();
         let read_elapsed = read_started.elapsed();
         read_time += read_elapsed;
@@ -117,38 +108,15 @@ fn retained_timeline_graph_diagnostic() {
     let storage = persistence_source::fjall::instrumentation::snapshot();
     persistence_source::fjall::instrumentation::disable();
     let commit_ms = commit_started.elapsed().as_millis();
-    let sequential_started = Instant::now();
-    let prefix = encode_key("timeline.record", &[KeyPart::Text(source.clone())]).unwrap();
-    let mut after = None;
-    let mut sequential_rows = 0u64;
-    for _ in 0..128 {
-        let page = snapshot
-            .keyset(
-                KeyspaceName::TimelineRecords,
-                &prefix,
-                after.as_deref(),
-                ScanDirection::Forward,
-                512,
-            )
-            .unwrap();
-        for entry in &page {
-            let envelope = VersionedEnvelope::decode(&entry.value).unwrap();
-            let record: TimelineRecord = serde_json::from_slice(&envelope.payload).unwrap();
-            assert_eq!(record.data_source_id, source);
-        }
-        sequential_rows += page.len() as u64;
-        after = page.last().map(|entry| entry.key.clone());
-        if page.len() < 512 {
-            break;
-        }
-    }
-    assert_eq!(sequential_rows, rows);
+    assert_eq!(
+        storage.point_reads, 0,
+        "primary scan must read records directly"
+    );
     let report = json!({"sourceId":source, "generation":generation, "copiedDatabase":database,
         "openMs":open_ms, "rows":rows, "readMs":read_time.as_millis(),
         "nodeWriteMs":nodes_time.as_millis(), "edgeWriteMs":edges_time.as_millis(),
         "commitMs":commit_ms,
-        "sequentialRecordReadMs":sequential_started.elapsed().as_millis(),
-        "sequentialRecordRows":sequential_rows,
+        "scanOrder":"recordId",
         "totalMs":started.elapsed().as_millis(), "pages":reports,
         "storage":{"pointReads":storage.point_reads, "scanCalls":storage.scan_calls,
             "scanEntries":storage.scan_entries, "bytesRead":storage.bytes_read}});
