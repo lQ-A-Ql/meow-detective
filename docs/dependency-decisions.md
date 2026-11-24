@@ -4,6 +4,23 @@ This document records non-trivial dependency license and sourcing decisions for 
 
 ## License decisions
 
+### indicatif — task progress estimates
+
+The task-progress implementation uses `indicatif 0.18.6` under the MIT license.
+The workspace dependency is consumed by `source-kernel`. Its hidden progress
+bar supplies the smoothed processing rate and remaining-time estimate.
+The task reporter provides stage weights, independent heartbeats, sequence
+numbers and the measurement thresholds used by the desktop interface.
+
+The resolved supporting packages are `console 0.16.6` and `unit-prefix 0.5.2`
+under MIT, and `encode_unicode 1.0.0` under MIT OR Apache-2.0.
+The license, advisory, source and dependency-ban checks passed on 2026-11-24.
+The workspace resolves Tauri's `cookie` dependency to `0.18.3` for the current
+advisory policy. Upstream references are the
+[indicatif API](https://docs.rs/indicatif/0.18.6/indicatif/struct.ProgressBar.html),
+[MIT license](https://github.com/console-rs/indicatif/blob/main/LICENSE) and
+[RustSec advisory](https://rustsec.org/advisories/RUSTSEC-2026-0594.html).
+
 ### tinybmp — shared BMP decoding
 
 - **Date**: 2026-11-23
