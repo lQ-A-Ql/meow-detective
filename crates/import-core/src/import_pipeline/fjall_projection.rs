@@ -11,10 +11,7 @@ mod projection_state;
 mod projections;
 mod records;
 use cephfs::mirror_namespace_locators;
-use generation::{
-    active_generation_root, active_root as active_import_generation_root,
-    publish as publish_source_generation,
-};
+use generation::{active_generation_root, publish as publish_source_generation};
 use projection_state::{
     analysis_projection_marker, analysis_projection_revision, catalog_projection_is_published,
     ensure_analysis_projection_building, ensure_projection_building, publish_projection_marker,
@@ -129,8 +126,12 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
     source_connection: &Connection,
     source_id: &str,
 ) -> Result<String, CommandError> {
-    let source_root = active_import_generation_root(case_root, case_id, source_id)?;
-    let projection_digest = mirror_source_records_from_connections_internal(
+    let source_root = persistence_source::detail::require_source_store(source_connection)
+        .map_err(CommandError::from_service_error)?
+        .database()
+        .path()
+        .to_owned();
+    mirror_source_records_from_connections_internal(
         case_connection,
         case_root,
         case_id,
@@ -138,30 +139,8 @@ pub(crate) fn mirror_analysis_outputs_from_connections(
         source_id,
         false,
         true,
-        source_root.as_deref(),
+        Some(&source_root),
     )?;
-    if let Some(root) = source_root.as_deref() {
-        if let Some(attempt_id) = root
-            .file_name()
-            .and_then(|name| name.to_str())
-            .and_then(|name| name.strip_prefix("source.fjall.build."))
-        {
-            let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
-                case_root, source_id, attempt_id,
-            )
-            .map_err(|error| CommandError::internal(error.to_string()))?;
-            publish_source_generation(
-                &layout,
-                root,
-                false,
-                source_id,
-                attempt_id,
-                &projection_digest,
-            )?;
-            persistence_source::detail::bind_generation(source_connection, "source.fjall")
-                .map_err(CommandError::from_service_error)?;
-        }
-    }
     generation::publication_receipt(source_connection, source_id)
 }
 

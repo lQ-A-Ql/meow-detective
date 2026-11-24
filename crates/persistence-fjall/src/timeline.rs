@@ -14,6 +14,7 @@ use std::path::Path;
 
 mod facet_index;
 pub mod projection_state;
+mod record_scan;
 mod staging;
 mod storage_cost;
 mod timeline_batch;

@@ -528,3 +528,45 @@ fn timestamp_encoding_round_trips_and_orders_descending() {
     assert_eq!(decode_timestamp_desc(&earlier).unwrap(), timestamp(10));
     assert_eq!(decode_timestamp_desc(&later).unwrap(), timestamp(20));
 }
+
+#[test]
+fn primary_record_scan_is_source_scoped_and_has_no_point_reads() {
+    let root = tempfile::tempdir().unwrap();
+    let store = TimelineRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    store
+        .upsert_batch(
+            &[
+                record("source", "b", "FILE_MODIFIED", "file-b", 30),
+                record("source", "a", "FILE_CREATED", "file-a", 10),
+                record("other", "foreign", "FILE_MODIFIED", "file-c", 20),
+            ],
+            PersistMode::SyncAll,
+        )
+        .unwrap();
+    let snapshot = store.read_snapshot();
+    persistence_fjall::instrumentation::enable();
+    persistence_fjall::instrumentation::reset();
+    let first = store.scan_by_source(&snapshot, "source", None, 1).unwrap();
+    let next = store
+        .scan_by_source(&snapshot, "source", first.next_cursor.as_deref(), 1)
+        .unwrap();
+    let counters = persistence_fjall::instrumentation::snapshot();
+    persistence_fjall::instrumentation::disable();
+    assert_eq!(first.records[0].id, "a");
+    assert_eq!(next.records[0].id, "b");
+    assert!(next.next_cursor.is_none());
+    assert_eq!(counters.point_reads, 0);
+    assert_eq!(counters.scan_calls, 2);
+    assert!(store
+        .scan_by_source(&snapshot, "other", first.next_cursor.as_deref(), 1)
+        .is_err());
+    assert!(store
+        .scan_by_source(&snapshot, "missing", None, 1)
+        .unwrap()
+        .records
+        .is_empty());
+    let by_time = store
+        .list_by_source(&snapshot, "source", None, ScanDirection::Forward, 2)
+        .unwrap();
+    assert_eq!(by_time.records[0].id, "b");
+}

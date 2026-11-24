@@ -1,7 +1,4 @@
 use persistence_source::fjall::{DatabaseConfig, PersistMode, SourceBuildLayout, SourceStore};
-use persistence_sqlite::repositories::storage_control_repo::{
-    StorageControlRepo, StorageOperationState,
-};
 use std::path::{Path, PathBuf};
 use transport::CommandError;
 
@@ -87,36 +84,4 @@ pub(super) fn publish(
             .map_err(|error| CommandError::internal(error.to_string()))?;
     }
     Ok(())
-}
-
-pub(super) fn active_root(
-    case_root: &Path,
-    case: &str,
-    source: &str,
-) -> Result<Option<PathBuf>, CommandError> {
-    let conn = source_kernel::connection::open_existing_case_db(&case_root.join("app.db"))
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    let mut operations = StorageControlRepo::new(&conn)
-        .list_open_operations(case)
-        .map_err(|error| CommandError::internal(error.to_string()))?
-        .into_iter()
-        .filter(|operation| {
-            operation.source_id.as_deref() == Some(source)
-                && operation.operation_kind == "source_import"
-                && matches!(
-                    operation.state,
-                    StorageOperationState::Planned | StorageOperationState::Running
-                )
-        });
-    let Some(operation) = operations.next() else {
-        return Ok(None);
-    };
-    if operations.next().is_some() {
-        return Err(CommandError::internal(
-            "multiple source import attempts are active",
-        ));
-    }
-    let layout = SourceBuildLayout::for_case_source(case_root, source, &operation.attempt_id)
-        .map_err(|error| CommandError::internal(error.to_string()))?;
-    Ok(Some(active_generation_root(&layout).1))
 }

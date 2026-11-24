@@ -90,10 +90,50 @@ fn both_analysis_projection_branches_return_the_published_receipt() {
         .unwrap());
     drop(current);
 
+    let mut staged = analysis_core::analysis_service::stage_source_generation(
+        &source,
+        &source_id.0,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .unwrap();
+    let bound_generation = staged.name.clone();
+    staged.bind(&source).unwrap();
+    staged.commit();
+    let expected = generation::publication_receipt(&source, &source_id.0).unwrap();
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&case)
+        .insert(
+            &domain::CaseId("case".into()),
+            &domain::DataSource {
+                id: source_id.clone(),
+                name: "source".into(),
+                kind: domain::DataSourceKind::Raw,
+                source_path: root.path().join("source.raw"),
+                imported_at: now,
+                provenance: domain::DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    persistence_sqlite::repositories::storage_control_repo::StorageControlRepo::new(&case)
+        .insert_operation(&persistence_sqlite::repositories::storage_control_repo::StorageOperationRecord {
+            operation_id:"source-import:original".into(), case_id:"case".into(),
+            source_id:Some(source_id.0.clone()), attempt_id:"receipt-attempt".into(),
+            operation_kind:"source_import".into(),
+            state:persistence_sqlite::repositories::storage_control_repo::StorageOperationState::Running,
+            input_digest:None, expected_batch_digest:None, created_at:now.to_rfc3339(),
+            updated_at:now.to_rfc3339(), last_error_code:None,
+        }).unwrap();
     let unchanged =
         mirror_analysis_outputs_from_connections(&case, root.path(), "case", &source, &source_id.0)
             .unwrap();
     assert_eq!(unchanged, expected);
+    let actual_binding: String = source
+        .query_row(
+            "SELECT value FROM source_meta WHERE key='fjall_root'",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(actual_binding, bound_generation);
     let current =
         source_kernel::source_db::open_registered_fjall_source_read_write(root.path(), &source_id)
             .unwrap();

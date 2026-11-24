@@ -2,7 +2,7 @@ use super::{
     TimelineProgressCallback, TimelineProjectionError, TimelineWork, TimelineWriteTimings,
 };
 use domain::{EdgeType, GraphEdge, GraphNode, NodeType};
-use persistence_source::fjall::{ScanDirection, TimelineRecord, TimelineRecordStore};
+use persistence_source::fjall::{TimelineRecord, TimelineRecordStore};
 use persistence_sqlite::repositories::graph_repo::GraphRepo;
 use rusqlite::Connection;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -60,17 +60,17 @@ fn write_graph(
         if cancel.load(Ordering::Acquire) {
             return Err(TimelineProjectionError::Cancelled);
         }
-        let page = timeline.list_by_source(
-            &snapshot,
-            source,
-            cursor.as_deref(),
-            ScanDirection::Forward,
-            512,
-        )?;
+        let started = std::time::Instant::now();
+        let page = timeline.scan_by_source(&snapshot, source, cursor.as_deref(), 512)?;
+        timings.graph_page += started.elapsed();
         timings.graph_buffer_rows = timings.graph_buffer_rows.max(page.records.len() as u64);
         let (nodes, edges) = graph_records(page.records, &case, &created);
+        let started = std::time::Instant::now();
         graph.insert_nodes_in_transaction(&nodes)?;
+        timings.graph_nodes += started.elapsed();
+        let started = std::time::Instant::now();
         graph.insert_edges_in_transaction(&edges)?;
+        timings.graph_edges += started.elapsed();
         processed += nodes.len() as u64;
         if let Some(progress) = progress {
             progress(TimelineWork::TimelineGraph, processed, Some(total));
