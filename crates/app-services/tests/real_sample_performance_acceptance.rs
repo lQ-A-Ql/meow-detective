@@ -186,6 +186,23 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         "warningCount":summary["warningCount"], "failedCount":summary["failedCount"],
         "warningScope":"import-including-automatic-analysis"});
     write_report(&output.join("analysis.json"), &analysis);
+    let timeline_build = active
+        .with_conn(|connection| {
+            app_services::timeline_service::rebuild_timeline_projection(
+                connection,
+                &active.case_root,
+                &active.meta.id,
+                Some(&source_id.0),
+                Default::default(),
+                &AtomicBool::new(false),
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    write_report(
+        &output.join("timeline-build.json"),
+        &serde_json::to_value(&timeline_build).unwrap(),
+    );
     let queries = active
         .with_conn(|connection| {
             Ok(query_checks::run(
@@ -197,13 +214,20 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         })
         .unwrap();
     let after = input_metadata(&fixture);
+    let task_progress = sink.task_report();
+    let task_passed = task_progress["last"]["state"] == "completed"
+        && task_progress["monotonicViolations"] == 0
+        && (import_elapsed_ms < 4000 || task_progress["heartbeats"].as_u64().unwrap_or(0) > 0);
     let required_passed = summary["sourceCount"] == 1
         && summary["state"] == "ready"
         && summary["platform"] == platform.as_storage_str()
         && summary["failedCount"] == 0
         && before == after_import
         && before == after
-        && queries["allRequiredPassed"] == true;
+        && queries["allRequiredPassed"] == true
+        && queries["timeline"]["total"].as_u64().unwrap_or(0) > 0
+        && queries["artifacts"]["total"].as_u64().unwrap_or(0) > 0
+        && task_passed;
     let status = if !required_passed {
         "failed"
     } else if summary["warningCount"].as_u64().unwrap() > 0
@@ -217,6 +241,7 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         "schemaVersion":1, "status":status, "caseRoot":active.case_root, "sourceId":source_id.0,
         "platform":platform.as_storage_str(), "import":summary, "analysis":analysis,
         "queries":queries, "inputMetadataUnchanged":before == after,
+        "timelineBuild":timeline_build, "taskProgress":task_progress,
         "observationLimits":["Input metadata equality does not replace a full evidence digest", "RSS is a sampled observation"]
     });
     let report_path = output.join("acceptance.json");
@@ -238,6 +263,22 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         report["queries"]["allRequiredPassed"], true,
         "query acceptance failed; report retained"
     );
+    assert!(
+        report["queries"]["timeline"]["total"].as_u64().unwrap_or(0) > 0,
+        "timeline must contain real evidence events"
+    );
+    assert!(
+        report["queries"]["artifacts"]["total"]
+            .as_u64()
+            .unwrap_or(0)
+            > 0,
+        "artifact extraction must produce real records"
+    );
+    assert_eq!(report["taskProgress"]["last"]["state"], "completed");
+    assert_eq!(report["taskProgress"]["monotonicViolations"], 0);
+    if import_elapsed_ms >= 4000 {
+        assert!(report["taskProgress"]["heartbeats"].as_u64().unwrap() > 0);
+    }
 }
 
 fn run_import(
@@ -284,9 +325,23 @@ struct ProgressSink {
     last: Mutex<Option<Instant>>,
     phases: Mutex<BTreeMap<String, Value>>,
     analysis_audit: Mutex<Vec<String>>,
+    tasks: Mutex<TaskAudit>,
+}
+
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct TaskAudit {
+    events: u64,
+    heartbeats: u64,
+    monotonic_violations: u64,
+    estimates: u64,
+    last: Option<transport::dto::TaskProgressDto>,
 }
 
 impl ProgressSink {
+    fn task_report(&self) -> Value {
+        serde_json::to_value(&*self.tasks.lock().unwrap()).unwrap()
+    }
     fn emit(&self, value: Value) {
         let mut last = self.last.lock().unwrap();
         if last.is_none_or(|instant| instant.elapsed() >= Duration::from_secs(2)) {
@@ -305,6 +360,24 @@ impl ProgressSink {
 }
 
 impl ImportEventSink for ProgressSink {
+    fn task_progress(&self, progress: &transport::dto::TaskProgressDto) {
+        let mut audit = self.tasks.lock().unwrap();
+        audit.events += 1;
+        audit.heartbeats += u64::from(progress.heartbeat);
+        audit.estimates += u64::from(progress.eta_seconds.is_some());
+        if let Some(previous) = &audit.last {
+            if progress.seq <= previous.seq {
+                return;
+            }
+            if progress.progress < previous.progress {
+                audit.monotonic_violations += 1;
+            }
+        }
+        audit.last = Some(progress.clone());
+        self.emit(json!({"phase":"weightedTask", "percent":progress.progress,
+            "stage":progress.stage, "work":progress.work, "completed":progress.completed_units, "total":progress.total_units,
+            "heartbeat":progress.heartbeat, "seq":progress.seq, "etaSeconds":progress.eta_seconds}));
+    }
     fn job_progress(&self, _: &str, progress: u32, detail: &str) {
         if detail.starts_with("analysis-audit: phase=")
             || detail.starts_with("analysis-audit: category=")
