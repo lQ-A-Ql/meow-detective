@@ -13,6 +13,45 @@ fn setup(map: &HashMap<u64, (Option<u64>, String, bool)>) -> rusqlite::Connectio
     }
     c
 }
+
+#[test]
+fn parent_identity_rejects_reused_files_and_directory_sequences() {
+    let c = rusqlite::Connection::open_in_memory().unwrap();
+    c.execute_batch(include_str!(
+        "../../../../persistence-sqlite/src/migrations/scripts/staging_001.sql"
+    ))
+    .unwrap();
+    let mut records = vec![
+        fake_mft_record(5, 5, ".", true),
+        fake_mft_record(36, 5, "thumbcache_idx.db", false),
+        fake_deleted_mft_record(107154, 36, "Prefetch", true),
+        fake_deleted_mft_record(131753, 107154, "TABTIP.pf", false),
+        fake_mft_record(42, 5, "Users", true),
+        fake_deleted_mft_record(43, 42, "NTUSER.DAT", false),
+    ];
+    records[1].sequence_number = 3;
+    records[2].parent_sequence_number = 1;
+    records[2].sequence_number = 2;
+    records[3].parent_sequence_number = 2;
+    records[4].sequence_number = 7;
+    records[5].parent_sequence_number = 6;
+    let mut catalog = stage_mft_records_for_test(&c, &records, "source", 4);
+    catalog
+        .update_staging_paths(&c, "source", 4, &AtomicBool::new(false))
+        .unwrap();
+    let path = |id| {
+        c.query_row(
+            "SELECT resolved_path FROM ntfs_paths WHERE record_num=?1",
+            [id],
+            |r| r.get::<_, String>(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(path(107154), "/$DeletedOrphans/107154-Prefetch");
+    assert_eq!(path(131753), "/$DeletedOrphans/107154-Prefetch/TABTIP.pf");
+    assert_eq!(path(43), "/$DeletedOrphans/43-NTUSER.DAT");
+    Repo::tree_shape(&c).unwrap();
+}
 #[test]
 fn narrow_paths_keep_facts_and_exact_root_orphan_deleted_cycle_values() {
     let map = HashMap::from([

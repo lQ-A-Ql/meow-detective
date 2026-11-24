@@ -13,6 +13,7 @@ pub(in crate::parallel_enum) struct MftCatalog {
     path_map: PathMap,
     deleted_records: HashSet<u64>,
     record_sequences: HashMap<u64, u16>,
+    parent_sequences: HashMap<u64, u16>,
     index_representatives: HashMap<u64, (u64, String, bool)>,
     external_file_sizes: ExternalFileSizes,
     stats: EnumerationStats,
@@ -35,6 +36,8 @@ impl MftCatalog {
             self.external_file_sizes.track(record);
             self.record_sequences
                 .insert(record.record_number, record.sequence_number);
+            self.parent_sequences
+                .insert(record.record_number, record.parent_sequence_number);
             let (parent_key, name, inserted) = stage_mft_record(statement, record)?;
             staged_rows += inserted;
             self.path_map
@@ -53,12 +56,26 @@ impl MftCatalog {
     }
 
     pub(in crate::parallel_enum) fn update_staging_paths(
-        &self,
+        &mut self,
         conn: &Connection,
         data_source_id: &str,
         partition_index: usize,
         cancel: &std::sync::atomic::AtomicBool,
     ) -> Result<super::numeric_paths::PathMaterializationStats, ParallelEnumError> {
+        let invalid = self
+            .path_map
+            .iter()
+            .filter_map(|(id, (parent, _, _))| {
+                let parent = (*parent)?;
+                let directory = self.path_map.get(&parent).is_some_and(|(_, _, dir)| *dir);
+                let matches = self.index_representatives.contains_key(id)
+                    || self.parent_sequences.get(id) == self.record_sequences.get(&parent);
+                (!directory || !matches).then_some(*id)
+            })
+            .collect::<Vec<_>>();
+        for id in invalid {
+            self.path_map.get_mut(&id).expect("existing path record").0 = None;
+        }
         update_mft_staging_paths_via_sqlite(
             conn,
             data_source_id,

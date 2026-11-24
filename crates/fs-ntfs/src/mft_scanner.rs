@@ -16,6 +16,7 @@ pub struct MftRecord {
     pub sequence_number: u16,
     pub name: String,
     pub parent_ref: u64,
+    pub parent_sequence_number: u16,
     pub is_dir: bool,
     pub size: u64,
     pub created_at: Option<DateTime<Utc>>,
@@ -92,6 +93,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
 
     let mut name = String::new();
     let mut parent_ref: u64 = 5;
+    let mut parent_sequence_number = 0;
     let mut size: u64 = 0;
     let mut created_at: Option<DateTime<Utc>> = None;
     let mut modified_at: Option<DateTime<Utc>> = None;
@@ -145,8 +147,9 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
                             let rank = FileNameNamespace::from_raw(name_ns).rank();
                             if selected_name_rank.is_none_or(|current| rank > current) {
                                 name = parsed_name;
-                                parent_ref = u64::from_le_bytes(content[0..8].try_into().ok()?)
-                                    & 0x0000_FFFF_FFFF_FFFF;
+                                let reference = u64::from_le_bytes(content[0..8].try_into().ok()?);
+                                parent_ref = reference & 0x0000_FFFF_FFFF_FFFF;
+                                parent_sequence_number = (reference >> 48) as u16;
                                 fn_created = ntfs_to_datetime(read_ntfs_time(content, 0x08));
                                 fn_modified = ntfs_to_datetime(read_ntfs_time(content, 0x10));
                                 fn_changed = ntfs_to_datetime(read_ntfs_time(content, 0x18));
@@ -208,6 +211,7 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         sequence_number: u16::from_le_bytes([rec[0x10], rec[0x11]]),
         name,
         parent_ref,
+        parent_sequence_number,
         is_dir,
         size,
         created_at: created_at.or(fn_created),

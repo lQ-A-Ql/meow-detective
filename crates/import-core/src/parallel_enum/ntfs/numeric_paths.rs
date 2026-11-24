@@ -60,7 +60,7 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
                 None
             } else {
                 parent
-                    .filter(|p| path_map.contains_key(p))
+                    .filter(|p| path_map.get(p).is_some_and(|(_, _, dir)| *dir))
                     .or_else(|| path_map.contains_key(&5).then_some(5))
             };
             let status = if record == 5 {
@@ -124,8 +124,6 @@ impl PathBudget {
     }
 }
 
-// Preserve the old iterative raw-path values. Partition prefixes are still
-// applied by the existing final catalog path/merge consumers, never here.
 fn resolve_mft_path(
     record: u64,
     path_map: &PathMap,
@@ -151,7 +149,9 @@ fn resolve_mft_path(
         }
         match path_map.get(&current) {
             Some((Some(parent), _, _))
-                if parent != &current && path_map.contains_key(parent) && seen.insert(*parent) =>
+                if parent != &current
+                    && path_map.get(parent).is_some_and(|(_, _, dir)| *dir)
+                    && seen.insert(*parent) =>
             {
                 chain.push(current);
                 current = *parent;

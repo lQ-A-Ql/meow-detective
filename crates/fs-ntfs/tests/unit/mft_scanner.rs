@@ -1,6 +1,15 @@
 use super::*;
 
 #[test]
+fn parent_reference_keeps_record_number_and_sequence() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let bytes = make_test_record(70231, "NTUSER.DAT", (7u64 << 48) | 2356, false);
+    let record = parser.parse(&bytes, 70231).unwrap();
+    assert_eq!(record.parent_ref, 2356);
+    assert_eq!(record.parent_sequence_number, 7);
+}
+
+#[test]
 fn bounded_mutation_smoke_mft_offsets_lengths_fixups_and_flags() {
     let seed_record = make_test_record(42, "bounded.txt", 5, false);
     let mut parser = MftRecordParser::new(1024, 512);

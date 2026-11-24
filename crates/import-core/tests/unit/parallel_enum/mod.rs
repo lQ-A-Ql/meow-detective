@@ -233,6 +233,7 @@ fn fake_mft_record(record_number: u64, parent_ref: u64, name: &str, is_dir: bool
         sequence_number: 0,
         name: name.to_string(),
         parent_ref,
+        parent_sequence_number: 0,
         is_dir,
         size: if is_dir { 0 } else { 12 },
         created_at: None,
@@ -489,7 +490,7 @@ fn ntfs_mft_updates_paths_and_parent_ids() {
         fake_mft_record(42, 5, "Windows", true),
         fake_mft_record(43, 42, "notepad.exe", false),
     ];
-    let catalog = stage_mft_records_for_test(&conn, &records, "ds-mft", 3);
+    let mut catalog = stage_mft_records_for_test(&conn, &records, "ds-mft", 3);
     catalog
         .update_staging_paths(&conn, "ds-mft", 3, &AtomicBool::new(false))
         .unwrap();
@@ -785,7 +786,7 @@ fn ntfs_mft_deleted_orphan_uses_deleted_orphans_path() {
         fake_mft_record(5, 5, ".", true),
         fake_deleted_mft_record(77, 999, "old.txt", false),
     ];
-    let catalog = stage_mft_records_for_test(&conn, &records, ds_id, 2);
+    let mut catalog = stage_mft_records_for_test(&conn, &records, ds_id, 2);
     catalog
         .update_staging_paths(&conn, ds_id, 2, &AtomicBool::new(false))
         .unwrap();

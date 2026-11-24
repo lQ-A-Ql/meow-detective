@@ -186,7 +186,7 @@ fn scan_mft_transaction(
         ctx.volume_offset,
         ctx.profile,
     )?;
-    materialize_catalog_paths(ctx, &catalog)?;
+    materialize_catalog_paths(ctx, &mut catalog)?;
     let stats = catalog.stats();
     drop(catalog);
     ctx.profile.measure(Phase::MftValidate, || {
@@ -205,7 +205,7 @@ fn check_cancelled(cancel_token: &AtomicBool) -> Result<(), ParallelEnumError> {
 
 fn materialize_catalog_paths(
     ctx: &mut EnumerationContext<'_>,
-    catalog: &MftCatalog,
+    catalog: &mut MftCatalog,
 ) -> Result<(), ParallelEnumError> {
     let path_stats = ctx.profile.measure(Phase::MftPathResolve, || {
         catalog.update_staging_paths(
