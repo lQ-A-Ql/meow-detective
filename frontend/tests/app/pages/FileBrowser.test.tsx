@@ -2,8 +2,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { FileBrowser } from '@/app/pages/FileBrowser';
+import { CAPABILITY_MATRIX_QUERY_KEY } from '@/features/capability/hooks';
 import { resetFileTreeExpansion } from '@/features/files/file-tree-expansion-store';
 import { useFileNavigationStore } from '@/stores/file-navigation-store';
+import type { CapabilityMatrix, DataSourceSummary } from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -252,6 +254,17 @@ const hiddenDeletedFile = {
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const sources: DataSourceSummary[] = mocks.dataSources().data;
+  queryClient.setQueryData<CapabilityMatrix>([...CAPABILITY_MATRIX_QUERY_KEY, 'case-1'], {
+    sources: sources.map((source) => ({
+      dataSourceId: source.id,
+      capability: 'catalog',
+      state: 'ready',
+      revision: 1,
+      derived: false,
+      updatedAt: source.importedAt,
+    })),
   });
   return render(
     <QueryClientProvider client={queryClient}>

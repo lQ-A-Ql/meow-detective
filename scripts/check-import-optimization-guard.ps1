@@ -15,7 +15,7 @@ $e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/unit/impor
 $stagingPath = Join-Path $repoRoot "crates/persistence-source/src/repositories/staging_repo.rs"
 $catalogMergePath = Join-Path $repoRoot "crates/persistence-source/src/staging/catalog.rs"
 $catalogSqlPath = Join-Path $repoRoot "crates/persistence-source/src/staging/catalog_staging.sql"
-# Import finalization owns the bounded file-activity Timeline projection.
+# Import finalization queues the bounded post-import file-activity Timeline projection.
 $pipelineFinalizePath = Join-Path $repoRoot "crates/import-core/src/import_pipeline/phases/finalize.rs"
 $timelineProjectionPath = Join-Path $repoRoot "crates/import-core/src/timeline_projection/fjall.rs"
 # The streamed bounded prefix-replacement primitive moved from import-core's
@@ -74,7 +74,7 @@ foreach ($forbidden in @('liuyang_pc\.E01', 'E:\\pangushi', '刘洋')) {
   }
 }
 if ($e01PipelineTest -notmatch 'Timeline events after import') {
-  throw "real E01 import profile must verify the import-finalized Timeline projection"
+  throw "real E01 import profile must verify the managed post-import Timeline projection"
 }
 if ($pipelineFinalize -notmatch 'ImportContentKind::Filesystem' -or
     $pipelineFinalize -notmatch 'timeline_projection_mark_deferred' -or
@@ -89,14 +89,14 @@ foreach ($pattern in @(
     'platform\s*!=\s*DataSourcePlatform::Windows'
   )) {
   if ($timelineProjection -notmatch $pattern) {
-    throw "Timeline finalization lost its bounded or platform-specific projection policy: $pattern"
+    throw "Timeline projection lost its bounded or platform-specific policy: $pattern"
   }
 }
 if ($timelineBatch -notmatch 'replace_by_parser_prefix_streamed') {
-  throw "Timeline finalization lost its bounded streamed prefix replacement primitive in persistence-fjall: replace_by_parser_prefix_streamed"
+  throw "Timeline projection lost its bounded streamed prefix replacement primitive in persistence-fjall: replace_by_parser_prefix_streamed"
 }
-if ($workerPool -notmatch 'timeline=finalize content=disabled text=disabled') {
-  throw "E01/RAW metadata-only import must report Timeline finalization explicitly"
+if ($workerPool -notmatch 'timeline=queued content=disabled text=disabled') {
+  throw "E01/RAW metadata indexing must report queued Timeline work explicitly"
 }
 
 foreach ($pattern in @(
@@ -178,4 +178,4 @@ foreach ($pattern in @(
   }
 }
 
-Write-Host "Import optimization guard passed: sample path, bounded Timeline finalization, DB pragmas, and profile harness are locked"
+Write-Host "Import optimization guard passed: sample path, queued bounded Timeline projection, DB pragmas, and profile harness are locked"

@@ -18,8 +18,8 @@ vi.mock('@/features/case/hooks', () => ({
     data: [
       { id: 'source-pending', name: 'pending', importState: 'ready', platform: 'windows' },
       { id: 'source-ready', name: 'ready', importState: 'importing', platform: 'windows' },
-      { id: 'source-legacy', name: 'legacy', importState: 'ready', platform: 'windows' },
-      { id: 'source-legacy-importing', name: 'legacy-importing', importState: 'importing', platform: 'windows' },
+      { id: 'source-missing', name: 'missing', importState: 'ready', platform: 'windows' },
+      { id: 'source-missing-importing', name: 'missing-importing', importState: 'importing', platform: 'windows' },
     ],
   }),
   useCurrentCase: () => ({ data: { id: 'case-a' } }),
@@ -85,17 +85,17 @@ describe('useSearchWorkspaceModel capability gating', () => {
     vi.clearAllMocks();
   });
 
-  it('excludes catalog-pending sources and admits matrix-ready sources; rows without a row fall back to legacy', () => {
+  it('admits catalog-ready sources and excludes pending or missing capability rows', () => {
     mocks.matrix.mockReturnValue({
       sources: [row('source-pending', 'pending'), row('source-ready', 'ready')],
     });
     const { result } = renderHook(() => useSearchWorkspaceModel(), { wrapper: wrapper() });
-    expect(result.current.indexSources.map((s) => s.id)).toEqual(['source-ready', 'source-legacy']);
+    expect(result.current.indexSources.map((s) => s.id)).toEqual(['source-ready']);
   });
 
-  it('falls back to the legacy importState filter when the matrix is absent', () => {
+  it('excludes sources when the capability matrix is absent', () => {
     mocks.matrix.mockReturnValue(undefined);
     const { result } = renderHook(() => useSearchWorkspaceModel(), { wrapper: wrapper() });
-    expect(result.current.indexSources.map((s) => s.id)).toEqual(['source-pending', 'source-legacy']);
+    expect(result.current.indexSources.map((s) => s.id)).toEqual([]);
   });
 });

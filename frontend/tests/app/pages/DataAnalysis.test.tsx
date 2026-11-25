@@ -3,8 +3,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DataAnalysis } from '@/app/pages/DataAnalysis';
+import { CAPABILITY_MATRIX_QUERY_KEY } from '@/features/capability/hooks';
 import { useAnalysisStore } from '@/stores/analysis-store';
-import type { DataSourceSummary } from '@/types/models';
+import type { CapabilityMatrix, DataSourceSummary } from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -48,6 +49,16 @@ vi.mock('@/features/analysis/hooks', () => ({
 function renderPage() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  queryClient.setQueryData<CapabilityMatrix>([...CAPABILITY_MATRIX_QUERY_KEY, 'case-1'], {
+    sources: [windowsDataSource, linuxDataSource].map((source) => ({
+      dataSourceId: source.id,
+      capability: 'catalog',
+      state: 'ready',
+      revision: 1,
+      derived: false,
+      updatedAt: source.importedAt,
+    })),
   });
   return render(createElement(QueryClientProvider, { client: queryClient }, createElement(DataAnalysis)));
 }
@@ -775,7 +786,7 @@ describe('DataAnalysis page', () => {
     expect(screen.getByLabelText('Linux Server / 系统日志').getAttribute('aria-current')).toBe('true');
   });
 
-  it('only selects and displays ready data sources with a supported platform', async () => {
+  it('only selects and displays catalog-ready data sources with a supported platform', async () => {
     const pendingSource = {
       ...windowsDataSource,
       id: 'ds-pending',
