@@ -92,14 +92,14 @@ fn reused_profiler_does_not_publish_a_single_process_window_for_multiple_workflo
 }
 
 #[test]
-fn timeline_write_parents_include_their_exclusive_children() {
+fn import_parent_measurements_include_their_exclusive_children() {
     let profiler = ImportProfiler::default();
     for phase in [
-        Phase::Timeline,
-        Phase::TimelineEvents,
-        Phase::TimelineGraph,
-        Phase::TimelineEventInsert,
-        Phase::TimelineGraphCommit,
+        Phase::Workflow,
+        Phase::Catalog,
+        Phase::Enumeration,
+        Phase::MftRead,
+        Phase::Checkpoint,
     ] {
         profiler.record(
             None,
@@ -114,7 +114,7 @@ fn timeline_write_parents_include_their_exclusive_children() {
             sample.inclusive,
             matches!(
                 sample.phase,
-                Phase::Timeline | Phase::TimelineEvents | Phase::TimelineGraph
+                Phase::Workflow | Phase::Catalog | Phase::Enumeration
             )
         );
     }

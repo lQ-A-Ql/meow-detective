@@ -1,5 +1,7 @@
 #[path = "support/import_ntfs_fixture.rs"]
 mod fixture;
+#[path = "support/managed_capabilities.rs"]
+mod managed_capabilities;
 #[path = "support/import_benchmark_oracle_tests.rs"]
 mod oracle_tests;
 #[path = "support/import_projection_policy.rs"]
@@ -15,13 +17,13 @@ mod streaming;
 
 use app_services::import_pipeline::ImportEventSink;
 use app_services::{
-    case_service,
+    active_case, bitlocker_runtime, capability_service, case_service,
     import_analysis::ImportAnalysisMode,
     import_pipeline::{
         execute_import_job_profiled, execute_import_job_with_counts, ImportJobOptions,
         ImportProfiler,
     },
-    import_precheck, source_db,
+    import_precheck, post_import_service, source_db, task_runtime,
 };
 use domain::{DataSourceId, DataSourcePlatform, EntryType, FileEntry, FileEntryId};
 use persistence_source::repositories::file_repo::FileRepo;
@@ -108,6 +110,10 @@ fn import_with_workers(path: &Path, profiling: bool, workers: usize) -> ImportRe
             let mut graph = snapshot(source, queries::NODES, &replacements);
             graph.extend(snapshot(source, queries::EDGES, &replacements));
             let timeline = native_timeline_snapshot(source, &replacements);
+            assert!(
+                !timeline.is_empty(),
+                "managed timeline must publish real events"
+            );
             ImportResult {
                 catalog,
                 graph,
@@ -195,6 +201,7 @@ fn with_import_context<T>(
                 result.unwrap_or_else(|error| panic!("synthetic import failed: {error}"));
                 // Capture import RSS before the correctness oracle allocates snapshots.
                 let report = profiler.report();
+                managed_capabilities::run(&active, None, std::time::Duration::from_secs(900));
                 let (source_id, state): (String, String) =
                     conn.query_row("SELECT id, import_state FROM data_sources", [], |row| {
                         Ok((row.get(0)?, row.get(1)?))
@@ -558,22 +565,10 @@ fn verify_report(report: &ImportBenchmarkReportDto, record_count: u64) {
         Phase::Cleanup,
         Phase::Graph,
         Phase::Analysis,
-        Phase::Timeline,
-        Phase::TimelineEvents,
-        Phase::TimelineGraph,
         Phase::MftReadParseWall,
         Phase::MftWriterWall,
         Phase::MftPathCompute,
         Phase::MftPathSql,
-        Phase::TimelineEventClear,
-        Phase::TimelineEventCursor,
-        Phase::TimelineEventInsert,
-        Phase::TimelineEventIndexes,
-        Phase::TimelineEventCommit,
-        Phase::TimelineGraphPage,
-        Phase::TimelineGraphNodes,
-        Phase::TimelineGraphEdges,
-        Phase::TimelineGraphCommit,
         Phase::Checkpoint,
         Phase::StagingMerge,
         Phase::Workflow,

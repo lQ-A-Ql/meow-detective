@@ -268,9 +268,6 @@ impl Measurement {
                     | Phase::SourceDatabaseOpen
                     | Phase::Enumeration
                     | Phase::Analysis
-                    | Phase::Timeline
-                    | Phase::TimelineEvents
-                    | Phase::TimelineGraph
                     | Phase::MftReadParseWall
                     | Phase::MftWriterWall
                     | Phase::MftPathResolve
