@@ -87,6 +87,21 @@ function renderSidebar(overrides: Partial<Parameters<typeof AnalysisSourceSideba
 }
 
 describe('AnalysisSourceSidebar plugin group', () => {
+  it('uses published Windows counts when extraction progress is absent', () => {
+    renderSidebar({ windowsNodeCounts: { registry: 71, browser: 103, email: 2, eventlogs: 17 } });
+    expect(screen.getByText(/注册表\(71\)/)).toBeInTheDocument();
+    expect(screen.getByText(/浏览器.*\(103\)/)).toBeInTheDocument();
+    expect(screen.getByText(/邮件.*\(2\)/)).toBeInTheDocument();
+    expect(screen.getByText(/事件.*\(17\)/)).toBeInTheDocument();
+  });
+
+  it('uses published results after an extraction completes with zero session counters', () => {
+    const progress = idleProgress();
+    progress.Registry = { ...progress.Registry, status: 'success', artifactCount: 0 };
+    renderSidebar({ progress, windowsNodeCounts: { registry: 71 } });
+    expect(screen.getByText(/注册表\(71\)/)).toBeInTheDocument();
+  });
+
   it('renders the plugin group with module nodes and total-count badges', () => {
     renderSidebar({
       pluginModules: [pluginModule(), pluginModule({ pluginId: 'plugin-qq', displayName: 'QQ', totalCount: 3 })],

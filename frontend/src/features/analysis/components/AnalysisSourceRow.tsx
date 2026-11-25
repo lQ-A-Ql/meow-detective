@@ -88,8 +88,15 @@ export function AnalysisSourceRow({ row, model, onSelectOrToggle }: Props) {
         : node.androidTab === model.activeAndroidTab);
   const progress = selected && node.category ? model.progress[node.category] : undefined;
   const summaryCount =
-    selected && source.platform === 'linux' && node.linuxTab ? model.linuxNodeCounts?.[node.linuxTab] : undefined;
-  const count = summaryCount ?? (progress && progress.status !== 'idle' ? progress.artifactCount : undefined);
+    selected && source.platform === 'windows' && node.windowsTab
+      ? model.windowsNodeCounts?.[node.windowsTab]
+      : selected && source.platform === 'linux' && node.linuxTab
+        ? model.linuxNodeCounts?.[node.linuxTab]
+        : undefined;
+  const count =
+    progress?.status === 'running'
+      ? progress.artifactCount
+      : (summaryCount ?? (progress && progress.status !== 'idle' ? progress.artifactCount : undefined));
   const label = t(node.labelKey);
   return (
     <div className="ml-3 border-l border-forensics-border-light pl-1">

@@ -1,7 +1,7 @@
 export const ANALYSIS_QUERY_OPTIONS = {
   staleTime: Infinity,
   gcTime: Infinity,
-  refetchOnMount: false,
+  refetchOnMount: true,
   refetchOnWindowFocus: false,
   refetchOnReconnect: false,
 } as const;

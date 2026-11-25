@@ -92,6 +92,7 @@ export function AnalysisWorkspace({ model }: AnalysisWorkspaceProps) {
             selectedDataSourceId={model.selectedDataSourceId}
             disabled={model.analysisMutationPending}
             progress={model.labeledExtractionProgress}
+            windowsNodeCounts={model.windowsNodeCounts}
             linuxNodeCounts={model.linuxNodeCounts}
             activeWindowsTab={model.activeTab}
             activeLinuxTab={model.activeLinuxTab}

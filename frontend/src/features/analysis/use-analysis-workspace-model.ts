@@ -16,6 +16,7 @@ import {
   useRegistryStructuredSummary,
 } from '@/features/analysis/hooks';
 import { refreshAnalysisQueries } from '@/features/analysis/refresh';
+import { windowsNodeCounts as publishedWindowsNodeCounts } from './windows-node-counts';
 import {
   AnalysisSourceEpoch,
   analysisSourceContextKey,
@@ -97,6 +98,13 @@ export function useAnalysisWorkspaceModel() {
     summaryMutation.isPending || deletedRecovery.scanning || deletedRecovery.reading || deletedRecovery.exporting;
 
   const labeledExtractionProgress = useMemo(() => labeledProgress(extractionProgress, t), [extractionProgress, t]);
+  const windowsNodeCounts = useMemo(
+    () =>
+      selectedPlatform === 'windows'
+        ? publishedWindowsNodeCounts(registrySummary.data, browserSummary.data, emailSummary.data, eventLogSummary.data)
+        : {},
+    [selectedPlatform, registrySummary.data, browserSummary.data, emailSummary.data, eventLogSummary.data],
+  );
   const linuxNodeCounts = useMemo<Partial<Record<LinuxAnalysisTabKey, number>>>(() => {
     const summary = selectedPlatform === 'linux' ? linuxSummary.data : undefined;
     const counts: Partial<Record<LinuxAnalysisTabKey, number>> = {};
@@ -340,6 +348,7 @@ export function useAnalysisWorkspaceModel() {
     selectedPlatform,
     analysisMutationPending,
     labeledExtractionProgress,
+    windowsNodeCounts,
     linuxNodeCounts,
     activeTab,
     activeLinuxTab,

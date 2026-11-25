@@ -1,4 +1,4 @@
-import type { QueryClient } from '@tanstack/react-query';
+import type { QueryClient, QueryFilters } from '@tanstack/react-query';
 import type {
   CapabilityKind,
   CapabilityStatusChangedPayload,
@@ -70,7 +70,7 @@ export const projectionQueryKeys = {
 } as const;
 
 type ProjectionKey = keyof typeof projectionQueryKeys;
-type QueryInvalidator = Pick<QueryClient, 'invalidateQueries'>;
+type QueryInvalidator = Pick<QueryClient, 'cancelQueries' | 'invalidateQueries'>;
 
 const importProjectionKeys: ProjectionKey[] = [
   'caseDataSources',
@@ -190,7 +190,7 @@ function invalidateCapabilityPublication(queryClient: QueryInvalidator, payload:
   void queryClient.invalidateQueries({ queryKey: [...CAPABILITY_MATRIX_QUERY_KEY, caseId] });
   if (!capability || !state || ['pending', 'queued', 'running'].includes(state)) return;
   const roots = new Set<string>(capabilityProjectionKeys[capability].map((key) => projectionQueryKeys[key][0]));
-  void queryClient.invalidateQueries({
+  const filters: QueryFilters = {
     predicate: ({ queryKey }) => {
       const family = queryKey[0];
       if (typeof family !== 'string' || !roots.has(family)) return false;
@@ -198,7 +198,9 @@ function invalidateCapabilityPublication(queryClient: QueryInvalidator, payload:
       if (queryKey[caseIndex] !== caseId) return false;
       return family !== 'analysis' || !dataSourceId || typeof queryKey[3] !== 'string' || queryKey[3] === dataSourceId;
     },
-  });
+  };
+  void queryClient.cancelQueries(filters);
+  void queryClient.invalidateQueries(filters);
 }
 
 export function invalidateEventProjectionQueries(

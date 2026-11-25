@@ -11,6 +11,7 @@ export interface AnalysisSourceSidebarProps {
   selectedDataSourceId?: string;
   disabled?: boolean;
   progress: Record<ExtractionCategory, AnalysisExtractionProgressInfo>;
+  windowsNodeCounts?: Partial<Record<AnalysisTabKey, number>>;
   linuxNodeCounts?: Partial<Record<LinuxAnalysisTabKey, number>>;
   activeWindowsTab: AnalysisTabKey;
   activeLinuxTab: LinuxAnalysisTabKey;
