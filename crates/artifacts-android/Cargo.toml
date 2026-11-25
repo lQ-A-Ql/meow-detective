@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-chrono.workspace = true
 android-abx.workspace = true
 quick-xml.workspace = true
 thiserror.workspace = true

@@ -95,7 +95,7 @@ fn exif_report_projects_one_artifact_without_timeline_events() {
         artifact.extractor_id.as_deref(),
         Some("image.metadata.container")
     );
-    assert_eq!(artifact.extractor_version.as_deref(), Some("1.0.0"));
+    assert_eq!(artifact.extractor_version.as_deref(), Some("2.0.0"));
     assert_eq!(artifact.confidence, Some(0.85));
     assert_eq!(artifact.title, "Image metadata: photo.jpg");
     assert!(artifact.summary.contains("JPEG 4032x3024"));

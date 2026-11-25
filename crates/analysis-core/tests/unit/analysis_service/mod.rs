@@ -1141,7 +1141,8 @@ fn run_analysis_extraction_extracts_linux_artifacts_and_persists() {
     let zsh_history = ": 1700000100:0;whoami\n";
     let fish_history = "- cmd: uname -a\n  when: 1700000200\n";
     let syslog = "Jan 15 10:30:00 ubuntu sshd[1234]: Accepted publickey for alice from 192.168.1.100 port 22\n";
-    let authorized_keys = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITestKey alice@example\n";
+    // RustCrypto public example also used by artifacts-linux/tests/ssh_metadata.rs.
+    let authorized_keys = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILM+rvN+ot98qgEN796jTiQfZfG1KaT0PtFDJ/XFSqti alice@example\n";
     let passwd = "root:x:0:0:root:/root:/bin/bash\nalice:x:1000:1000:Alice:/home/alice:/bin/bash\n";
     let os_release = "PRETTY_NAME=\"CentOS Stream 9\"\nID=centos\nVERSION_ID=\"9\"\n";
     let pve_storage = "dir: local\n\tpath /var/lib/vz\n\tcontent iso,vztmpl,backup\n";

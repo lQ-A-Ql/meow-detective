@@ -9,6 +9,3 @@ license.workspace = true
 domain.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-tempfile.workspace = true
