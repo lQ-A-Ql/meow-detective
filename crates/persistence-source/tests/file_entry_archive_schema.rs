@@ -3,54 +3,14 @@ use rusqlite::{Connection, ErrorCode};
 use tempfile::TempDir;
 
 #[test]
-fn fresh_and_upgraded_staging_schemas_default_archive_to_false() {
+fn current_staging_schema_defaults_archive_to_false() {
     let temporary = TempDir::new().expect("create staging root");
     let fresh = StagingRepo::open_partition_staging_conn(temporary.path(), "fresh", 0)
         .expect("open fresh staging database");
-    assert_archive_contract(&fresh, "fresh-file", "fresh", true);
-
-    let upgraded = Connection::open_in_memory().expect("open legacy staging database");
-    upgraded
-        .execute_batch(
-            "CREATE TABLE file_entries (
-                id TEXT PRIMARY KEY NOT NULL,
-                parent_id TEXT,
-                data_source_id TEXT NOT NULL,
-                path TEXT NOT NULL,
-                name TEXT NOT NULL,
-                entry_type TEXT NOT NULL,
-                size INTEGER,
-                ext TEXT,
-                deleted INTEGER NOT NULL DEFAULT 0,
-                created_at TEXT,
-                modified_at TEXT,
-                accessed_at TEXT,
-                changed_at TEXT,
-                hash_sha256 TEXT
-            );
-            INSERT INTO file_entries
-                (id, data_source_id, path, name, entry_type)
-            VALUES ('legacy-stage', 'upgraded', 'old.bin', 'old.bin', 'file');",
-        )
-        .expect("create legacy staging schema");
-    StagingRepo::ensure_enum_staging_columns(&upgraded).expect("upgrade staging schema");
-    let historical: i64 = upgraded
-        .query_row(
-            "SELECT archive FROM file_entries WHERE id = 'legacy-stage'",
-            [],
-            |row| row.get(0),
-        )
-        .expect("read upgraded staging status");
-    assert_eq!(historical, 0);
-    assert_archive_contract(&upgraded, "upgraded-file", "upgraded", false);
+    assert_archive_contract(&fresh, "fresh-file", "fresh");
 }
 
-fn assert_archive_contract(
-    conn: &Connection,
-    file_id: &str,
-    data_source_id: &str,
-    enforces_check: bool,
-) {
+fn assert_archive_contract(conn: &Connection, file_id: &str, data_source_id: &str) {
     let column: (String, i64, Option<String>) = conn
         .query_row(
             "SELECT type, \"notnull\", dflt_value
@@ -83,16 +43,14 @@ fn assert_archive_contract(
         [file_id],
     )
     .expect("persist archive state");
-    if enforces_check {
-        let error = conn
-            .execute(
-                "UPDATE file_entries SET archive = 2 WHERE id = ?1",
-                [file_id],
-            )
-            .expect_err("reject non-boolean archive state");
-        assert!(matches!(
-            error.sqlite_error_code(),
-            Some(ErrorCode::ConstraintViolation)
-        ));
-    }
+    let error = conn
+        .execute(
+            "UPDATE file_entries SET archive = 2 WHERE id = ?1",
+            [file_id],
+        )
+        .expect_err("reject non-boolean archive state");
+    assert!(matches!(
+        error.sqlite_error_code(),
+        Some(ErrorCode::ConstraintViolation)
+    ));
 }

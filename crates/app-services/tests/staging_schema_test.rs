@@ -149,12 +149,12 @@ fn staging_analysis_schema_creates_expected_tables() {
 }
 
 #[test]
-fn staging_analysis_schema_upgrades_legacy_provenance_columns() {
+fn staging_analysis_rejects_incomplete_provenance_schema() {
     let tmp = tempfile::TempDir::new().unwrap();
     let db_path = analysis_staging_db_path(tmp.path(), "ds-analysis", 0);
     std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
-    let legacy = Connection::open(&db_path).unwrap();
-    legacy
+    let incomplete = Connection::open(&db_path).unwrap();
+    incomplete
         .execute_batch(
             "CREATE TABLE artifact_rows (
                 id TEXT PRIMARY KEY NOT NULL, file_id TEXT, artifact_type TEXT NOT NULL,
@@ -176,9 +176,9 @@ fn staging_analysis_schema_upgrades_legacy_provenance_columns() {
             );",
         )
         .unwrap();
-    drop(legacy);
-
-    let upgraded = open_analysis_staging(tmp.path(), "ds-analysis", 0).unwrap();
+    drop(incomplete);
+    assert!(open_analysis_staging(tmp.path(), "ds-analysis", 0).is_err());
+    let unchanged = Connection::open(&db_path).unwrap();
     for (table, column) in [
         ("artifact_rows", "extractor_id"),
         ("artifact_rows", "extractor_version"),
@@ -189,13 +189,16 @@ fn staging_analysis_schema_upgrades_legacy_provenance_columns() {
         ("timeline_rows", "confidence"),
         ("timeline_rows", "source_attribution"),
     ] {
-        let present: bool = upgraded
+        let present: bool = unchanged
             .query_row(
                 &format!("SELECT COUNT(*) > 0 FROM pragma_table_info('{table}') WHERE name = ?1"),
                 [column],
                 |row| row.get(0),
             )
             .unwrap();
-        assert!(present, "missing upgraded column {table}.{column}");
+        assert!(
+            !present,
+            "incomplete schema was modified at {table}.{column}"
+        );
     }
 }

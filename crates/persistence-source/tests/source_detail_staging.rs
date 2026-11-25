@@ -81,7 +81,7 @@ fn catalog_staging_merge_folds_roots_and_replays_without_duplicates() {
                     "Partition"
                 )
                 .unwrap(),
-                Some(2)
+                2
             );
         }
     }
@@ -148,7 +148,7 @@ fn catalog_staging_groups_top_level_orphans_under_a_bounded_root_node() {
             "Partition 1"
         )
         .unwrap(),
-        Some(1)
+        1
     );
     let store = persistence_source::detail::open_store(&main)
         .unwrap()

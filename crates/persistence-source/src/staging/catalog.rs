@@ -12,10 +12,9 @@ pub fn merge_staging_catalog(
     source_id: &str,
     partition: usize,
     partition_name: &str,
-) -> DbResult<Option<u64>> {
-    let Some(store) = open_store_for_write(main)? else {
-        return Ok(None);
-    };
+) -> DbResult<u64> {
+    let store = open_store_for_write(main)?
+        .ok_or_else(|| DbError::System("source detail storage is missing".into()))?;
     if crate::detail::source_id(main)?.as_deref() != Some(source_id) {
         return Err(DbError::System(
             "catalog staging source identity mismatch".into(),
@@ -72,7 +71,7 @@ pub fn merge_staging_catalog(
         return Err(error);
     }
     outcome.map_err(storage_error)?;
-    Ok(Some(merged))
+    Ok(merged)
 }
 
 #[derive(Clone, Copy)]

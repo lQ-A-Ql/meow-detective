@@ -4,43 +4,6 @@ use rusqlite::{params, Connection, OptionalExtension};
 pub const NTFS_STAGING_LAYOUT_VERSION: &str = "ntfs-v3";
 pub struct NtfsStagingRepo;
 impl NtfsStagingRepo {
-    /// Called only by the partition-staging owner. A known v2 numeric catalog
-    /// is disposable and must be enumerated again; published source DBs refuse it.
-    pub fn rebuild_previous_layout(conn: &Connection) -> DbResult<bool> {
-        let has_meta: bool=conn.query_row("SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='ntfs_staging_meta')",[],|r|r.get(0))?;
-        if !has_meta || Self::meta(conn, "layout_version")?.as_deref() != Some("ntfs-v2") {
-            return Ok(false);
-        }
-        let published: bool = conn.query_row(
-            "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='table' AND name='source_meta')",
-            [],
-            |r| r.get(0),
-        )?;
-        if published {
-            return Err(DbError::System(
-                "Cannot rebuild published source as staging".into(),
-            ));
-        }
-        conn.prepare(
-            "SELECT record_num,parent_record_num,sequence_num,name,path FROM ntfs_entries LIMIT 0",
-        )?;
-        with_layout_savepoint(conn, || {
-            if Self::is_numeric(conn)? {
-                conn.execute_batch("DROP VIEW file_entries")?;
-                conn.execute_batch(include_str!("../migrations/scripts/staging_001.sql"))?;
-                conn.execute_batch("DELETE FROM staging_meta WHERE key IN ('status','enum_strategy','mft_records','mft_fallback_warning','file_count','dir_count')")?;
-            } else {
-                let rows: u64 =
-                    conn.query_row("SELECT COUNT(*) FROM ntfs_entries", [], |r| r.get(0))?;
-                if rows != 0 {
-                    return Err(DbError::System("Inconsistent legacy staging facts".into()));
-                }
-            }
-            conn.execute_batch("DROP TABLE ntfs_entries; DROP TABLE ntfs_staging_meta")?;
-            Self::ensure_schema(conn)?;
-            Ok(true)
-        })
-    }
     pub fn is_numeric(conn: &Connection) -> rusqlite::Result<bool> {
         conn.query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='view' AND name='file_entries')",
