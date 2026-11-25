@@ -1,11 +1,12 @@
 use app_services::{
+    active_case,
     active_case::ActiveCase,
-    case_service,
+    bitlocker_runtime, capability_service, case_service,
     import_analysis::ImportAnalysisMode,
     import_pipeline::{
         execute_import_job_profiled, ImportEventSink, ImportJobOptions, ImportProfiler,
     },
-    import_precheck, source_db,
+    import_precheck, post_import_service, source_db, task_runtime,
 };
 use domain::{DataSourceId, DataSourcePlatform};
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
@@ -33,6 +34,8 @@ mod analysis_diagnostic;
 mod chromium_metadata;
 #[path = "support/real_sample_input_diagnostic.rs"]
 mod input_diagnostic;
+#[path = "support/managed_capabilities.rs"]
+mod managed_capabilities;
 #[path = "support/real_sample_query_checks.rs"]
 mod query_checks;
 #[path = "support/real_sample_warning_diagnostic.rs"]
@@ -185,7 +188,7 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
 
     let profiler = ImportProfiler::with_output_directory(output.join("profile"))
         .expect("create persistent import profile");
-    let sink = ProgressSink::default();
+    let sink = Arc::new(ProgressSink::default());
     let memory = RssSampler::start();
     let started = Instant::now();
     let imported = run_import(&active, &fixture, platform, &profiler, &sink);
@@ -197,7 +200,6 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         &json!({
             "schemaVersion":1, "platform":platform.as_storage_str(), "elapsedMs":import_elapsed_ms,
             "memory":import_memory, "profile":profiler.report(), "phaseEvents":sink.report(),
-            "analysisAudit":sink.analysis_report(),
             "inputMetadataUnchanged":before == after_import,
             "inputBefore":before, "inputAfter":after_import,
             "outcome":imported.as_ref().map(|(_, summary)| summary).map_err(|error| error.to_string())
@@ -205,19 +207,31 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
     );
     let (source_id, summary) =
         imported.expect("real source import failed; case and import report retained");
-    let analysis = json!({"mode":"automatic-platform-analysis", "deferred":false,
-        "warningCount":summary["warningCount"], "failedCount":summary["failedCount"],
-        "warningScope":"import-including-automatic-analysis"});
+    let managed_started = Instant::now();
+    managed_capabilities::run(
+        &active,
+        Some(sink.clone()),
+        Duration::from_secs(900).saturating_sub(started.elapsed()),
+    );
+    let sections = sink.analysis_report();
+    let warning_candidates = sections
+        .iter()
+        .map(|section| section.warning_candidates)
+        .sum::<u64>();
+    let analysis = json!({
+        "mode":"managed-platform-analysis",
+        "elapsedMs":managed_started.elapsed().as_millis(),
+        "sections":sections,
+        "warningCandidates":warning_candidates,
+        "warningScope":"managed-artifact-candidate-warnings"
+    });
     write_report(&output.join("analysis.json"), &analysis);
     let timeline_build = active
         .with_conn(|connection| {
-            app_services::timeline_service::rebuild_timeline_projection(
+            app_services::timeline_service::get_timeline_projection_status(
                 connection,
                 &active.case_root,
                 &active.meta.id,
-                Some(&source_id.0),
-                Default::default(),
-                &AtomicBool::new(false),
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
         })
@@ -263,6 +277,7 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         "failed"
     } else if summary["warningCount"].as_u64().unwrap() > 0
         || summary["skippedCount"].as_u64().unwrap() > 0
+        || warning_candidates > 0
     {
         "passedWithWarnings"
     } else {
@@ -273,6 +288,7 @@ fn run_sample(variable: &str, platform: DataSourcePlatform) {
         "platform":platform.as_storage_str(), "import":summary, "analysis":analysis,
         "queries":queries, "inputMetadataUnchanged":before == after,
         "timelineBuild":timeline_build, "taskProgress":task_progress,
+        "managedTaskProgress":*sink.managed_tasks.lock().unwrap(),
         "observationLimits":["Input metadata equality does not replace a full evidence digest", "RSS is a sampled observation"]
     });
     let report_path = output.join("acceptance.json");
@@ -355,7 +371,8 @@ fn run_import(
 struct ProgressSink {
     last: Mutex<Option<Instant>>,
     phases: Mutex<BTreeMap<String, Value>>,
-    analysis_audit: Mutex<Vec<String>>,
+    analysis: Mutex<BTreeMap<String, transport::dto::AnalysisExtractionProgressDto>>,
+    managed_tasks: Mutex<BTreeMap<String, transport::dto::TaskProgressDto>>,
     tasks: Mutex<TaskAudit>,
 }
 
@@ -385,8 +402,8 @@ impl ProgressSink {
         self.phases.lock().unwrap().values().cloned().collect()
     }
 
-    fn analysis_report(&self) -> Vec<String> {
-        self.analysis_audit.lock().unwrap().clone()
+    fn analysis_report(&self) -> Vec<transport::dto::AnalysisExtractionProgressDto> {
+        self.analysis.lock().unwrap().values().cloned().collect()
     }
 }
 
@@ -409,14 +426,7 @@ impl ImportEventSink for ProgressSink {
             "stage":progress.stage, "work":progress.work, "completed":progress.completed_units, "total":progress.total_units,
             "heartbeat":progress.heartbeat, "seq":progress.seq, "etaSeconds":progress.eta_seconds}));
     }
-    fn job_progress(&self, _: &str, progress: u32, detail: &str) {
-        if detail.starts_with("analysis-audit: phase=")
-            || detail.starts_with("analysis-audit: category=")
-        {
-            self.analysis_audit.lock().unwrap().push(detail.to_owned());
-            eprintln!("REAL_SAMPLE_ANALYSIS {detail}");
-            return;
-        }
+    fn job_progress(&self, _: &str, progress: u32, _: &str) {
         self.emit(json!({"phase":"import","percent":progress}));
     }
 
@@ -424,14 +434,6 @@ impl ImportEventSink for ProgressSink {
         self.emit(
             json!({"phase":"partition","completed":completed,"total":total,"percent":percent}),
         );
-    }
-
-    fn timeline_updated(&self, event_count: u64) {
-        self.emit(json!({"phase":"timeline","events":event_count}));
-    }
-
-    fn search_index_progress(&self, progress: u32, _: &str) {
-        self.emit(json!({"phase":"searchIndex","percent":progress}));
     }
 
     fn data_source_imported(&self, _: &str, _: &DataSourceSummaryDto, _: &str) {
@@ -457,6 +459,32 @@ impl ImportEventSink for ProgressSink {
     fn cache_index_status(&self, _: &IndexCacheStatusDto) {}
 
     fn job_cancellation(&self, _: &JobCancellationDto) {}
+}
+
+impl app_services::post_import_service::ApplicationEventSink for ProgressSink {
+    fn emit(&self, event: &transport::events::EventEnvelope<Value>) -> std::io::Result<()> {
+        match event.topic {
+            transport::events::EventTopic::AnalysisExtractionProgress => {
+                let progress: transport::dto::AnalysisExtractionProgressDto =
+                    serde_json::from_value(event.payload.clone()).map_err(std::io::Error::other)?;
+                self.analysis
+                    .lock()
+                    .unwrap()
+                    .insert(progress.category.clone(), progress);
+            }
+            transport::events::EventTopic::JobProgress => {
+                let progress: transport::dto::TaskProgressDto =
+                    serde_json::from_value(event.payload.clone()).map_err(std::io::Error::other)?;
+                self.managed_tasks
+                    .lock()
+                    .unwrap()
+                    .insert(progress.job_id.clone(), progress);
+            }
+            _ => {}
+        }
+        self.emit(json!({"phase":"managed", "topic":event.topic, "payload":event.payload}));
+        Ok(())
+    }
 }
 
 struct RssSampler {

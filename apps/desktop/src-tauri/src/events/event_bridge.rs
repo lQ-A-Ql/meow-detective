@@ -10,7 +10,7 @@ use transport::events::{
     TOPIC_FILE_EXTRACT_PROGRESS, TOPIC_IMPORT_PARTIAL_RESULT, TOPIC_IMPORT_PHASE_PROGRESS,
     TOPIC_JOB_CANCELLATION, TOPIC_JOB_CANCELLED, TOPIC_JOB_COMPLETED, TOPIC_JOB_CREATED,
     TOPIC_JOB_FAILED, TOPIC_JOB_PROGRESS, TOPIC_JOB_STARTED, TOPIC_PARTITION_PROGRESS,
-    TOPIC_PERFORMANCE_REPORT_READY, TOPIC_SEARCH_INDEX_PROGRESS, TOPIC_TIMELINE_UPDATED,
+    TOPIC_PERFORMANCE_REPORT_READY,
 };
 
 pub fn emit_event<T: serde::Serialize + Clone>(
@@ -254,31 +254,6 @@ pub fn emit_artifact_added(app: &AppHandle, artifact_id: &str, artifact_type: &s
             artifact_id,
             e
         );
-    }
-}
-
-pub fn emit_timeline_updated(app: &AppHandle, event_count: u64) {
-    let envelope = envelope(
-        EventTopic::TimelineUpdated,
-        serde_json::json!({
-            "eventCount": event_count,
-        }),
-    );
-    if let Err(e) = emit_event(app, TOPIC_TIMELINE_UPDATED, &envelope) {
-        tracing::warn!("Failed to emit timeline updated event: {}", e);
-    }
-}
-
-pub fn emit_search_index_progress(app: &AppHandle, progress: u32, detail: &str) {
-    let envelope = envelope(
-        EventTopic::SearchIndexProgress,
-        serde_json::json!({
-            "progress": progress,
-            "detail": detail,
-        }),
-    );
-    if let Err(e) = emit_event(app, TOPIC_SEARCH_INDEX_PROGRESS, &envelope) {
-        tracing::warn!("Failed to emit search index progress event: {}", e);
     }
 }
 

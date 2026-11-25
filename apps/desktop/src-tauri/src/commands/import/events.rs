@@ -45,14 +45,6 @@ impl ImportEventSink for TauriImportEventSink<'_> {
         );
     }
 
-    fn timeline_updated(&self, event_count: u64) {
-        event_bridge::emit_timeline_updated(self.app, event_count);
-    }
-
-    fn search_index_progress(&self, progress: u32, detail: &str) {
-        event_bridge::emit_search_index_progress(self.app, progress, detail);
-    }
-
     fn data_source_imported(
         &self,
         case_id: &str,

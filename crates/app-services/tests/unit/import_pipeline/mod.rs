@@ -17,6 +17,9 @@ use transport::dto::{
     PartialResultDto,
 };
 
+#[path = "../../support/managed_capabilities.rs"]
+mod managed_capabilities;
+
 fn import_config_for_path(path: &std::path::Path) -> import_precheck::ImportSourceConfig {
     import_precheck::prepare_import_source_config_from_path(
         &path.to_string_lossy(),
@@ -130,14 +133,6 @@ impl ImportEventSink for RecordingImportEventSink {
         _partition_pct: u32,
     ) {
         self.record("partition");
-    }
-
-    fn timeline_updated(&self, event_count: u64) {
-        self.record(format!("timeline:{event_count}"));
-    }
-
-    fn search_index_progress(&self, progress: u32, detail: &str) {
-        self.record(format!("search:{progress}:{detail}"));
     }
 
     fn data_source_imported(
@@ -815,6 +810,7 @@ fn logical_import_post_pipeline_indexes_marker_and_completes_platform_artifacts(
             .map_err(|err| persistence_sqlite::DbError::System(err.message))?;
 
             assert!(message.contains("Index:"));
+            managed_capabilities::run(&active, None, std::time::Duration::from_secs(30));
 
             let data_sources: i64 = conn.query_row(
                 "SELECT COUNT(*) FROM data_sources WHERE case_id = ?1 AND kind = 'logical_directory'",
@@ -989,21 +985,17 @@ fn logical_import_reports_progress_through_tauri_free_sink() {
         events.iter().any(|event| event.starts_with("phase:")),
         "sink should receive typed phase progress events: {events:?}"
     );
-    assert!(
-        events.iter().any(|event| event.starts_with("timeline:")),
-        "sink should receive timeline readiness events: {events:?}"
-    );
     let checkpoint_index = events
         .iter()
         .position(|event| event.starts_with("phase:Checkpoint:Completed:"))
         .expect("sink should receive source checkpoint progress");
-    let timeline_index = events
+    let ready_index = events
         .iter()
-        .position(|event| event.starts_with("timeline:"))
-        .expect("sink should receive timeline readiness");
+        .position(|event| event.starts_with("data-source:"))
+        .expect("sink should receive source readiness");
     assert!(
-        checkpoint_index < timeline_index,
-        "timeline readiness must follow a successful source checkpoint: {events:?}"
+        checkpoint_index < ready_index,
+        "source readiness must follow a successful source checkpoint: {events:?}"
     );
     assert!(
         events.iter().any(|event| event.starts_with("data-source:")),
@@ -1251,6 +1243,7 @@ fn e01_full_import() {
                 }
             }
 
+            managed_capabilities::run(&active, None, std::time::Duration::from_secs(900));
             let data_source_id = single_imported_data_source_id(conn, &active.meta.id)?;
             let source_conn =
                 source_kernel::source_db::open_source_db(&active.case_root, &data_source_id)

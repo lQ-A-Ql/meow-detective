@@ -45,8 +45,7 @@ pub fn persist_linux_evidence_facts(
     data_source_id: &DataSourceId,
     facts: &LinuxEvidenceFacts,
 ) -> persistence_sqlite::DbResult<()> {
-    // PostReady stores this derived cache in source.db under the import
-    // publication lease. Published catalog records remain read-only inputs.
+    // The managed artifact task writes this source-local derived cache.
     let mut value = serde_json::to_value(facts)
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     let Value::Object(ref mut object) = value else {

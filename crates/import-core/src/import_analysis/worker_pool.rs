@@ -82,7 +82,7 @@ fn finish_disabled_post_import(
     if let Some(cb) = progress_cb {
         cb(
             84,
-            "Post-import metadata indexing: phase=search-index scheduling=running workerBudget=0 activeWorkers=0 queuedTasks=0 pendingTasks=unknown timeline=finalize content=disabled text=disabled contentDeferred=true textDeferred=true",
+            "Post-import metadata indexing: phase=search-index scheduling=running workerBudget=0 activeWorkers=0 queuedTasks=0 pendingTasks=unknown timeline=queued content=disabled text=disabled contentDeferred=true textDeferred=true",
         );
     }
     let search_stats = rebuild_file_metadata_index(options, progress_cb)

@@ -1,11 +1,4 @@
-//! Task-confirmed capability row writes for the detached (catalog-only) import
-//! path.
-//!
-//! Import-core already writes control-plane rows directly through
-//! `persistence-sqlite` repositories (`StorageControlRepo`, `JobRepo`,
-//! `TimelineProjectionRepo`); this helper follows the same boundary and must
-//! not call `app-services` (forbidden dependency). Rows are conservative: the
-//! row is written after the owning marker/decision, never before.
+//! Persist task-confirmed capability decisions through control-plane repositories.
 
 use persistence_sqlite::repositories::source_capability_repo::{
     SourceCapabilityRepo, SourceCapabilityRow,

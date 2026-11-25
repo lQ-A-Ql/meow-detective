@@ -1,6 +1,6 @@
 use std::sync::{atomic::AtomicBool, Arc};
 
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager};
 use transport::CommandError;
 
 use super::completion::complete_evidence_set_import;
@@ -59,6 +59,12 @@ pub(super) fn publish_evidence_set(
                     0,
                 );
                 if let (Some(task_manager), Some(app)) = (projection_task_manager.as_ref(), app) {
+                    crate::post_import_scheduler::enqueue_case_pending(
+                        app.state::<crate::state::AppState>().inner(),
+                        Some(app),
+                        &job.case_id.0,
+                        &job.case_root,
+                    )?;
                     crate::case_projection_jobs::schedule(
                         task_manager,
                         app,

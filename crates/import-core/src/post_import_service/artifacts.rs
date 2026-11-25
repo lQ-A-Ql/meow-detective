@@ -5,6 +5,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 mod android;
 mod host;
+mod linux_facts;
 
 pub(super) fn run(
     work: &CapabilityWork,

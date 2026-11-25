@@ -1,8 +1,8 @@
-//! Queue platform artifacts after source publication.
+//! Register platform artifact work before source publication.
 use super::context::{ImportContentKind, ImportJobContext};
 use transport::CommandError;
 
-pub(super) fn finish(
+pub(super) fn queue_artifacts(
     ctx: &mut ImportJobContext<'_>,
     source: &domain::DataSource,
     connection: &rusqlite::Connection,
@@ -46,7 +46,6 @@ pub(super) fn finish(
         None,
     )?;
     ensure_active(ctx)?;
-    super::phases::emit_data_source_ready(ctx, source)?;
     Ok(message)
 }
 

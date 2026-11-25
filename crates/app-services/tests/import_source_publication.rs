@@ -19,28 +19,52 @@ use transport::dto::{
 
 struct RetireAt {
     case_id: String,
-    progress: u32,
+    point: RetirementPoint,
+    retired: AtomicBool,
     ready: AtomicBool,
 }
-impl ImportEventSink for RetireAt {
-    fn job_progress(&self, _: &str, progress: u32, _: &str) {
-        if progress == self.progress {
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RetirementPoint {
+    Merge,
+    Finalize,
+    Publish,
+}
+
+impl RetireAt {
+    fn retire(&self) {
+        if !self.retired.swap(true, Ordering::AcqRel) {
             source_runtime::invalidate_case(&self.case_id);
         }
     }
+}
+
+impl ImportEventSink for RetireAt {
+    fn job_progress(&self, _: &str, _: u32, detail: &str) {
+        if (self.point == RetirementPoint::Merge && detail == "Merging partitions...")
+            || (self.point == RetirementPoint::Finalize && detail == "Finalizing...")
+        {
+            self.retire();
+        }
+    }
     fn partition_progress(&self, _: &str, _: &str, _: u32, _: u32, _: u32) {}
-    fn timeline_updated(&self, _: u64) {}
-    fn search_index_progress(&self, _: u32, _: &str) {}
     fn data_source_imported(&self, _: &str, _: &DataSourceSummaryDto, _: &str) {
         self.ready.store(true, Ordering::Release);
     }
-    fn import_phase_progress(&self, _: &ImportPhaseProgressDto) {}
+    fn import_phase_progress(&self, progress: &ImportPhaseProgressDto) {
+        if self.point == RetirementPoint::Publish
+            && progress.phase == transport::dto::ImportPhaseDto::Finalize
+            && progress.state == transport::dto::ImportPhaseStateDto::Completed
+        {
+            self.retire();
+        }
+    }
     fn import_partial_result(&self, _: &PartialResultDto) {}
     fn cache_index_status(&self, _: &IndexCacheStatusDto) {}
     fn job_cancellation(&self, _: &JobCancellationDto) {}
 }
 
-fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
+fn reject_stale_source(point: RetirementPoint, platform: domain::DataSourcePlatform) {
     let temp = tempfile::tempdir().unwrap();
     let image = temp.path().join("source.raw");
     std::fs::write(&image, fixture::image(96)).unwrap();
@@ -48,7 +72,8 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
         case_service::create_case(&temp.path().join("cases"), "source fence", None).unwrap();
     let sink = RetireAt {
         case_id: active.meta.id.0.clone(),
-        progress,
+        point,
+        retired: AtomicBool::new(false),
         ready: AtomicBool::new(false),
     };
     active
@@ -77,8 +102,12 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
                 },
             );
             assert!(
+                sink.retired.load(Ordering::Acquire),
+                "{point:?} was not reached"
+            );
+            assert!(
                 result.is_err(),
-                "stale source reached successful import at {progress}"
+                "stale source reached successful import at {point:?}"
             );
             let (id, state): (String, String) =
                 conn.query_row("SELECT id,import_state FROM data_sources", [], |r| {
@@ -91,8 +120,11 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
                 |r| r.get(0),
             )?;
             assert_eq!(operation_state, "failed");
+            let pending = persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRepo::new(conn)
+                .list_pending(&active.meta.id.0)?;
+            assert!(pending.is_empty());
             assert!(!sink.ready.load(Ordering::Acquire));
-            if progress == 62 {
+            if point == RetirementPoint::Merge {
                 let connection = persistence_sqlite::open_existing_source_read_only(
                     &source_db::source_db_path(&active.case_root, &domain::DataSourceId(id)),
                 )?;
@@ -117,15 +149,18 @@ fn reject_stale_source(progress: u32, platform: domain::DataSourcePlatform) {
 
 #[test]
 fn retired_generation_cannot_merge_a_completed_staging_partition() {
-    reject_stale_source(62, domain::DataSourcePlatform::Windows);
+    reject_stale_source(RetirementPoint::Merge, domain::DataSourcePlatform::Windows);
 }
 
 #[test]
 fn invalidation_inside_finalization_event_cannot_publish_ready_or_deadlock() {
-    reject_stale_source(95, domain::DataSourcePlatform::Windows);
+    reject_stale_source(
+        RetirementPoint::Finalize,
+        domain::DataSourcePlatform::Windows,
+    );
 }
 
 #[test]
-fn invalidation_at_automatic_linux_analysis_cannot_publish_ready() {
-    reject_stale_source(96, domain::DataSourcePlatform::Linux);
+fn invalidation_before_linux_capability_queue_cannot_publish_ready() {
+    reject_stale_source(RetirementPoint::Publish, domain::DataSourcePlatform::Linux);
 }

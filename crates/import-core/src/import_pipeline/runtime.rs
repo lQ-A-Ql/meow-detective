@@ -92,6 +92,24 @@ pub(super) fn record_failure(
         .as_ref()
         .map(|lease| lease.failure_fence_connection(ctx.conn));
     super::execute::persist_failed_import(ctx.conn, &ds.id, error);
+    let state = if error.category == "cancelled" {
+        "cancelled"
+    } else {
+        "failed"
+    };
+    for capability in ["timeline", "artifacts"] {
+        if let Err(update_error) = super::capability::mark_capability(
+            ctx.conn,
+            ctx.case_id,
+            &ds.id,
+            capability,
+            state,
+            Some(&error.message),
+            Some(&error.code),
+        ) {
+            tracing::error!(%update_error, capability, "Failed to close import capability state");
+        }
+    }
 }
 
 fn publish_outcome(

@@ -64,10 +64,18 @@ pub(super) fn run(
         return CapabilityOutcome::failed("EVENT_PUBLICATION_FAILED");
     }
     match result {
-        Ok(execution) => artifact_capability_state(
-            execution.retryable_failure_count,
-            execution.dto.warnings.len(),
-        ),
+        Ok(execution) => {
+            if platform == DataSourcePlatform::Linux {
+                if let Err(error) = super::linux_facts::persist(work, conn) {
+                    tracing::error!(%error, "Linux evidence facts publication failed");
+                    return CapabilityOutcome::failed("LINUX_FACTS_PUBLICATION_FAILED");
+                }
+            }
+            artifact_capability_state(
+                execution.retryable_failure_count,
+                execution.dto.warnings.len(),
+            )
+        }
         Err(AnalysisServiceError::Cancelled) => CapabilityOutcome::terminal("cancelled"),
         Err(error) => {
             tracing::error!(error = %error, "post-import artifact extraction failed");

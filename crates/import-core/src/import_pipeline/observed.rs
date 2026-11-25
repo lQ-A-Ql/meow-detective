@@ -69,13 +69,16 @@ pub(super) fn finish_import_outcome(
 ) -> Result<String, CommandError> {
     let profiler = ctx.profiler.clone();
     let ready_state = super::execute::ready_state(ctx.content_kind);
+    let started = Instant::now();
+    let result = result.and_then(|message| {
+        profile::measure_command(profiler.as_ref(), Phase::PostReady, || {
+            super::post_ready::queue_artifacts(ctx, source, source_conn, message)
+        })
+    });
     let message = profile::measure_command(profiler.as_ref(), Phase::OutcomePersistence, || {
         super::runtime::persist_outcome(ctx, source, ready_state, result)
     })?;
-    let started = Instant::now();
-    let message = profile::measure_command(profiler.as_ref(), Phase::PostReady, || {
-        super::post_ready::finish(ctx, source, source_conn, message)
-    })?;
+    super::phases::emit_data_source_ready(ctx, source)?;
     ctx.task_stage(transport::dto::TaskStageKeyDto::Analyze, true);
     profile::emit_timed_phase_profile(
         ctx,
@@ -83,7 +86,7 @@ pub(super) fn finish_import_outcome(
         transport::dto::ImportPhaseStateDto::Completed,
         99,
         started.elapsed(),
-        "Post-ready analysis complete".into(),
+        "Post-import capabilities queued".into(),
     )?;
     ctx.job_repo
         .update_outcome_counts(

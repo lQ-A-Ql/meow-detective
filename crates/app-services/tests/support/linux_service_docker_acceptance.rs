@@ -39,10 +39,6 @@ impl ImportEventSink for ProgressSink {
     fn partition_progress(&self, _: &str, partition: &str, _: u32, _: u32, percent: u32) {
         self.emit(&format!("{partition} {percent}%"));
     }
-    fn timeline_updated(&self, _: u64) {}
-    fn search_index_progress(&self, _: u32, detail: &str) {
-        self.emit(detail);
-    }
     fn data_source_imported(&self, _: &str, _: &DataSourceSummaryDto, _: &str) {}
     fn import_phase_progress(&self, progress: &ImportPhaseProgressDto) {
         self.emit(&progress.detail);

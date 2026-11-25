@@ -66,8 +66,6 @@ impl ImportEventSink for BenchmarkPhaseSink {
         _partition_pct: u32,
     ) {
     }
-    fn timeline_updated(&self, _event_count: u64) {}
-    fn search_index_progress(&self, _progress: u32, _detail: &str) {}
     fn data_source_imported(
         &self,
         _case_id: &str,

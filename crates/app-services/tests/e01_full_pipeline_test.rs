@@ -1,7 +1,7 @@
 use app_services::{case_service, datasource_service, file_service, timeline_service};
 use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
-use persistence_source::repositories::{file_repo::FileRepo, timeline_repo::TimelineRepo};
+use persistence_source::repositories::timeline_repo::TimelineRepo;
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
 use std::io::{Read, Seek, SeekFrom};
 use tempfile::TempDir;

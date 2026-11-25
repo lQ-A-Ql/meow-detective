@@ -10,17 +10,7 @@ use transport::dto::{
 pub trait ImportEventSink: Sync {
     fn task_progress(&self, _progress: &transport::dto::TaskProgressDto) {}
 
-    fn analysis_progress(&self, _progress: &transport::dto::AnalysisExtractionProgressDto) {}
-
     fn task_stage(&self, _stage: transport::dto::TaskStageKeyDto, _complete: bool) {}
-
-    fn timeline_work(
-        &self,
-        _work: transport::dto::TaskProgressWorkDto,
-        _done: u64,
-        _total: Option<u64>,
-    ) {
-    }
 
     fn job_progress(&self, job_id: &str, progress: u32, detail: &str);
 
@@ -32,10 +22,6 @@ pub trait ImportEventSink: Sync {
         total: u32,
         partition_pct: u32,
     );
-
-    fn timeline_updated(&self, event_count: u64);
-
-    fn search_index_progress(&self, progress: u32, detail: &str);
 
     fn data_source_imported(&self, case_id: &str, data_source: &DataSourceSummaryDto, job_id: &str);
 
@@ -63,10 +49,6 @@ impl ImportEventSink for NoopImportEventSink {
         _partition_pct: u32,
     ) {
     }
-
-    fn timeline_updated(&self, _event_count: u64) {}
-
-    fn search_index_progress(&self, _progress: u32, _detail: &str) {}
 
     fn data_source_imported(
         &self,

@@ -23,22 +23,20 @@ use transport::dto::{
     PartialResultDto,
 };
 
-struct CancelAtAutomaticAnalysis {
+struct CancelAtFinalization {
     token: Arc<AtomicBool>,
     ready: AtomicUsize,
 }
 
-struct FailJournalAtAutomaticAnalysis {
+struct FailJournalAtFinalization {
     journal: std::path::PathBuf,
     failed: AtomicBool,
     ready: AtomicUsize,
 }
 
-impl ImportEventSink for FailJournalAtAutomaticAnalysis {
+impl ImportEventSink for FailJournalAtFinalization {
     fn job_progress(&self, _: &str, _: u32, detail: &str) {
-        if detail.ends_with("artifact analysis started automatically")
-            && !self.failed.swap(true, Ordering::AcqRel)
-        {
+        if detail == "Finalizing..." && !self.failed.swap(true, Ordering::AcqRel) {
             fs::rename(&self.journal, self.journal.with_extension("retained")).unwrap();
             fs::write(&self.journal, b"journal directory is no longer writable").unwrap();
         }
@@ -47,34 +45,32 @@ impl ImportEventSink for FailJournalAtAutomaticAnalysis {
         self.ready.fetch_add(1, Ordering::AcqRel);
     }
     fn partition_progress(&self, _: &str, _: &str, _: u32, _: u32, _: u32) {}
-    fn timeline_updated(&self, _: u64) {}
-    fn search_index_progress(&self, _: u32, _: &str) {}
     fn import_phase_progress(&self, _: &ImportPhaseProgressDto) {}
     fn import_partial_result(&self, _: &PartialResultDto) {}
     fn cache_index_status(&self, _: &IndexCacheStatusDto) {}
     fn job_cancellation(&self, _: &JobCancellationDto) {}
 }
 
-impl ImportEventSink for CancelAtAutomaticAnalysis {
-    fn job_progress(&self, _: &str, _: u32, detail: &str) {
-        if detail.ends_with("artifact analysis started automatically") {
-            self.token.store(true, Ordering::Release);
-        }
-    }
+impl ImportEventSink for CancelAtFinalization {
+    fn job_progress(&self, _: &str, _: u32, _: &str) {}
     fn data_source_imported(&self, _: &str, _: &DataSourceSummaryDto, _: &str) {
         self.ready.fetch_add(1, Ordering::AcqRel);
     }
     fn partition_progress(&self, _: &str, _: &str, _: u32, _: u32, _: u32) {}
-    fn timeline_updated(&self, _: u64) {}
-    fn search_index_progress(&self, _: u32, _: &str) {}
-    fn import_phase_progress(&self, _: &ImportPhaseProgressDto) {}
+    fn import_phase_progress(&self, progress: &ImportPhaseProgressDto) {
+        if progress.phase == transport::dto::ImportPhaseDto::Finalize
+            && progress.state == transport::dto::ImportPhaseStateDto::Completed
+        {
+            self.token.store(true, Ordering::Release);
+        }
+    }
     fn import_partial_result(&self, _: &PartialResultDto) {}
     fn cache_index_status(&self, _: &IndexCacheStatusDto) {}
     fn job_cancellation(&self, _: &JobCancellationDto) {}
 }
 
 #[test]
-fn automatic_analysis_cancellation_retains_cancelled_outcome_and_no_ready_event() {
+fn finalization_cancellation_retains_cancelled_outcome_and_no_ready_event() {
     let scratch = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../output/repair-2026-11-13/import");
     fs::create_dir_all(&scratch).unwrap();
@@ -89,7 +85,7 @@ fn automatic_analysis_cancellation_retains_cancelled_outcome_and_no_ready_event(
     let active =
         case_service::create_case(&root.path().join("cases"), "cancel-post-ready", None).unwrap();
     let token = Arc::new(AtomicBool::new(false));
-    let sink = CancelAtAutomaticAnalysis {
+    let sink = CancelAtFinalization {
         token: token.clone(),
         ready: AtomicUsize::new(0),
     };
@@ -123,16 +119,29 @@ fn automatic_analysis_cancellation_retains_cancelled_outcome_and_no_ready_event(
                 },
                 &profiler,
             );
-            assert_eq!(
-                result.expect_err("automatic analysis must cancel").category,
-                "cancelled"
-            );
+            let failure = result.expect_err("finalization must cancel");
+            assert_eq!(failure.category, "cancelled", "{failure:?}");
             let steps = NotebookRepo::new(connection)
                 .list_steps(&active.meta.id.0, &StepFilters::default())
                 .unwrap();
             assert_eq!(steps.len(), 1);
             assert_eq!(steps[0].success, Some(false));
             assert_eq!(steps[0].error_code.as_deref(), Some("CANCELLED"));
+            let (source_state, operation_state): (String, String) = connection.query_row(
+                "SELECT import_state, state FROM data_sources
+                 JOIN storage_operations ON storage_operations.source_id=data_sources.id",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )?;
+            assert_eq!(source_state, "failed");
+            assert_eq!(operation_state, "cancelled");
+            let capabilities = persistence_sqlite::repositories::source_capability_repo::SourceCapabilityRepo::new(connection)
+                .list_for_case(&active.meta.id.0)?;
+            for capability in capabilities.iter().filter(|row| {
+                matches!(row.capability.as_str(), "timeline" | "artifacts")
+            }) {
+                assert_eq!(capability.state, "cancelled");
+            }
             Ok(())
         })
         .unwrap();
@@ -156,7 +165,7 @@ fn automatic_analysis_cancellation_retains_cancelled_outcome_and_no_ready_event(
 }
 
 #[test]
-fn automatic_analysis_journal_failure_prevents_ready_and_successful_outcome() {
+fn finalization_journal_failure_prevents_ready_and_successful_outcome() {
     let scratch = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../output/repair-2026-11-13/import");
     fs::create_dir_all(&scratch).unwrap();
@@ -173,7 +182,7 @@ fn automatic_analysis_journal_failure_prevents_ready_and_successful_outcome() {
     let token = Arc::new(AtomicBool::new(false));
     let output = root.path().join("profile");
     let profiler = ImportProfiler::with_output_directory(&output).unwrap();
-    let sink = FailJournalAtAutomaticAnalysis {
+    let sink = FailJournalAtFinalization {
         journal: fs::read_dir(&output)
             .unwrap()
             .next()
