@@ -1,6 +1,5 @@
 use super::records::structured_event_from_json;
 use super::types::{EvtxBootExtraction, EvtxStructuredEvent, EvtxStructuredExtraction};
-use crate::evtx::capability::supports_evtx_boot_shutdown_path;
 use crate::evtx::error::EvtxBootError;
 use evtx::{err::EvtxError, EvtxParser, ParserSettings};
 use serde_json::Value;
@@ -88,7 +87,6 @@ where
     R: Read + Seek,
     F: FnMut(EvtxStructuredEvent) -> Result<(), E>,
 {
-    validate_path(source_path).map_err(EvtxVisitError::Parser)?;
     let mut parser = EvtxParser::from_read_seek(reader).map_err(|error| {
         EvtxVisitError::Parser(parser_initialization_error(source_path, &error))
     })?;
@@ -144,7 +142,6 @@ pub(crate) fn extract_structured_events_from_json_records(
     records: &[Value],
     source_path: &str,
 ) -> Result<EvtxStructuredExtraction, EvtxBootError> {
-    validate_path(source_path)?;
     let mut extraction = EvtxStructuredExtraction::default();
     for record in records {
         if let Some(event) = structured_event_from_json(record, None, None, source_path) {
@@ -156,7 +153,6 @@ pub(crate) fn extract_structured_events_from_json_records(
 }
 
 fn validate_input(bytes: &[u8], source_path: &str) -> Result<(), EvtxBootError> {
-    validate_path(source_path)?;
     if bytes.len() > MAX_EVTX_ANALYSIS_BYTES {
         return Err(EvtxBootError::InputTooLarge {
             path: sanitize_evtx_path(source_path),
@@ -165,16 +161,6 @@ fn validate_input(bytes: &[u8], source_path: &str) -> Result<(), EvtxBootError> 
         });
     }
     Ok(())
-}
-
-fn validate_path(source_path: &str) -> Result<(), EvtxBootError> {
-    if supports_evtx_boot_shutdown_path(source_path) {
-        Ok(())
-    } else {
-        Err(EvtxBootError::UnsupportedPath {
-            path: sanitize_evtx_path(source_path),
-        })
-    }
 }
 
 /// Bound the parser input to complete 64KiB chunks.

@@ -71,6 +71,9 @@ enum EventClass {
 
 fn classify_event(event_id: u32, provider: Option<&str>, channel: Option<&str>) -> EventClass {
     let channel = channel.unwrap_or("");
+    if !provider_channel_matches(provider, channel) {
+        return EventClass::Ignore;
+    }
     match event_id {
         12 if provider_matches(provider, "microsoft-windows-kernel-general") => {
             EventClass::Boot(EvtxBootEventKind::OperatingSystemStarted)
@@ -78,10 +81,19 @@ fn classify_event(event_id: u32, provider: Option<&str>, channel: Option<&str>) 
         13 if provider_matches(provider, "microsoft-windows-kernel-general") => {
             EventClass::Boot(EvtxBootEventKind::OperatingSystemShutdown)
         }
-        6005 => EventClass::Boot(EvtxBootEventKind::EventLogStarted),
-        6006 => EventClass::Boot(EvtxBootEventKind::EventLogStopped),
-        6008 => EventClass::Boot(EvtxBootEventKind::UnexpectedShutdown),
-        1074 => EventClass::Boot(EvtxBootEventKind::PlannedShutdown),
+        6005 | 6006 | 6008
+            if provider_matches(provider, "eventlog")
+                || provider_matches(provider, "microsoft-windows-eventlog") =>
+        {
+            EventClass::Boot(match event_id {
+                6005 => EvtxBootEventKind::EventLogStarted,
+                6006 => EvtxBootEventKind::EventLogStopped,
+                _ => EvtxBootEventKind::UnexpectedShutdown,
+            })
+        }
+        1074 if provider_matches(provider, "user32") => {
+            EventClass::Boot(EvtxBootEventKind::PlannedShutdown)
+        }
         4104 if provider_matches(provider, "microsoft-windows-powershell") => {
             EventClass::Boot(EvtxBootEventKind::PowerShellScriptBlock)
         }
@@ -124,18 +136,41 @@ fn classify_event(event_id: u32, provider: Option<&str>, channel: Option<&str>) 
         4732 if channel.eq_ignore_ascii_case("security") => {
             EventClass::Security(EvtxSecurityEventKind::GroupMemberAdded)
         }
-        1000..=1002 if channel.eq_ignore_ascii_case("application") => {
-            EventClass::Application(match event_id {
-                1000 => EvtxApplicationEventKind::ApplicationCrash,
-                1001 => EvtxApplicationEventKind::WindowsErrorReporting,
-                _ => EvtxApplicationEventKind::ApplicationHang,
-            })
+        1000 if provider_matches(provider, "application error") => {
+            EventClass::Application(EvtxApplicationEventKind::ApplicationCrash)
         }
-        1033 | 11707 | 11708 if channel.eq_ignore_ascii_case("application") => {
+        1001 if provider_matches(provider, "windows error reporting") => {
+            EventClass::Application(EvtxApplicationEventKind::WindowsErrorReporting)
+        }
+        1002 if provider_matches(provider, "application hang") => {
+            EventClass::Application(EvtxApplicationEventKind::ApplicationHang)
+        }
+        1033 | 11707 | 11708 if provider_matches(provider, "msiinstaller") => {
             EventClass::Application(EvtxApplicationEventKind::SoftwareInstallation)
         }
         _ => EventClass::Ignore,
     }
+}
+
+fn provider_channel_matches(provider: Option<&str>, channel: &str) -> bool {
+    let expected = match provider.unwrap_or("").to_ascii_lowercase().as_str() {
+        "microsoft-windows-kernel-general"
+        | "eventlog"
+        | "microsoft-windows-eventlog"
+        | "user32" => "System",
+        "microsoft-windows-powershell" => "Microsoft-Windows-PowerShell/Operational",
+        "microsoft-windows-sysmon" => "Microsoft-Windows-Sysmon/Operational",
+        "microsoft-windows-terminalservices-localsessionmanager" => {
+            "Microsoft-Windows-TerminalServices-LocalSessionManager/Operational"
+        }
+        "microsoft-windows-windows defender" => "Microsoft-Windows-Windows Defender/Operational",
+        "microsoft-windows-security-auditing" => "Security",
+        "application error" | "application hang" | "windows error reporting" | "msiinstaller" => {
+            "Application"
+        }
+        _ => return false,
+    };
+    channel.eq_ignore_ascii_case(expected)
 }
 
 fn security_event_from_json(

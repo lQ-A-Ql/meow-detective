@@ -43,7 +43,7 @@ impl ArtifactExtractor for PrefetchExtractor {
             .map_err(|error| error.to_string())?;
         let data = match decode_prefetch_payload(raw) {
             Ok(data) => data,
-            Err(error) if error == "Not a Prefetch file" => return Ok(report(0, 0, Vec::new())),
+            Err(error) if error == "Not a Prefetch file" => return Err(error),
             Err(error) => return Ok(report(0, 0, vec![error])),
         };
         let decoded = match decode_prefetch(&data) {

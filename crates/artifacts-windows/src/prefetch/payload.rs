@@ -13,98 +13,64 @@ pub(super) fn decode_prefetch_payload(data: Vec<u8>) -> Result<Vec<u8>, String> 
 
 #[cfg(windows)]
 fn decode_mam_prefetch(data: &[u8]) -> Result<Vec<u8>, String> {
-    use windows_sys::Win32::Storage::Compression::{
-        COMPRESS_ALGORITHM_LZMS, COMPRESS_ALGORITHM_XPRESS, COMPRESS_ALGORITHM_XPRESS_HUFF,
-        COMPRESS_RAW,
+    use windows_sys::Wdk::Storage::FileSystem::{
+        RtlDecompressBufferEx, RtlGetCompressionWorkSpaceSize,
     };
+    use windows_sys::Win32::Storage::FileSystem::COMPRESSION_FORMAT_XPRESS_HUFF;
 
     if data.len() < 10 {
-        return Err("Compressed Prefetch payload is truncated".to_string());
+        return Err("Compressed Prefetch payload is truncated".into());
     }
-    let expected_size = u32::from_le_bytes(data[4..8].try_into().unwrap_or_default()) as usize;
-    if expected_size == 0 || expected_size > 128 * 1024 * 1024 {
-        return Err("Compressed Prefetch declares an invalid uncompressed size".to_string());
+    let expected = u32::from_le_bytes(data[4..8].try_into().expect("validated MAM header"));
+    if expected == 0 || expected > 128 * 1024 * 1024 {
+        return Err("Compressed Prefetch declares an invalid output size".into());
     }
-    let algorithms = [
-        COMPRESS_ALGORITHM_XPRESS_HUFF | COMPRESS_RAW,
-        COMPRESS_ALGORITHM_XPRESS | COMPRESS_RAW,
-        COMPRESS_ALGORITHM_LZMS | COMPRESS_RAW,
-        COMPRESS_ALGORITHM_XPRESS_HUFF,
-        COMPRESS_ALGORITHM_XPRESS,
-        COMPRESS_ALGORITHM_LZMS,
-    ];
-    let mut last_error = None;
-    for algorithm in algorithms {
-        match try_decompress(algorithm, &data[8..], expected_size) {
-            Ok(decoded) if decoded.get(4..8) == Some(UNCOMPRESSED_SIGNATURE.as_slice()) => {
-                return Ok(decoded);
-            }
-            Ok(_) => {
-                last_error =
-                    Some("Compressed Prefetch decompressed without an SCCA payload".to_string())
-            }
-            Err(error) => last_error = Some(error),
-        }
+    let mut buffer_workspace = 0;
+    let mut fragment_workspace = 0;
+    // SAFETY: both output arguments reference initialized u32 variables.
+    let status = unsafe {
+        RtlGetCompressionWorkSpaceSize(
+            COMPRESSION_FORMAT_XPRESS_HUFF,
+            &mut buffer_workspace,
+            &mut fragment_workspace,
+        )
+    };
+    if status != 0 {
+        return Err(format!(
+            "XPRESS Huffman workspace failed: NTSTATUS {status:#010x}"
+        ));
     }
-    Err(last_error.unwrap_or_else(|| {
-        "Compressed Prefetch could not be decompressed with supported algorithms".to_string()
-    }))
+    if fragment_workspace > 16 * 1024 * 1024 {
+        return Err("XPRESS Huffman workspace exceeds 16 MiB".into());
+    }
+    let mut workspace = vec![0u8; fragment_workspace as usize];
+    let mut decoded = vec![0u8; expected as usize];
+    let mut written = 0;
+    // SAFETY: input and output lengths match their buffers. The workspace size
+    // is supplied by the compression provider for fragment decompression.
+    let status = unsafe {
+        RtlDecompressBufferEx(
+            COMPRESSION_FORMAT_XPRESS_HUFF,
+            decoded.as_mut_ptr(),
+            expected,
+            data[8..].as_ptr(),
+            u32::try_from(data.len() - 8).map_err(|error| error.to_string())?,
+            &mut written,
+            workspace.as_mut_ptr().cast(),
+        )
+    };
+    if status != 0 {
+        return Err(format!(
+            "XPRESS Huffman decompression failed: NTSTATUS {status:#010x}"
+        ));
+    }
+    if written != expected || decoded.get(4..8) != Some(UNCOMPRESSED_SIGNATURE.as_slice()) {
+        return Err("Prefetch decoded size or SCCA signature is invalid".into());
+    }
+    Ok(decoded)
 }
 
 #[cfg(not(windows))]
 fn decode_mam_prefetch(_data: &[u8]) -> Result<Vec<u8>, String> {
-    Err("MAM-compressed Prefetch requires Windows decompression support".to_string())
-}
-
-#[cfg(windows)]
-fn try_decompress(algorithm: u32, data: &[u8], expected_size: usize) -> Result<Vec<u8>, String> {
-    use windows_sys::Win32::Storage::Compression::{
-        CreateDecompressor, Decompress, DECOMPRESSOR_HANDLE,
-    };
-
-    let mut handle: DECOMPRESSOR_HANDLE = std::ptr::null_mut();
-    // SAFETY: the API writes a new decompressor handle to the valid output pointer.
-    let created = unsafe { CreateDecompressor(algorithm, std::ptr::null(), &mut handle) };
-    if created == 0 || handle.is_null() {
-        return Err(last_os_error("CreateDecompressor failed"));
-    }
-    let _guard = DecompressorGuard(handle);
-    let mut decoded = vec![0u8; expected_size];
-    let mut actual_size = 0usize;
-    // SAFETY: input and output buffers are valid for the supplied lengths.
-    let ok = unsafe {
-        Decompress(
-            handle,
-            data.as_ptr().cast(),
-            data.len(),
-            decoded.as_mut_ptr().cast(),
-            decoded.len(),
-            &mut actual_size,
-        )
-    };
-    if ok == 0 {
-        return Err(last_os_error("Decompress failed"));
-    }
-    decoded.truncate(actual_size);
-    Ok(decoded)
-}
-
-#[cfg(windows)]
-struct DecompressorGuard(windows_sys::Win32::Storage::Compression::DECOMPRESSOR_HANDLE);
-
-#[cfg(windows)]
-impl Drop for DecompressorGuard {
-    fn drop(&mut self) {
-        if !self.0.is_null() {
-            // SAFETY: the handle was created by CreateDecompressor and is closed once.
-            unsafe {
-                windows_sys::Win32::Storage::Compression::CloseDecompressor(self.0);
-            }
-        }
-    }
-}
-
-#[cfg(windows)]
-fn last_os_error(prefix: &str) -> String {
-    format!("{prefix}: {}", std::io::Error::last_os_error())
+    Err("MAM-compressed Prefetch requires the Windows compression provider".into())
 }

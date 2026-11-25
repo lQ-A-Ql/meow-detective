@@ -4,10 +4,7 @@ pub mod capability;
 pub mod error;
 pub mod parser;
 
-pub use capability::{
-    evtx_capability, EvtxCapability, EVTX_PARSER_ID, SUPPORTED_EVENT_IDS,
-    SUPPORTED_SOURCE_PATH_SUFFIX,
-};
+pub use capability::{evtx_capability, EvtxCapability, EVTX_PARSER_ID, SUPPORTED_EVENT_IDS};
 pub use error::EvtxBootError;
 pub use parser::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,

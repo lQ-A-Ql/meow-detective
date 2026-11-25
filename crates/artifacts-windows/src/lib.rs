@@ -18,10 +18,7 @@ pub use browser::firefox::{
     parse_firefox_history, parse_firefox_session, BrowserExtension,
 };
 pub use browser::profile_detect::{detect_browser_profiles, BrowserProfile};
-pub use evtx::capability::{
-    evtx_capability, EvtxCapability, EVTX_PARSER_ID, SUPPORTED_EVENT_IDS,
-    SUPPORTED_SOURCE_PATH_SUFFIX,
-};
+pub use evtx::capability::{evtx_capability, EvtxCapability, EVTX_PARSER_ID, SUPPORTED_EVENT_IDS};
 pub use evtx::parser::{
     extract_boot_shutdown_events, extract_boot_shutdown_events_from_json_records,
     extract_structured_events, probe_newest_records, visit_structured_events_from_read_seek,

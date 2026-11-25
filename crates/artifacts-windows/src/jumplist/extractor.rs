@@ -68,8 +68,31 @@ fn extract_automatic(
     sink: &mut dyn ArtifactSink,
 ) -> Result<ExtractorReport, String> {
     let list = shell::jumplist::automatic(bytes).map_err(|error| error.to_string())?;
-    if !matches!(list.version, 1 | 3 | 4) {
-        return Err("AutomaticDestinations has no supported DestList header".into());
+    if list.version == 0 {
+        let file =
+            shell::compound::CompoundFile::parse(bytes).map_err(|error| error.to_string())?;
+        if file
+            .stream("DestList")
+            .map_err(|error| error.to_string())?
+            .is_some_and(|stream| stream.is_empty())
+        {
+            return Ok(ExtractorReport {
+                artifacts_found: 0,
+                timeline_events: 0,
+                errors: list.problems,
+            });
+        }
+        return Err("AutomaticDestinations DestList is missing or truncated".into());
+    }
+    if !matches!(list.version, 1 | 3 | 4 | 6) {
+        return Err(format!("Unsupported DestList version {}", list.version));
+    }
+    if list.destinations.is_empty() && list.problems.is_empty() {
+        return Ok(ExtractorReport {
+            artifacts_found: 0,
+            timeline_events: 0,
+            errors: Vec::new(),
+        });
     }
     let mut report = ExtractorReport {
         artifacts_found: 0,

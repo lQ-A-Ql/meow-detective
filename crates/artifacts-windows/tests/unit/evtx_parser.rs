@@ -18,6 +18,7 @@ fn extract_eventlog_started_6005_from_json() {
     let extraction = extract_boot_shutdown_events_from_json_records(
         &[json!({"Event":{"System":{
             "Provider":{"@Name":"EventLog"},
+            "Channel":"System",
             "EventID":6005,
             "EventRecordID":41,
             "TimeCreated":{"@SystemTime":"2026-01-01T00:00:00Z"}
@@ -40,9 +41,9 @@ fn extract_eventlog_started_6005_from_json() {
 fn extract_shutdown_candidates_from_json_string_event_id() {
     let extraction = extract_boot_shutdown_events_from_json_records(
         &[
-            json!({"Event":{"System":{"EventID":"6006","TimeCreated":{"SystemTime":"2026-01-01T01:00:00Z"}}}}),
-            json!({"Event":{"System":{"EventID":{"#text":"6008"},"TimeCreated":"2026-01-01T02:00:00Z"}}}),
-            json!({"Event":{"System":{"EventID":"1074","TimeCreated":{"@SystemTime":"2026-01-01T03:00:00Z"}}}}),
+            json!({"Event":{"System":{"Provider":{"@Name":"EventLog"},"Channel":"System","EventID":"6006","TimeCreated":{"SystemTime":"2026-01-01T01:00:00Z"}}}}),
+            json!({"Event":{"System":{"Provider":{"@Name":"EventLog"},"Channel":"System","EventID":{"#text":"6008"},"TimeCreated":"2026-01-01T02:00:00Z"}}}),
+            json!({"Event":{"System":{"Provider":{"@Name":"User32"},"Channel":"System","EventID":"1074","TimeCreated":{"@SystemTime":"2026-01-01T03:00:00Z"}}}}),
         ],
         SYSTEM_PATH,
     )
@@ -62,12 +63,14 @@ fn extract_kernel_general_operating_system_boundaries() {
     let records = [
         json!({"Event":{"System":{
             "Provider":{"@Name":"Microsoft-Windows-Kernel-General"},
+            "Channel":"System",
             "EventID":12,
             "EventRecordID":10,
             "TimeCreated":{"@SystemTime":"2026-01-01T00:00:00Z"}
         }}}),
         json!({"Event":{"System":{
             "Provider":{"@Name":"Microsoft-Windows-Kernel-General"},
+            "Channel":"System",
             "EventID":13,
             "EventRecordID":11,
             "TimeCreated":{"@SystemTime":"2026-01-01T01:00:00Z"}
@@ -93,11 +96,13 @@ fn extract_kernel_boundaries_from_nested_json_attributes() {
     let records = [
         json!({"Event":{"System":{
             "Provider":{"#attributes":{"Name":"Microsoft-Windows-Kernel-General"}},
+            "Channel":"System",
             "EventID":12,
             "TimeCreated":{"#attributes":{"SystemTime":"2026-01-01T00:00:00Z"}}
         }}}),
         json!({"Event":{"System":{
             "Provider":{"#attributes":{"Name":"Microsoft-Windows-Kernel-General"}},
+            "Channel":"System",
             "EventID":13,
             "TimeCreated":{"#attributes":{"SystemTime":"2026-01-01T01:00:00Z"}}
         }}}),
@@ -116,6 +121,7 @@ fn nested_event_data_attributes_preserve_named_values() {
     let records = [json!({"Event":{
         "System":{
             "Provider":{"#attributes":{"Name":"Microsoft-Windows-Kernel-General"}},
+            "Channel":"System",
             "EventID":13,
             "TimeCreated":{"#attributes":{"SystemTime":"2026-01-01T01:00:00Z"}}
         },
@@ -593,11 +599,17 @@ fn parses_real_system_evtx_fixture_boot_candidates() {
 }
 
 #[test]
-fn unsupported_path_returns_error() {
+fn exported_log_path_is_validated_by_contents() {
     assert!(matches!(
         extract_boot_shutdown_events(b"ElfFile\0", "Windows/Temp/UnknownChannel.evtx"),
-        Err(EvtxBootError::UnsupportedPath { .. })
+        Err(EvtxBootError::ParserInit { .. })
     ));
+    let bytes = std::fs::read(testing::fixtures::tiny_system_evtx()).unwrap();
+    let normal = extract_boot_shutdown_events(&bytes, SYSTEM_PATH).unwrap();
+    let exported =
+        extract_boot_shutdown_events(&bytes, "$DeletedOrphans/Logs/System.evtx").unwrap();
+    assert_eq!(normal.events.len(), exported.events.len());
+    assert!(!exported.events.is_empty());
 }
 
 #[test]
@@ -622,6 +634,7 @@ fn operational_event(
     json!({"Event":{
         "System":{
             "Provider":{"@Name":provider},
+            "Channel":format!("{provider}/Operational"),
             "EventID":event_id,
             "EventRecordID":record_id,
             "TimeCreated":{"@SystemTime":"2026-03-15T10:30:00Z"}
@@ -765,7 +778,16 @@ fn structured_record(
 ) -> serde_json::Value {
     json!({"Event":{
         "System":{
-            "Provider":{"@Name":format!("{channel} Provider")},
+            "Provider":{"@Name":match channel {
+                "Security" => "Microsoft-Windows-Security-Auditing",
+                "Application" => match event_id {
+                    1000 => "Application Error",
+                    1001 => "Windows Error Reporting",
+                    1002 => "Application Hang",
+                    _ => "MsiInstaller",
+                },
+                _ => "Unrelated-Provider",
+            }},
             "EventID":event_id,
             "EventRecordID":record_id,
             "Channel":channel,
@@ -950,6 +972,7 @@ fn boot_events_dont_have_details() {
     let extraction = extract_boot_shutdown_events_from_json_records(
         &[json!({"Event":{"System":{
             "Provider":{"@Name":"EventLog"},
+            "Channel":"System",
             "EventID":6005,
             "TimeCreated":{"@SystemTime":"2026-01-01T00:00:00Z"}
         }}})],

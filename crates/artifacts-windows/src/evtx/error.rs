@@ -17,10 +17,6 @@ pub enum EvtxBootError {
         kind: std::io::ErrorKind,
     },
 
-    /// The source path is not within the bounded EVTX surface this parser supports.
-    #[error("{path} is outside bounded EVTX parser scope")]
-    UnsupportedPath { path: String },
-
     /// The input exceeds the bounded parser size limit.
     #[error("{path} exceeds bounded EVTX parser limit of {max} bytes (got {size})")]
     InputTooLarge {
