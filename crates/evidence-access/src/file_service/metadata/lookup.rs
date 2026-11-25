@@ -34,15 +34,15 @@ pub(crate) fn file_entry_to_dto(entry: &FileEntry) -> FileEntryRowDto {
 pub(crate) fn file_entry_to_tree_node(
     entry: &FileEntry,
     depth: u32,
-    expanded: Option<bool>,
+    has_children: Option<bool>,
 ) -> FileTreeNodeDto {
-    file_entry_to_tree_node_with_partition_hint(entry, depth, expanded, false)
+    file_entry_to_tree_node_with_partition_hint(entry, depth, has_children, false)
 }
 
 pub(crate) fn file_entry_to_tree_node_with_partition_hint(
     entry: &FileEntry,
     depth: u32,
-    expanded: Option<bool>,
+    has_children: Option<bool>,
     force_partition_root: bool,
 ) -> FileTreeNodeDto {
     let (node_type, status) = if let Some(partition_status) = partition_placeholder_status(entry) {
@@ -57,7 +57,7 @@ pub(crate) fn file_entry_to_tree_node_with_partition_hint(
         id: entry.id.0.clone(),
         name: entry.name.clone(),
         depth,
-        has_children: entry.entry_type == EntryType::Directory,
+        has_children: has_children.unwrap_or(entry.entry_type == EntryType::Directory),
         data_source_id: Some(entry.data_source_id.0.clone()),
         entry_type: Some(match entry.entry_type {
             EntryType::Directory => "directory".to_string(),
@@ -70,7 +70,7 @@ pub(crate) fn file_entry_to_tree_node_with_partition_hint(
         encrypted: entry.encrypted,
         node_type: Some(node_type),
         status,
-        expanded,
+        expanded: Some(depth == 0),
         active: Some(false),
     }
 }

@@ -232,7 +232,7 @@ fn scan_directory_page(
             .map_err(|error| FileServiceError::other(error.to_string()))?;
         let filtered = page.records.into_iter().filter_map(|record| {
             let entry = record_to_domain(record);
-            if show_hidden || !entry.hidden {
+            if show_hidden || (!entry.hidden && !entry.system) {
                 total = total.saturating_add(1);
                 Some(entry)
             } else {
@@ -340,7 +340,7 @@ pub(super) fn tree(
         .map_err(|error| FileServiceError::other(error.to_string()))?;
     let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     let child_counts = repository
-        .count_child_directories_batch_visible(
+        .has_child_directories_batch_visible(
             &entries.iter().map(|entry| &entry.id).collect::<Vec<_>>(),
             show_hidden,
         )
@@ -362,14 +362,14 @@ pub(super) fn tree(
                     super::metadata::lookup::file_entry_to_tree_node_with_partition_hint(
                         &normalized,
                         0,
-                        Some(child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0),
+                        Some(child_counts.get(&entry.id.0).copied().unwrap_or(false)),
                         mark_as_partition,
                     )
                 } else {
                     super::metadata::lookup::file_entry_to_tree_node_with_partition_hint(
                         entry,
                         0,
-                        Some(child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0),
+                        Some(child_counts.get(&entry.id.0).copied().unwrap_or(false)),
                         mark_as_partition,
                     )
                 }
@@ -397,7 +397,7 @@ pub(super) fn children(
     let visible = &entries[start..end];
     let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     let child_counts = repository
-        .count_child_directories_batch_visible(
+        .has_child_directories_batch_visible(
             &visible.iter().map(|entry| &entry.id).collect::<Vec<_>>(),
             show_hidden,
         )
@@ -409,7 +409,7 @@ pub(super) fn children(
                 super::metadata::lookup::file_entry_to_tree_node(
                     entry,
                     1,
-                    Some(child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0),
+                    Some(child_counts.get(&entry.id.0).copied().unwrap_or(false)),
                 )
             })
             .collect(),

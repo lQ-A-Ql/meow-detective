@@ -67,7 +67,7 @@ pub(in crate::parallel_enum) fn update_mft_staging_paths_via_sqlite(
                 0
             } else if path.starts_with("/$DeletedOrphans/") {
                 2
-            } else if path.starts_with("/Unresolved/") {
+            } else if path.starts_with("/$Unresolved/") {
                 3
             } else {
                 1
@@ -164,13 +164,13 @@ fn resolve_mft_path(
                 let path = if deleted_records.contains(&current) {
                     format!("/$DeletedOrphans/{current}-{name}")
                 } else {
-                    format!("/Unresolved/{name}")
+                    format!("/$Unresolved/{current}-{name}")
                 };
                 budget.store(resolved, current, &path)?;
                 break path;
             }
             None => {
-                let path = format!("/Unresolved/{current}");
+                let path = format!("/$Unresolved/{current}");
                 budget.store(resolved, current, &path)?;
                 break path;
             }

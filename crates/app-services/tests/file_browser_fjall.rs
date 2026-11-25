@@ -94,6 +94,24 @@ fn write_catalog(source: &ReadWriteSourceStorageHandle) -> WriteBatchReceipt {
             false,
         ),
         record(
+            "system-dir",
+            Some("root"),
+            "system directory",
+            CatalogEntryType::Directory,
+            false,
+            true,
+            false,
+        ),
+        record(
+            "deleted-dir",
+            Some("dir"),
+            "historical directory",
+            CatalogEntryType::Directory,
+            false,
+            false,
+            true,
+        ),
+        record(
             "hidden",
             Some("root"),
             "hidden",
@@ -192,6 +210,44 @@ fn file_browser_fjall_matches_visibility_sorting_and_orphan_root_rules() {
         })
         .unwrap();
     assert!(tree.iter().any(|node| node.id == scoped("orphan")));
+    let root = tree.iter().find(|node| node.id == scoped("root")).unwrap();
+    assert!(root.has_children);
+    assert_eq!(root.expanded, Some(true));
+    let children = case
+        .with_conn(|connection| {
+            file_service::get_file_children_for_case(
+                connection,
+                &case.case_root,
+                &case.meta.id,
+                &scoped("root"),
+                0,
+                50,
+                false,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    assert_eq!(children.children.len(), 1);
+    assert_eq!(children.children[0].id, scoped("dir"));
+    assert!(children.children[0].has_children);
+    assert_eq!(children.children[0].expanded, Some(false));
+    let deleted_children = case
+        .with_conn(|connection| {
+            file_service::get_file_children_for_case(
+                connection,
+                &case.case_root,
+                &case.meta.id,
+                &scoped("dir"),
+                0,
+                50,
+                true,
+            )
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
+        })
+        .unwrap();
+    assert_eq!(deleted_children.children.len(), 1);
+    assert!(deleted_children.children[0].deleted);
+    assert!(!deleted_children.children[0].has_children);
 
     let rows = case
         .with_conn(|connection| {

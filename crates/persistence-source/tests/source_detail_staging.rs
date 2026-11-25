@@ -60,6 +60,11 @@ fn stage_catalog_with_orphan(root: &std::path::Path, partition: usize) -> rusqli
             [],
         )
         .unwrap();
+    stage.execute(
+        "INSERT INTO file_entries(id,parent_id,data_source_id,path,name,entry_type,partition_index,encrypted)
+         VALUES ('unresolved-orphan','raw-orphan','source-1','/$Unresolved/42-stray','stray','directory',1,NULL)",
+        [],
+    ).unwrap();
     stage
 }
 
@@ -148,7 +153,7 @@ fn catalog_staging_groups_top_level_orphans_under_a_bounded_root_node() {
             "Partition 1"
         )
         .unwrap(),
-        1
+        2
     );
     let store = persistence_source::detail::open_store(&main)
         .unwrap()
@@ -180,16 +185,31 @@ fn catalog_staging_groups_top_level_orphans_under_a_bounded_root_node() {
         )
         .unwrap()
         .records;
-    assert_eq!(groups.len(), 1);
-    assert_eq!(groups[0].name, "$DeletedOrphans");
-    assert_eq!(groups[0].path, "/$DeletedOrphans");
-    assert!(groups[0].hidden);
-    assert!(groups[0].system);
+    assert_eq!(groups.len(), 2);
+    let deleted_group = groups
+        .iter()
+        .find(|group| group.name == "$DeletedOrphans")
+        .unwrap();
+    let unresolved_group = groups
+        .iter()
+        .find(|group| group.name == "$Unresolved")
+        .unwrap();
+    assert_eq!(deleted_group.path, "/$DeletedOrphans");
+    assert!(deleted_group.hidden);
+    assert!(deleted_group.system);
+    assert_eq!(
+        catalog
+            .get(&snapshot, "source-1", "unresolved-orphan")
+            .unwrap()
+            .unwrap()
+            .parent_id,
+        Some(unresolved_group.id.clone())
+    );
     let orphan = catalog
         .list_directories_by_parent(
             &snapshot,
             "source-1",
-            Some(&groups[0].id),
+            Some(&deleted_group.id),
             None,
             persistence_fjall::ScanDirection::Forward,
             10,
@@ -198,7 +218,10 @@ fn catalog_staging_groups_top_level_orphans_under_a_bounded_root_node() {
         .records;
     assert_eq!(orphan.len(), 1);
     assert_eq!(orphan[0].id, "deleted-orphan");
-    assert_eq!(orphan[0].parent_id.as_deref(), Some(groups[0].id.as_str()));
+    assert_eq!(
+        orphan[0].parent_id.as_deref(),
+        Some(deleted_group.id.as_str())
+    );
 }
 
 #[test]

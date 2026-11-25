@@ -83,10 +83,10 @@ fn narrow_paths_keep_facts_and_exact_root_orphan_deleted_cycle_values() {
             (5, "".into(), None, 0),
             (42, "Windows".into(), Some(5), 1),
             (43, "Windows/a.txt".into(), Some(42), 1),
-            (100, "/Unresolved/stray.txt".into(), Some(5), 3),
+            (100, "/$Unresolved/100-stray.txt".into(), Some(5), 3),
             (101, "/$DeletedOrphans/101-gone.txt".into(), Some(5), 2),
-            (200, "/Unresolved/cycleB/cycleA".into(), Some(201), 3),
-            (201, "/Unresolved/cycleB".into(), Some(200), 3)
+            (200, "/$Unresolved/201-cycleB/cycleA".into(), Some(201), 3),
+            (201, "/$Unresolved/201-cycleB".into(), Some(200), 3)
         ]
     );
     assert_eq!(

@@ -33,7 +33,7 @@ pub fn get_file_tree_real_with_visibility(
     let mut roots = repo.find_root_directories_visible(show_hidden)?;
     sort_directories_for_tree(&mut roots);
 
-    let child_counts = repo.count_child_directories_batch_visible(
+    let child_counts = repo.has_child_directories_batch_visible(
         &roots.iter().map(|r| &r.id).collect::<Vec<_>>(),
         show_hidden,
     )?;
@@ -52,7 +52,7 @@ pub fn get_file_tree_real_with_visibility(
     roots
         .iter()
         .map(|entry| {
-            let has_children = child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0;
+            let has_children = child_counts.get(&entry.id.0).copied().unwrap_or(false);
             let partitions = partitions_for_entry(&partitions_by_ds, entry);
             if looks_like_raw_fs_root_name(&entry.name) {
                 let mut normalized = entry.clone();
@@ -155,7 +155,7 @@ pub fn get_file_children_lazy_with_visibility(
     sort_directories_for_tree(&mut children);
     let child_depth = directory_depth(&parent).saturating_add(1);
 
-    let child_counts = repo.count_child_directories_batch_visible(
+    let child_counts = repo.has_child_directories_batch_visible(
         &children.iter().map(|c| &c.id).collect::<Vec<_>>(),
         show_hidden,
     )?;
@@ -163,7 +163,7 @@ pub fn get_file_children_lazy_with_visibility(
     let child_nodes = children
         .iter()
         .map(|entry| {
-            let has_children = child_counts.get(&entry.id.0).copied().unwrap_or(0) > 0;
+            let has_children = child_counts.get(&entry.id.0).copied().unwrap_or(false);
             file_entry_to_tree_node(entry, child_depth, Some(has_children))
         })
         .collect();

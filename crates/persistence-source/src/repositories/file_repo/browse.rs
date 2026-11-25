@@ -277,29 +277,11 @@ impl FileRepo<'_> {
         ))
     }
 
-    pub fn count_child_directories_batch(
-        &self,
-        parent_ids: &[&FileEntryId],
-    ) -> DbResult<HashMap<String, i64>> {
-        self.count_child_directories_batch_filtered(parent_ids, false)
-    }
-
-    pub fn count_child_directories_batch_visible(
+    pub fn has_child_directories_batch_visible(
         &self,
         parent_ids: &[&FileEntryId],
         show_hidden: bool,
-    ) -> DbResult<HashMap<String, i64>> {
-        if show_hidden {
-            return self.count_child_directories_batch(parent_ids);
-        }
-        self.count_child_directories_batch_filtered(parent_ids, true)
-    }
-
-    fn count_child_directories_batch_filtered(
-        &self,
-        parent_ids: &[&FileEntryId],
-        visible_only: bool,
-    ) -> DbResult<HashMap<String, i64>> {
+    ) -> DbResult<HashMap<String, bool>> {
         if parent_ids.is_empty() {
             return Ok(HashMap::new());
         }
@@ -312,7 +294,7 @@ impl FileRepo<'_> {
         let mut result = HashMap::new();
         for parent_id in parent_ids {
             let mut cursor = None;
-            let mut count = 0u64;
+            let mut found = false;
             loop {
                 persistence_sqlite::read_operation::ensure_active()?;
                 let page = catalog
@@ -322,30 +304,23 @@ impl FileRepo<'_> {
                         Some(&parent_id.0),
                         cursor.as_deref(),
                         persistence_fjall::ScanDirection::Forward,
-                        512,
+                        if show_hidden { 1 } else { 64 },
                     )
                     .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-                count = count.saturating_add(
-                    page.records
-                        .iter()
-                        .filter(|record| {
-                            !record.deleted && (!visible_only || (!record.hidden && !record.system))
-                        })
-                        .count() as u64,
-                );
+                if page
+                    .records
+                    .iter()
+                    .any(|record| show_hidden || (!record.hidden && !record.system))
+                {
+                    found = true;
+                    break;
+                }
                 cursor = page.next_cursor;
                 if cursor.is_none() {
                     break;
                 }
             }
-            if count > 0 {
-                let count = i64::try_from(count).map_err(|_| {
-                    persistence_sqlite::DbError::System(
-                        "child directory count exceeds SQLite range".into(),
-                    )
-                })?;
-                result.insert(parent_id.0.clone(), count);
-            }
+            result.insert(parent_id.0.clone(), found);
         }
         Ok(result)
     }
