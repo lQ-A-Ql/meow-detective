@@ -189,26 +189,20 @@ fn replacement_index_rejects_artifacts_from_other_data_sources() {
 }
 
 #[test]
-fn native_replacement_matches_only_its_unsigned_legacy_family() {
+fn native_replacement_requires_an_explicit_matching_producer() {
     let scopes = [replacement(
         "object",
         AnalysisOutputProducer::Prefix("windows.native.activity."),
     )];
     let index = ReplacementIndex::new(&scopes);
-    let mut legacy = artifact_record(Some("object"), DATA_SOURCE_ID, "");
-    legacy.artifact_type = "LNK".into();
-    legacy.attrs = serde_json::json!({});
-    assert!(index.matches_artifact(&legacy, DATA_SOURCE_ID));
-    legacy.artifact_type = "JumpList".into();
-    assert!(index.matches_artifact(&legacy, DATA_SOURCE_ID));
-    legacy.artifact_type = "Prefetch".into();
-    assert!(!index.matches_artifact(&legacy, DATA_SOURCE_ID));
-    legacy.artifact_type = "LNK".into();
-    legacy.attrs = serde_json::json!({ "extractorId": "other.parser" });
-    assert!(!index.matches_artifact(&legacy, DATA_SOURCE_ID));
-    legacy.attrs = serde_json::json!({});
-    legacy.source_object_id = Some("other-object".into());
-    assert!(!index.matches_artifact(&legacy, DATA_SOURCE_ID));
+    let mut record = artifact_record(Some("object"), DATA_SOURCE_ID, "");
+    record.artifact_type = "LNK".into();
+    record.attrs = serde_json::json!({});
+    assert!(!index.matches_artifact(&record, DATA_SOURCE_ID));
+    record.attrs = serde_json::json!({ "extractorId": "windows.native.activity.lnk" });
+    assert!(index.matches_artifact(&record, DATA_SOURCE_ID));
+    record.source_object_id = Some("other-object".into());
+    assert!(!index.matches_artifact(&record, DATA_SOURCE_ID));
 }
 
 #[test]

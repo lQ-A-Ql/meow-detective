@@ -35,9 +35,6 @@ pub(super) fn network_adapter_artifacts(
                     Value::String(mac.clone()),
                 );
             }
-            if let Some(ip) = adapter.ip_addresses.first() {
-                attrs.insert("ipAddress".to_string(), Value::String(ip.clone()));
-            }
             attrs.insert(
                 "ipAddresses".to_string(),
                 string_array_value(&adapter.ip_addresses),
@@ -46,9 +43,6 @@ pub(super) fn network_adapter_artifacts(
                 "subnetMasks".to_string(),
                 string_array_value(&adapter.subnet_masks),
             );
-            if let Some(gateway) = adapter.gateways.first() {
-                attrs.insert("gateway".to_string(), Value::String(gateway.clone()));
-            }
             attrs.insert(
                 "gateways".to_string(),
                 string_array_value(&adapter.gateways),

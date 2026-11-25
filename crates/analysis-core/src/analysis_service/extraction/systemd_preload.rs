@@ -76,13 +76,8 @@ impl SystemdPreload {
         &self,
         conn: &rusqlite::Connection,
     ) -> Result<(), AnalysisServiceError> {
-        // Preserve the legacy flat-database extraction API. Source-backed
-        // production analyses always have their source_meta summary store.
-        if !persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(conn)
-            .table_available()?
-        {
-            return Ok(());
-        }
+        persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(conn)
+            .read("data_source_id")?;
         let tx = conn.unchecked_transaction()?;
         for (source, (count, complete)) in &self.markers {
             persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&tx).write(&format!("systemd.inventory:{source}"),&serde_json::json!({"schemaVersion":2,"unitCount":count,"complete":complete,"generatedAt":chrono::Utc::now().to_rfc3339()}).to_string())?;

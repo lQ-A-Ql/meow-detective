@@ -83,9 +83,9 @@ fn load_network_adapters(
                 description: optional_string_attr(&row.attrs, "description"),
                 mac_address: optional_string_attr(&row.attrs, "macAddress"),
                 permanent_mac_address: optional_string_attr(&row.attrs, "permanentMacAddress"),
-                ip_addresses: string_vec_or_legacy(&row.attrs, "ipAddresses", "ipAddress"),
+                ip_addresses: string_vec_attr(&row.attrs, "ipAddresses"),
                 subnet_masks: string_vec_attr(&row.attrs, "subnetMasks"),
-                gateways: string_vec_or_legacy(&row.attrs, "gateways", "gateway"),
+                gateways: string_vec_attr(&row.attrs, "gateways"),
                 dhcp_enabled: optional_bool_attr(&row.attrs, "dhcpEnabled"),
                 dhcp_server: optional_string_attr(&row.attrs, "dhcpServer"),
                 dns_servers: string_vec_attr(&row.attrs, "dnsServers"),
@@ -94,21 +94,6 @@ fn load_network_adapters(
             })
             .collect(),
     )
-}
-
-fn string_vec_or_legacy(
-    attrs: &std::collections::BTreeMap<String, serde_json::Value>,
-    array_key: &str,
-    legacy_key: &str,
-) -> Vec<String> {
-    let values = string_vec_attr(attrs, array_key);
-    if values.is_empty() {
-        optional_string_attr(attrs, legacy_key)
-            .into_iter()
-            .collect()
-    } else {
-        values
-    }
 }
 
 fn load_system_services(conn: &Connection) -> Result<Vec<SystemServiceDto>, AnalysisServiceError> {

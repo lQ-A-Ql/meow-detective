@@ -164,8 +164,10 @@ fn network_adapter_artifact_preserves_physical_and_tcpip_fields() {
     assert_eq!(attrs["description"], "Intel Ethernet Controller");
     assert_eq!(attrs["permanentMacAddress"], "00:11:22:33:44:56");
     assert_eq!(attrs["ipAddresses"][0], "192.0.2.10");
+    assert!(!attrs.contains_key("ipAddress"));
     assert_eq!(attrs["subnetMasks"][0], "255.255.255.0");
     assert_eq!(attrs["gateways"][0], "192.0.2.1");
+    assert!(!attrs.contains_key("gateway"));
     assert_eq!(attrs["pnpInstanceId"], "PCI\\VEN_8086&DEV_1234");
 }
 
