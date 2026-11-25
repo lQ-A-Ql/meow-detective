@@ -1,4 +1,4 @@
-use super::result::ready_corrupt_input;
+use super::result::{ready_corrupt_input, ready_warning};
 use super::*;
 use crate::analysis_service::capability::CandidateReadPolicy;
 use crate::analysis_service::extraction::linux::linux_candidate_read_limit;
@@ -85,15 +85,7 @@ where
 
     let bytes = match read_candidate_bytes(coordinator, &candidate, capability, read_limit) {
         Ok(bytes) => bytes,
-        Err(CandidateExtractionError::Warning(warning)) => {
-            return Ok(ready_warning(candidate, capability, warning));
-        }
-        Err(CandidateExtractionError::CorruptInput(reason)) => {
-            return Ok(ready_corrupt_input(candidate, capability, reason))
-        }
-        Err(CandidateExtractionError::Cancelled) => {
-            return Err(AnalysisServiceError::Cancelled);
-        }
+        Err(error) => return super::result::ready_read_error(candidate, capability, error),
     };
     if capability.read_policy == CandidateReadPolicy::Full && bytes.len() as u64 != candidate.size {
         let warning = format!(
@@ -130,15 +122,7 @@ where
     let input = if capability.key == PLUGIN_CAPABILITY_KEY {
         let companions = match read_plugin_companions(coordinator, &candidate, capability) {
             Ok(companions) => companions,
-            Err(CandidateExtractionError::Warning(warning)) => {
-                return Ok(ready_warning(candidate, capability, warning));
-            }
-            Err(CandidateExtractionError::CorruptInput(reason)) => {
-                return Ok(ready_corrupt_input(candidate, capability, reason))
-            }
-            Err(CandidateExtractionError::Cancelled) => {
-                return Err(AnalysisServiceError::Cancelled);
-            }
+            Err(error) => return super::result::ready_read_error(candidate, capability, error),
         };
         PreparedCandidateInput::Plugin {
             primary: bytes,
@@ -472,17 +456,5 @@ fn ready_capability_limit(
         candidate,
         capability,
         kind: CandidateCompletionKind::capability_limit(warning),
-    })
-}
-
-fn ready_warning(
-    candidate: EvidenceCandidate,
-    capability: AnalysisCapability,
-    warning: String,
-) -> PreparedWork<PreparedCandidate, CandidateCompletion> {
-    PreparedWork::Ready(CandidateCompletion {
-        candidate,
-        capability,
-        kind: CandidateCompletionKind::Warning(warning),
     })
 }

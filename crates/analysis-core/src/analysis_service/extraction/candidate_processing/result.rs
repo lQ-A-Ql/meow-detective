@@ -64,3 +64,32 @@ pub(super) fn ready_corrupt_input(
         kind: CandidateCompletionKind::corrupt_input(warning),
     })
 }
+
+pub(super) fn ready_read_error(
+    candidate: EvidenceCandidate,
+    capability: AnalysisCapability,
+    error: super::CandidateExtractionError,
+) -> Result<super::PreparedWork<super::PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
+{
+    match error {
+        super::CandidateExtractionError::Warning(warning) => {
+            Ok(ready_warning(candidate, capability, warning))
+        }
+        super::CandidateExtractionError::CorruptInput(reason) => {
+            Ok(ready_corrupt_input(candidate, capability, reason))
+        }
+        super::CandidateExtractionError::Cancelled => Err(AnalysisServiceError::Cancelled),
+    }
+}
+
+pub(super) fn ready_warning(
+    candidate: EvidenceCandidate,
+    capability: AnalysisCapability,
+    warning: String,
+) -> super::PreparedWork<super::PreparedCandidate, CandidateCompletion> {
+    super::PreparedWork::Ready(CandidateCompletion {
+        candidate,
+        capability,
+        kind: CandidateCompletionKind::Warning(warning),
+    })
+}
