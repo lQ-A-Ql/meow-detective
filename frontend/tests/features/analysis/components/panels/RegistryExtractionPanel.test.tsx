@@ -31,12 +31,13 @@ describe('RegistryExtractionPanel', () => {
     fireEvent.mouseDown(screen.getByRole('tab', { name: '原始键值' }), { button: 0 });
     expect(screen.getByText('来源暂不可读')).toBeDefined();
     fireEvent.mouseDown(screen.getByRole('tab', { name: '系统硬件' }), { button: 0 });
-    expect(screen.getByText('来源暂不可读')).toBeDefined();
+    expect(screen.getByText('配置单元可能未保存该信息，或对应缓存不可读取。')).toBeDefined();
     expect(screen.queryByText('注册表提取')).not.toBeInTheDocument();
   });
 
   it('renders SAM user data when provided', () => {
     const structured: RegistryStructuredSummary = {
+      hardwareDevices: [],
       samUsers: [
         {
           username: 'Administrator',
@@ -91,6 +92,7 @@ describe('RegistryExtractionPanel', () => {
     const { container } = render(
       createElement(RegistryExtractionPanel, {
         structured: {
+          hardwareDevices: [],
           hiveOverviews: [],
           samUsers: [],
           userAssistEntries: [],

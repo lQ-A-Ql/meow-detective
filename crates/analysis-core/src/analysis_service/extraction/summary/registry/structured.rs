@@ -23,6 +23,7 @@ pub(super) fn load_registry_structured_summary(
 
     Ok(RegistryStructuredSummaryDto {
         hive_overviews: core.hive_overviews,
+        hardware_devices: system.hardware_devices,
         sam_users: core.sam_users,
         user_assist_entries: core.user_assist_entries,
         network_adapters: system.network_adapters,
@@ -64,6 +65,7 @@ fn structured_status(
         && core.hive_overviews.is_empty()
         && core.network_profiles.is_empty()
         && system.network_adapters.is_empty()
+        && system.hardware_devices.is_empty()
         && system.usb_devices.is_empty()
         && system.mounted_devices.is_empty()
         && system.shutdown_times.is_empty()

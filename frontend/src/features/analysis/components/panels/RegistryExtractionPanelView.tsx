@@ -5,7 +5,7 @@ import { DenseDataTable } from '@/components/tables/DenseDataTable';
 import { DenseDataTableFrame } from '@/components/tables/DenseDataTableFrame';
 import { ExtractionTableSection } from './helpers';
 import { NativeRegistryBrowserContainer } from '@/features/registry-browser/containers/NativeRegistryBrowserContainer';
-import { NativeRegistryHardwareContainer } from '@/features/registry-hardware/containers/NativeRegistryHardwareContainer';
+import { RegistryHardwareContainer } from '@/features/registry-hardware/containers/RegistryHardwareContainer';
 import { createRegistryColumns } from './registry-columns';
 
 const TABLE_CONTENT_CLASS = 'm-0 flex-col overflow-hidden data-[state=active]:flex data-[state=inactive]:hidden';
@@ -71,11 +71,7 @@ export function RegistryExtractionPanelView({
           </TabsContent>
           <TabsContent value="hardware" className={TABLE_CONTENT_CLASS}>
             {activeTab === 'hardware' ? (
-              dataSourceId ? (
-                <NativeRegistryHardwareContainer dataSourceId={dataSourceId} />
-              ) : (
-                <p className="registry-browser-message">{t('registryBrowser.errors.sourceUnavailable')}</p>
-              )
+              <RegistryHardwareContainer devices={data?.hardwareDevices ?? []} warnings={data?.warnings ?? []} />
             ) : null}
           </TabsContent>
           <TabsContent value="network" className={TABLE_CONTENT_CLASS}>

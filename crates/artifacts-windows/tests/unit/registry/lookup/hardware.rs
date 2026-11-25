@@ -191,3 +191,36 @@ fn system_hardware_uses_selected_control_set_and_keeps_64_bit_gpu_capacity() {
     assert!(info.devices[0].key_path.starts_with("ControlSet002\\"));
     assert!(info.warnings.is_empty());
 }
+
+#[test]
+fn snapshot_hardware_inventory_reads_smbios_cache_through_value_ranges() {
+    let raw = raw_table(&[cpu()]);
+    let mut data = empty_hive("SYSTEM");
+    write_nk(
+        &mut data,
+        0x20,
+        "SYSTEM",
+        &[("Select", 0x200), ("ControlSet001", 0x400)],
+        &[],
+    );
+    write_nk(&mut data, 0x200, "Select", &[], &[0x1200]);
+    write_dword_value(&mut data, 0x1200, "Current", 1);
+    write_nk(
+        &mut data,
+        0x400,
+        "ControlSet001",
+        &[("Services", 0x600)],
+        &[],
+    );
+    write_nk(&mut data, 0x600, "Services", &[("mssmbios", 0x800)], &[]);
+    write_nk(&mut data, 0x800, "mssmbios", &[("Data", 0xa00)], &[]);
+    write_nk(&mut data, 0xa00, "Data", &[], &[0x1300]);
+    write_binary_value(&mut data, 0x1300, "SMBiosData", &raw, 0x1800);
+
+    let snapshot = crate::registry::RegistrySnapshot::prepare(&data, None, None).unwrap();
+    let info = snapshot.hardware_inventory().unwrap();
+    assert!(info.warnings.is_empty());
+    assert_eq!(info.devices.len(), 1);
+    assert_eq!(info.devices[0].name, "Fixture CPU");
+    assert_eq!(info.devices[0].source_offset, Some(8));
+}

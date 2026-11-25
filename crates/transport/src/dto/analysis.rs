@@ -44,10 +44,10 @@ pub use crate::dto::analysis_registry::{
     AmcacheApplicationDto, AmcacheApplicationFileDto, AppCompatLayerDto, CachedCredentialDto,
     InstalledSoftwareDto, LastVisitedMruEntryDto, LsaPackageDto, LsaSecretDto, MountedDeviceDto,
     MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto, RegistryExtractionSummaryDto,
-    RegistryHiveOverviewDto, RegistryNetworkAdapterDto, RegistryStructuredSummaryDto,
-    RegistryValueDto, RunMruEntryDto, SamUserAccountDto, SecurityPolicyDto, ShellbagEntryDto,
-    ShimCacheEntryDto, ShutdownTimeDto, SystemServiceDto, UsbDeviceHistoryDto, UserAssistEntryDto,
-    WinlogonConfigDto,
+    RegistryHardwareDeviceDto, RegistryHiveOverviewDto, RegistryNetworkAdapterDto,
+    RegistryStructuredSummaryDto, RegistryValueDto, RunMruEntryDto, SamUserAccountDto,
+    SecurityPolicyDto, ShellbagEntryDto, ShimCacheEntryDto, ShutdownTimeDto, SystemServiceDto,
+    UsbDeviceHistoryDto, UserAssistEntryDto, WinlogonConfigDto,
 };
 pub use crate::dto::analysis_system::{
     AnalysisBootRecordDto, AnalysisNetworkAdapterDto, AnalysisSystemInfoDto,

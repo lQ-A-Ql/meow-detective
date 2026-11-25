@@ -1,16 +1,18 @@
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::extraction::artifact_query::query_artifact_rows;
 use crate::analysis_service::extraction::attr_mapping::{
-    bool_attr, optional_bool_attr, optional_string_attr, optional_u32_attr, string_attr,
-    string_vec_attr,
+    bool_attr, details_attr, optional_bool_attr, optional_string_attr, optional_u32_attr,
+    string_attr, string_vec_attr,
 };
 use rusqlite::Connection;
 use transport::dto::{
-    LsaPackageDto, MountedDeviceDto, RegistryNetworkAdapterDto, RegistryRunKeyDto,
-    ShimCacheEntryDto, ShutdownTimeDto, SystemServiceDto, UsbDeviceHistoryDto, WinlogonConfigDto,
+    LsaPackageDto, MountedDeviceDto, RegistryHardwareDeviceDto, RegistryNetworkAdapterDto,
+    RegistryRunKeyDto, ShimCacheEntryDto, ShutdownTimeDto, SystemServiceDto, UsbDeviceHistoryDto,
+    WinlogonConfigDto,
 };
 
 pub(super) struct SystemRegistryData {
+    pub(super) hardware_devices: Vec<RegistryHardwareDeviceDto>,
     pub(super) network_adapters: Vec<RegistryNetworkAdapterDto>,
     pub(super) system_services: Vec<SystemServiceDto>,
     pub(super) usb_devices: Vec<UsbDeviceHistoryDto>,
@@ -24,6 +26,7 @@ pub(super) struct SystemRegistryData {
 
 impl SystemRegistryData {
     pub(super) fn load(conn: &Connection) -> Result<Self, AnalysisServiceError> {
+        let hardware_devices = load_hardware_devices(conn)?;
         let network_adapters = load_network_adapters(conn)?;
         let system_services = load_system_services(conn)?;
         let usb_devices = load_usb_devices(conn)?;
@@ -34,6 +37,7 @@ impl SystemRegistryData {
         let winlogon_config = load_winlogon_config(conn)?;
         let lsa_packages = load_lsa_packages(conn)?;
         Ok(Self {
+            hardware_devices,
             network_adapters,
             system_services,
             usb_devices,
@@ -45,6 +49,26 @@ impl SystemRegistryData {
             lsa_packages,
         })
     }
+}
+
+fn load_hardware_devices(
+    conn: &Connection,
+) -> Result<Vec<RegistryHardwareDeviceDto>, AnalysisServiceError> {
+    Ok(
+        query_artifact_rows(conn, &["RegistryHardwareDevice"], 0, 10_000)?
+            .into_iter()
+            .map(|row| RegistryHardwareDeviceDto {
+                kind: string_attr(&row.attrs, "kind"),
+                device_id: string_attr(&row.attrs, "deviceId"),
+                name: string_attr(&row.attrs, "name"),
+                manufacturer: optional_string_attr(&row.attrs, "manufacturer"),
+                properties: details_attr(&row.attrs, "properties"),
+                key_path: string_attr(&row.attrs, "keyPath"),
+                value_name: optional_string_attr(&row.attrs, "valueName"),
+                source_offset: optional_u32_attr(&row.attrs, "sourceOffset"),
+            })
+            .collect(),
+    )
 }
 
 fn load_network_adapters(

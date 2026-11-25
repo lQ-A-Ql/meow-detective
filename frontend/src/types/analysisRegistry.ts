@@ -262,6 +262,7 @@ export interface AppCompatLayerEntry {
 // Registry Structured Summary (aggregates all structured views)
 export interface RegistryStructuredSummary {
   hiveOverviews: RegistryHiveOverview[];
+  hardwareDevices: RegistryHardwareDevice[];
   samUsers: SamUserAccount[];
   userAssistEntries: UserAssistEntry[];
   networkAdapters: RegistryNetworkAdapter[];
@@ -289,6 +290,17 @@ export interface RegistryStructuredSummary {
   status: AnalysisParseStatus;
   generatedAt: string;
   warnings: string[];
+}
+
+export interface RegistryHardwareDevice {
+  kind: string;
+  deviceId: string;
+  name: string;
+  manufacturer?: string;
+  properties: Record<string, string>;
+  keyPath: string;
+  valueName?: string;
+  sourceOffset?: number;
 }
 
 export interface SecurityPolicyEntry {

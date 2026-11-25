@@ -1,6 +1,8 @@
 use super::ntuser::user_assist_artifacts;
 use super::sam::sam_user_artifacts;
-use super::system::{network_adapter_artifacts, shutdown_time_artifacts};
+use super::system::{
+    hardware_device_artifacts, network_adapter_artifacts, shutdown_time_artifacts,
+};
 use super::warnings::govern_registry_warnings;
 use super::*;
 use crate::analysis_service::candidates::EvidenceCandidate;
@@ -165,6 +167,36 @@ fn network_adapter_artifact_preserves_physical_and_tcpip_fields() {
     assert_eq!(attrs["subnetMasks"][0], "255.255.255.0");
     assert_eq!(attrs["gateways"][0], "192.0.2.1");
     assert_eq!(attrs["pnpInstanceId"], "PCI\\VEN_8086&DEV_1234");
+}
+
+#[test]
+fn hardware_device_artifact_preserves_exact_properties_and_source_provenance() {
+    let device = artifacts_windows::registry::lookup::hardware::RegistryHardwareRecord {
+        kind: "ram".into(),
+        device_id: "ram-1".into(),
+        name: "DIMM_A1".into(),
+        manufacturer: Some("Fixture Vendor".into()),
+        properties: std::collections::BTreeMap::from([
+            ("capacityBytes".into(), u64::MAX.to_string()),
+            ("configuredSpeedMtS".into(), "6000".into()),
+        ]),
+        key_path: "ControlSet001\\Services\\mssmbios\\Data".into(),
+        value_name: Some("SMBiosData".into()),
+        source_offset: Some(8),
+    };
+    let artifacts =
+        hardware_device_artifacts(&candidate("Windows/System32/config/SYSTEM"), &[device]);
+    assert_eq!(artifacts.len(), 1);
+    assert_eq!(artifacts[0].family, "RegistryHardwareDevice");
+    assert_eq!(
+        artifacts[0].attrs["properties"]["capacityBytes"],
+        "18446744073709551615"
+    );
+    assert_eq!(artifacts[0].attrs["sourceOffset"], 8);
+    assert_eq!(
+        artifacts[0].attrs["keyPath"],
+        "ControlSet001\\Services\\mssmbios\\Data"
+    );
 }
 
 #[test]

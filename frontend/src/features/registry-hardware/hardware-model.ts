@@ -4,7 +4,7 @@ import {
   REGISTRY_HARDWARE_GROUPS,
   REGISTRY_HARDWARE_PROPERTIES,
 } from '@/design/registry-hardware';
-import type { RegistryHardwareDevice } from '@/types/registryHardware';
+import type { RegistryHardwareDevice } from '@/types/analysisRegistry';
 
 function exactBytes(value?: string) {
   return value && /^\d{1,20}$/.test(value) ? BigInt(value) : undefined;
@@ -54,7 +54,7 @@ export function hardwareGroups(devices: RegistryHardwareDevice[], t: TFunction) 
           return value ? [{ label: t(`registryHardware.properties.${key}`), value }] : [];
         }),
       })),
-  })).filter((group) => group.rows.length > 0 || ['cpu', 'gpu', 'ram'].includes(group.kind));
+  })).filter((group) => group.rows.length > 0);
 }
 
 export function hardwareMemorySummary(devices: RegistryHardwareDevice[], t: TFunction) {

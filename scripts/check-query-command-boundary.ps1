@@ -45,7 +45,6 @@ $policies = [ordered]@{
   "file_commands/registry.rs" = @("browse_registry_key")
   "registry_browser_commands/discovery.rs" = @("list_registry_hives")
   "registry_browser_commands/opening.rs" = @("open_registry_hive")
-  "registry_browser_commands/hardware.rs" = @("get_registry_hardware")
   "registry_browser_commands/resolve.rs" = @("resolve_registry_key")
   "registry_browser_commands/subkeys.rs" = @("list_registry_subkeys")
   "registry_browser_commands/values.rs" = @("list_registry_values")

@@ -1,8 +1,9 @@
 use super::super::context::RegistryExtractionContext;
 use super::super::shared::registry_field_artifacts;
 use super::super::system::{
-    lsa_package_artifacts, mounted_device_artifacts, network_adapter_artifacts,
-    shimcache_artifacts, shutdown_time_artifacts, system_service_artifacts, usb_device_artifacts,
+    hardware_device_artifacts, lsa_package_artifacts, mounted_device_artifacts,
+    network_adapter_artifacts, shimcache_artifacts, shutdown_time_artifacts,
+    system_service_artifacts, usb_device_artifacts,
 };
 
 pub(in crate::analysis_service::extraction::registry) fn extract(
@@ -16,6 +17,7 @@ pub(in crate::analysis_service::extraction::registry) fn extract(
     extract_shutdown_time(context);
     extract_shimcache(context);
     extract_lsa_packages(context);
+    extract_hardware(context);
 }
 
 fn extract_fields(context: &mut RegistryExtractionContext<'_>) {
@@ -152,6 +154,22 @@ fn extract_lsa_packages(context: &mut RegistryExtractionContext<'_>) {
         Err(err) => context.warnings.push(format!(
             "{} LSA package extraction failed: {}",
             context.candidate.path, err
+        )),
+    }
+}
+
+fn extract_hardware(context: &mut RegistryExtractionContext<'_>) {
+    match context.bytes.hardware_inventory() {
+        Ok(info) => {
+            context
+                .outcome
+                .artifacts
+                .extend(hardware_device_artifacts(context.candidate, &info.devices));
+            context.warnings.extend(info.warnings);
+        }
+        Err(error) => context.warnings.push(format!(
+            "{} hardware inventory extraction failed: {error}",
+            context.candidate.path
         )),
     }
 }

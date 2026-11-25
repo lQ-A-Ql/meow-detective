@@ -1,15 +1,14 @@
-import { registryHardwareClient, type RegistryHardwareClient } from '@/lib/api/registry-hardware';
-import type { RegistryBrowserContext } from '@/features/registry-browser/types';
+import type { RegistryHardwareDevice } from '@/types/analysisRegistry';
 import { useRegistryHardwareModel } from '../use-registry-hardware-model';
 import { RegistryHardwareView } from '../components/RegistryHardwareView';
 
 export function RegistryHardwareContainer({
-  context,
-  client = registryHardwareClient,
+  devices,
+  warnings,
 }: {
-  context: RegistryBrowserContext;
-  client?: RegistryHardwareClient;
+  devices: RegistryHardwareDevice[];
+  warnings: string[];
 }) {
-  const model = useRegistryHardwareModel(client, context);
+  const model = useRegistryHardwareModel(devices, warnings);
   return <RegistryHardwareView model={model} />;
 }

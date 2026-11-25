@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-mod hardware;
 mod hives;
 mod keys;
 mod range;
@@ -11,7 +10,6 @@ mod session;
 mod shared;
 mod values;
 
-pub use hardware::*;
 pub use hives::*;
 pub use keys::*;
 pub use range::*;

@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 use crate::dto::analysis_base::AnalysisParseStatusDto;
 
@@ -25,6 +26,22 @@ pub struct RegistryValueDto {
     pub data: String,
     pub parser: String,
     pub created_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryHardwareDeviceDto {
+    pub kind: String,
+    pub device_id: String,
+    pub name: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub manufacturer: Option<String>,
+    pub properties: BTreeMap<String, String>,
+    pub key_path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_offset: Option<u32>,
 }
 
 // SAM User Account (structured view)
@@ -429,6 +446,7 @@ pub struct AmcacheApplicationFileDto {
 #[serde(rename_all = "camelCase")]
 pub struct RegistryStructuredSummaryDto {
     pub hive_overviews: Vec<RegistryHiveOverviewDto>,
+    pub hardware_devices: Vec<RegistryHardwareDeviceDto>,
     pub sam_users: Vec<SamUserAccountDto>,
     pub user_assist_entries: Vec<UserAssistEntryDto>,
     pub network_adapters: Vec<RegistryNetworkAdapterDto>,

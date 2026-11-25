@@ -103,6 +103,65 @@ pub(super) fn network_adapter_artifacts(
         .collect()
 }
 
+pub(super) fn hardware_device_artifacts(
+    candidate: &EvidenceCandidate,
+    devices: &[artifacts_windows::registry::lookup::hardware::RegistryHardwareRecord],
+) -> Vec<Artifact> {
+    devices
+        .iter()
+        .map(|device| {
+            let mut attrs = base_attrs(candidate);
+            attrs.insert("kind".to_string(), Value::String(device.kind.clone()));
+            attrs.insert(
+                "deviceId".to_string(),
+                Value::String(device.device_id.clone()),
+            );
+            attrs.insert("name".to_string(), Value::String(device.name.clone()));
+            if let Some(manufacturer) = &device.manufacturer {
+                attrs.insert(
+                    "manufacturer".to_string(),
+                    Value::String(manufacturer.clone()),
+                );
+            }
+            attrs.insert(
+                "properties".to_string(),
+                Value::Object(
+                    device
+                        .properties
+                        .iter()
+                        .map(|(key, value)| (key.clone(), Value::String(value.clone())))
+                        .collect(),
+                ),
+            );
+            attrs.insert(
+                "keyPath".to_string(),
+                Value::String(device.key_path.clone()),
+            );
+            if let Some(value_name) = &device.value_name {
+                attrs.insert("valueName".to_string(), Value::String(value_name.clone()));
+            }
+            if let Some(source_offset) = device.source_offset {
+                attrs.insert(
+                    "sourceOffset".to_string(),
+                    Value::Number(source_offset.into()),
+                );
+            }
+            attrs.insert(
+                "parser".to_string(),
+                Value::String("registry.system.hardware".to_string()),
+            );
+            make_artifact(
+                "RegistryHardwareDevice",
+                format!("Hardware {}: {}", device.kind, device.name),
+                format!("{} ({})", device.name, device.key_path),
+                candidate,
+                "registry.system.hardware.v1",
+                attrs,
+            )
+        })
+        .collect()
+}
+
 pub(super) fn system_service_artifacts(
     candidate: &EvidenceCandidate,
     services: &[artifacts_windows::SystemServiceEntry],

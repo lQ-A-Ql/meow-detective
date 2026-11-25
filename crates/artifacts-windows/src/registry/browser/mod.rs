@@ -1,5 +1,4 @@
 //! Bounded, read-only base-hive browsing. No transaction replay or recovery.
-mod hardware;
 mod search;
 mod search_walk;
 
