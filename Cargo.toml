@@ -160,7 +160,6 @@ skia-jpeg-scanner = { path = "vendor/skia-jpeg-scanner" }
 img-parts = "=0.4.2"
 tinybmp = "=0.7.0"
 crc32fast = "1.5"
-crc32c = "0.6"
 tar = { version = "0.4", default-features = false }
 containers-pst = { path = "crates/containers-pst" }
 containers-bolt = { path = "crates/containers-bolt", default-features = false }

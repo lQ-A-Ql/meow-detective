@@ -6,7 +6,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-chrono.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
@@ -28,6 +27,7 @@ fs-ntfs.workspace = true
 fs-xfs.workspace = true
 
 [dev-dependencies]
+chrono.workspace = true
 tempfile.workspace = true
 evidence-block.workspace = true
 ceph-wire.workspace = true

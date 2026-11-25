@@ -42,10 +42,7 @@ persistence-sqlite.workspace = true
 persistence-source.workspace = true
 evidence-core.workspace = true
 volume-bitlocker.workspace = true
-artifacts-core.workspace = true
-image-e01 = { path = "../../../crates/image-e01" }
 fs-ntfs = { path = "../../../crates/fs-ntfs" }
-fs-fat = { path = "../../../crates/fs-fat" }
 rusqlite.workspace = true
 uuid.workspace = true
 tracing.workspace = true

@@ -9,7 +9,6 @@ license.workspace = true
 serde.workspace = true
 chrono.workspace = true
 thiserror.workspace = true
-base64.workspace = true
 mail-parser.workspace = true
 io-mbox.workspace = true
 

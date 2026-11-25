@@ -6,9 +6,6 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
-serde.workspace = true
-chrono.workspace = true
-thiserror.workspace = true
 evidence-core.workspace = true
 tracing.workspace = true
 flate2 = { workspace = true }

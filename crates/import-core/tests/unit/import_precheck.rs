@@ -65,7 +65,7 @@ fn pre_check_rejects_ceph_rbd_before_filesystem_access() {
 
     assert_eq!(
         result.errors,
-        vec!["Ceph RBD derived data sources are not ordinary import sources"]
+        vec!["Derived data sources require case registration"]
     );
     assert_eq!(result.plan.total_files, 0);
     assert_eq!(result.plan.total_size, 0);

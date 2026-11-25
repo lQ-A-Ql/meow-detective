@@ -170,7 +170,6 @@ dependencies = [
  "transport",
  "uuid",
  "zeroize",
- "zip",
 ]
 
 [[package]]
@@ -400,9 +399,7 @@ version = "0.1.1"
 dependencies = [
  "chrono",
  "domain",
- "serde",
  "serde_json",
- "thiserror 2.0.21",
  "uuid",
 ]
 
@@ -1308,7 +1305,6 @@ dependencies = [
 name = "containers-pst"
 version = "0.1.1"
 dependencies = [
- "base64 0.22.1",
  "chrono",
  "io-mbox",
  "mail-parser",
@@ -2263,7 +2259,6 @@ dependencies = [
  "chrono",
  "crc32fast",
  "flate2",
- "serde",
  "sha2 0.10.9",
  "tar",
  "tempfile",
@@ -2296,7 +2291,6 @@ dependencies = [
  "ahash",
  "bitflags 2.13.0",
  "bumpalo",
- "byteorder",
  "crc32fast",
  "encoding_rs",
  "glob",
@@ -2304,7 +2298,6 @@ dependencies = [
  "jiff",
  "log",
  "rayon",
- "serde",
  "serde_json",
  "sonic-rs",
  "thiserror 2.0.21",
@@ -2505,7 +2498,6 @@ name = "forensics-desktop"
 version = "0.1.1"
 dependencies = [
  "app-services",
- "artifacts-core",
  "axum",
  "base64 0.22.1",
  "chrono",
@@ -2519,11 +2511,9 @@ dependencies = [
  "evidence-core",
  "evidence-emulation",
  "evidence-mount",
- "fs-fat",
  "fs-ntfs",
  "headers",
  "hex",
- "image-e01",
  "infrastructure",
  "mimalloc",
  "persistence-source",
@@ -2578,8 +2568,6 @@ dependencies = [
  "evidence-core",
  "rust-fs-btrfs",
  "rust-fs-core",
- "serde",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2598,8 +2586,6 @@ version = "0.1.1"
 dependencies = [
  "chrono",
  "evidence-core",
- "serde",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2630,10 +2616,7 @@ dependencies = [
 name = "fs-fat"
 version = "0.1.1"
 dependencies = [
- "chrono",
  "evidence-core",
- "serde",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -2652,7 +2635,6 @@ dependencies = [
  "chrono",
  "compcol",
  "evidence-core",
- "serde",
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
@@ -3572,14 +3554,11 @@ dependencies = [
 name = "image-e01"
 version = "0.1.1"
 dependencies = [
- "chrono",
  "evidence-core",
  "flate2",
- "serde",
  "sha2 0.10.9",
  "tempfile",
  "testing",
- "thiserror 2.0.21",
  "tracing",
 ]
 
@@ -3622,7 +3601,6 @@ version = "0.1.1"
 dependencies = [
  "analysis-core",
  "artifact-storage",
- "artifacts-core",
  "ceph-reconstruction",
  "ceph-wire",
  "chrono",
@@ -5853,9 +5831,7 @@ dependencies = [
  "chrono",
  "domain",
  "infrastructure",
- "serde",
  "serde_json",
- "thiserror 2.0.21",
 ]
 
 [[package]]
@@ -6995,7 +6971,6 @@ dependencies = [
  "ceph-reconstruction",
  "ceph-wire",
  "chrono",
- "crc32c",
  "domain",
  "evidence-access",
  "evidence-block",

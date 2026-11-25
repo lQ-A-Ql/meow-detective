@@ -8,7 +8,6 @@ license.workspace = true
 [dependencies]
 base64.workspace = true
 chrono.workspace = true
-crc32c.workspace = true
 flate2.workspace = true
 hex.workspace = true
 lz4_flex.workspace = true
@@ -32,7 +31,6 @@ persistence-source.workspace = true
 source-kernel.workspace = true
 ceph-reconstruction.workspace = true
 ceph-wire.workspace = true
-image-e01.workspace = true
 evidence-access.workspace = true
 tempfile.workspace = true
 evidence-core.workspace = true
@@ -51,6 +49,7 @@ fs-ntfs.workspace = true
 fs-xfs.workspace = true
 
 [dev-dependencies]
+image-e01.workspace = true
 rusqlite = { workspace = true, features = ["functions"] }
 tempfile.workspace = true
 sha2.workspace = true
