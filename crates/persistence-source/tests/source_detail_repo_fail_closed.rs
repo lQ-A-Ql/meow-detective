@@ -20,7 +20,7 @@ fn source_detail_repositories_fail_closed_without_fjall_storage() {
         .contains("source detail storage is missing"));
 
     let error = repository
-        .registry_hive_candidates(&source, "", 10)
+        .registry_log_companions(&source, "Windows/System32/config/SYSTEM")
         .unwrap_err();
     assert!(error
         .to_string()

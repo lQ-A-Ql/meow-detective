@@ -1,103 +1,47 @@
-//! Stable, bounded discovery of live registry candidates in one source catalog.
-use super::{push_bounded, FileRepo, MAX_FILE_QUERY_ROWS};
+//! Bounded registry companion lookup through the source path index.
+use super::FileRepo;
 use domain::{DataSourceId, FileEntry};
 use persistence_sqlite::DbResult;
 
 impl FileRepo<'_> {
-    /// Match exact source-relative sibling paths, including partition prefixes.
-    /// A bounded result preserves duplicate-name ambiguity instead of selecting
-    /// an arbitrary log when the catalog contains conflicting entries.
     pub fn registry_log_companions(
         &self,
         source: &DataSourceId,
         hive_path: &str,
     ) -> DbResult<Vec<FileEntry>> {
+        let owner = crate::detail::source_id(self.conn)?.ok_or_else(|| {
+            persistence_sqlite::DbError::System("source identity is missing".into())
+        })?;
+        if owner != source.0 {
+            return Err(persistence_sqlite::DbError::System(
+                "source catalog owner mismatch".into(),
+            ));
+        }
         let path = hive_path.replace('\\', "/");
-        if crate::detail::source_id(self.conn)?.is_some() {
-            let paths = [format!("{path}.LOG1"), format!("{path}.LOG2")];
-            let mut entries = Vec::new();
-            let mut counts = [0; 2];
-            self.visit_all(Some(&source.0), |entry| {
-                if !entry.deleted && !entry.is_directory() {
-                    let normalized = entry.path.replace('\\', "/");
-                    for (index, path) in paths.iter().enumerate() {
-                        if counts[index] < 2 && normalized.eq_ignore_ascii_case(path) {
-                            push_bounded(&mut entries, entry.clone())?;
-                            counts[index] += 1;
-                        }
-                    }
-                }
-                Ok(())
-            })?;
-            return Ok(entries);
+        let mut entries = Vec::new();
+        for candidate in [format!("{path}.LOG1"), format!("{path}.LOG2")] {
+            entries.extend(
+                self.exact_path_entries(&source.0, &candidate)?
+                    .into_iter()
+                    .filter(|entry| !entry.deleted && !entry.is_directory())
+                    .take(2),
+            );
         }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
-    }
-    pub fn registry_hive_candidates(
-        &self,
-        source: &DataSourceId,
-        after: &str,
-        limit: u32,
-    ) -> DbResult<Vec<FileEntry>> {
-        if crate::detail::source_id(self.conn)?.is_some() {
-            if limit as usize > MAX_FILE_QUERY_ROWS {
-                return Err(persistence_sqlite::DbError::System(
-                    "registry candidate query exceeds the bounded row limit".into(),
-                ));
-            }
-            let mut entries = Vec::new();
-            let mut after = after.to_owned();
-            while entries.len() < limit as usize {
-                let page = self.index_page(&source.0, &after, 512)?;
-                if page.is_empty() {
-                    break;
-                }
-                for entry in page {
-                    after = entry.id.0.clone();
-                    if is_hive(&entry) {
-                        entries.push(entry);
-                    }
-                    if entries.len() == limit as usize {
-                        break;
-                    }
-                }
-            }
-            return Ok(entries);
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
+        Ok(entries)
     }
 
-    pub fn registry_hive_candidate_count(&self, source: &DataSourceId) -> DbResult<u64> {
-        if crate::detail::source_id(self.conn)?.is_some() {
-            let mut count = 0;
-            self.visit_all(Some(&source.0), |entry| {
-                count += u64::from(is_hive(&entry));
-                Ok(())
-            })?;
-            return Ok(count);
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
+    fn exact_path_entries(&self, source: &str, path: &str) -> DbResult<Vec<FileEntry>> {
+        let store = crate::detail::require_source_store(self.conn)?;
+        let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+        let snapshot = catalog.read_snapshot();
+        let page = catalog
+            .list_files_by_path(&snapshot, source, Some((path, "")), 64)
+            .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+        Ok(page
+            .records
+            .into_iter()
+            .filter(|record| record.path.eq_ignore_ascii_case(path))
+            .map(crate::detail::file_entry)
+            .collect())
     }
-}
-
-fn is_hive(entry: &FileEntry) -> bool {
-    !entry.deleted
-        && !entry.is_directory()
-        && matches!(
-            entry.name.to_ascii_lowercase().as_str(),
-            "system"
-                | "software"
-                | "sam"
-                | "security"
-                | "default"
-                | "ntuser.dat"
-                | "usrclass.dat"
-                | "amcache.hve"
-        )
 }

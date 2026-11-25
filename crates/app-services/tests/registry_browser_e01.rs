@@ -1,6 +1,10 @@
 //! Private, opt-in end-to-end source catalog/session regression.
 #[path = "support/registry_browser_case.rs"]
 mod fixture;
+#[path = "support/registry_hive_entry.rs"]
+mod hive_entry_fixture;
+#[path = "support/registry_browser_hive.rs"]
+mod hive_fixture;
 use app_services::{
     datasource_service::{detect_image_filesystem, ImageFilesystemKind},
     registry_browser_service::*,
@@ -84,7 +88,7 @@ fn registry_browser_reads_real_hives_and_hot_navigation_preserves_source_bytes()
             let Ok(file)=fs.preview_file(&path) else {continue};
             let id=format!("mft:0:{}",file.inode());
             let mut bytes=Vec::new();fs.open_file(&path).unwrap().read_to_end(&mut bytes).unwrap();
-            fixture::entry(&source,"sample-source",&id,&format!("[P0]/{path}"),bytes.len() as u64);
+            hive_entry_fixture::hive_entry(&source,&case.active.meta.id.0,"sample-source",&id,&format!("[P0]/{path}"),bytes.len() as u64);
             FileRepo::new(&source).set_partition_index_by_id(&domain::FileEntryId(id.clone()),0).unwrap();
             present.push((id,path,bytes));
         }

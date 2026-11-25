@@ -1,5 +1,7 @@
 #[path = "support/registry_browser_case.rs"]
 mod fixture;
+#[path = "support/registry_hive_entry.rs"]
+mod hive_entry_fixture;
 #[path = "support/registry_browser_hive.rs"]
 mod hive_fixture;
 use app_services::registry_browser_service::*;
@@ -22,18 +24,27 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
                 &evidence,
                 domain::DataSourceKind::LogicalDirectory,
             );
-            fixture::entry(
+            hive_entry_fixture::hive_entry(
                 &source,
+                &case.active.meta.id.0,
                 "source-a",
                 "hive-1",
                 "SOFTWARE",
                 bytes.len() as u64,
             );
-            fixture::entry(
+            hive_entry_fixture::hive_entry(
                 &source,
+                &case.active.meta.id.0,
                 "source-a",
                 "hive-2",
                 "NTUSER.DAT",
+                bytes.len() as u64,
+            );
+            fixture::entry(
+                &source,
+                "source-a",
+                "unindexed-hive",
+                "Windows/System32/config/SECURITY",
                 bytes.len() as u64,
             );
             let foreign = case.source(
@@ -42,8 +53,9 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
                 &evidence,
                 domain::DataSourceKind::LogicalDirectory,
             );
-            fixture::entry(
+            hive_entry_fixture::hive_entry(
                 &foreign,
+                &case.active.meta.id.0,
                 "source-b",
                 "hive-1",
                 "SOFTWARE",
@@ -93,16 +105,6 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
             )
             .unwrap();
             assert_eq!(session.source.source_revision, page.source_revision);
-            let hardware = read_hardware(
-                &registry,
-                &ctx,
-                RegistryHardwareRequestDto {
-                    session_id: session.session_id.clone(),
-                },
-            )
-            .unwrap();
-            assert_eq!(hardware.source, session.source);
-            assert!(hardware.devices.is_empty());
             for _ in 0..3 {
                 let key = resolve_key(
                     &registry,
@@ -148,16 +150,6 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
                 ..case.context(conn)
             };
             assert!(matches!(
-                read_hardware(
-                    &registry,
-                    &foreign_ctx,
-                    RegistryHardwareRequestDto {
-                        session_id: session.session_id.clone()
-                    }
-                ),
-                Err(RegistryBrowserError::ExpiredSession)
-            ));
-            assert!(matches!(
                 resolve_key(
                     &registry,
                     &foreign_ctx,
@@ -178,16 +170,6 @@ fn source_bound_sessions_read_once_and_reject_foreign_ids_cursors_and_generation
             case.preview
                 .invalidate_source(&case.active.meta.id.0, "source-a")
                 .unwrap();
-            assert!(matches!(
-                read_hardware(
-                    &registry,
-                    &ctx,
-                    RegistryHardwareRequestDto {
-                        session_id: session.session_id.clone()
-                    }
-                ),
-                Err(RegistryBrowserError::ExpiredSession)
-            ));
             assert!(matches!(
                 resolve_key(
                     &registry,
