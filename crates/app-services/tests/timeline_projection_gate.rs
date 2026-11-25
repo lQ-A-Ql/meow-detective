@@ -1,8 +1,7 @@
 //! Read-side timeline projection gate, status, and single-flight rebuild tests.
 //!
 //! Fixture sources register through the case DB and use the sealed-generation
-//! layout; no real case or private sample is touched. A missing timeline marker
-//! must behave exactly like the legacy complete case.
+//! layout. Published projection state controls every read.
 
 use app_services::{
     case_service,
@@ -45,8 +44,7 @@ fn record(source_id: &str, id: &str, when: chrono::DateTime<Utc>) -> TimelineRec
 }
 
 /// Register, open, populate, and seal a fixture source. When `marker` is given
-/// the explicit timeline projection state marker is written; otherwise the
-/// marker stays absent (legacy complete).
+/// the explicit timeline projection state marker is written.
 fn publish_source(
     case: &app_services::active_case::ActiveCase,
     source_id: &str,
@@ -119,9 +117,9 @@ fn event_record(source_id: &str, id: &str, when: chrono::DateTime<Utc>) -> Timel
 }
 
 #[test]
-fn missing_marker_legacy_behavior_unchanged() {
+fn missing_marker_blocks_explicit_reads_and_is_skipped_by_case_queries() {
     let temporary = tempfile::tempdir().unwrap();
-    let case = case_service::create_case(temporary.path(), "legacy marker", None).unwrap();
+    let case = case_service::create_case(temporary.path(), "missing marker", None).unwrap();
     let when = Utc.with_ymd_and_hms(2026, 11, 18, 0, 0, 0).unwrap();
     let records = vec![
         event_record("legacy", "e1", when),
@@ -144,30 +142,37 @@ fn missing_marker_legacy_behavior_unchanged() {
             },
         )
     });
-    assert_eq!(page.total, 2);
-    assert_eq!(page.items.len(), 2);
+    assert_eq!(page.total, 0);
+    assert!(page.items.is_empty());
 
     let total = run_with_conn(&case, |conn| {
         count_timeline_events_for_case(conn, &case.case_root, &case.meta.id)
     });
-    assert_eq!(total, 2);
+    assert_eq!(total, 0);
 
-    let event = run_with_conn(&case, |conn| {
-        get_timeline_event_by_id_for_case(conn, &case.case_root, &case.meta.id, "ds:legacy:e1")
-    });
-    assert!(event.is_some());
+    assert!(case
+        .with_conn(|conn| {
+            Ok(get_timeline_event_by_id_for_case(
+                conn,
+                &case.case_root,
+                &case.meta.id,
+                "ds:legacy:e1",
+            )
+            .is_err())
+        })
+        .unwrap());
 
     let facets = run_with_conn(&case, |conn| {
         get_timeline_facets_for_case(conn, &case.case_root, &case.meta.id, None, None, None, 60)
     });
-    assert_eq!(facets.total_events, 2);
+    assert_eq!(facets.total_events, 0);
 
     let status = run_with_conn(&case, |conn| {
         get_timeline_projection_status(conn, &case.case_root, &case.meta.id)
     });
     assert_eq!(
         status.state,
-        transport::dto::TimelineProjectionStateDto::Complete
+        transport::dto::TimelineProjectionStateDto::Deferred
     );
     assert_eq!(status.sources.len(), 1);
     assert_eq!(status.sources[0].data_source_id, "legacy");
@@ -178,7 +183,12 @@ fn building_source_is_skipped_by_cross_source_readers_but_blocks_explicit_querie
     let temporary = tempfile::tempdir().unwrap();
     let case = case_service::create_case(temporary.path(), "building gate", None).unwrap();
     let when = Utc.with_ymd_and_hms(2026, 11, 18, 0, 0, 0).unwrap();
-    publish_source(&case, "ready", &[event_record("ready", "r1", when)], None);
+    publish_source(
+        &case,
+        "ready",
+        &[event_record("ready", "r1", when)],
+        Some((TimelineProjectionState::Complete, None)),
+    );
     publish_source(
         &case,
         "building",
@@ -241,7 +251,12 @@ fn deferred_source_is_skipped_by_cross_source_readers() {
     let temporary = tempfile::tempdir().unwrap();
     let case = case_service::create_case(temporary.path(), "deferred gate", None).unwrap();
     let when = Utc.with_ymd_and_hms(2026, 11, 18, 0, 0, 0).unwrap();
-    publish_source(&case, "ready", &[event_record("ready", "r1", when)], None);
+    publish_source(
+        &case,
+        "ready",
+        &[event_record("ready", "r1", when)],
+        Some((TimelineProjectionState::Complete, None)),
+    );
     publish_source(
         &case,
         "deferred",
@@ -332,7 +347,12 @@ fn status_lists_skipped_sources_and_takes_worst_state() {
     let temporary = tempfile::tempdir().unwrap();
     let case = case_service::create_case(temporary.path(), "status worst", None).unwrap();
     let when = Utc.with_ymd_and_hms(2026, 11, 18, 0, 0, 0).unwrap();
-    publish_source(&case, "ready", &[event_record("ready", "r1", when)], None);
+    publish_source(
+        &case,
+        "ready",
+        &[event_record("ready", "r1", when)],
+        Some((TimelineProjectionState::Complete, None)),
+    );
     publish_source(
         &case,
         "building",

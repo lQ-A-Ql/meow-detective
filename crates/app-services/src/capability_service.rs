@@ -9,8 +9,6 @@ use persistence_sqlite::repositories::source_capability_repo::{
 use rusqlite::Connection;
 use std::path::Path;
 use thiserror::Error;
-mod backfill;
-pub use backfill::backfill_case_capabilities;
 use transport::dto::{
     CapabilityKindDto, CapabilityMatrixDto, CapabilityProgressDto, CapabilityStateDto,
     SourceCapabilityDto, TimelineProjectionSourceStatusDto, TimelineProjectionStateDto,
@@ -204,10 +202,9 @@ fn timeline_mapping(
                 (CapabilityStateDto::Deferred, entry.reason.clone(), false)
             }
         },
-        // Legacy sources without a marker retain their published status.
         Some(_) => (
-            CapabilityStateDto::Ready,
-            Some("legacy marker absent".to_string()),
+            CapabilityStateDto::Pending,
+            Some("timeline projection state is missing".to_string()),
             true,
         ),
         None => (
@@ -292,21 +289,6 @@ fn kind_wire(kind: CapabilityKindDto) -> &'static str {
         CapabilityKindDto::Graph => "graph",
         CapabilityKindDto::PlatformFacts => "platformFacts",
         CapabilityKindDto::Artifacts => "artifacts",
-    }
-}
-
-fn state_wire(state: CapabilityStateDto) -> &'static str {
-    match state {
-        CapabilityStateDto::Pending => "pending",
-        CapabilityStateDto::Queued => "queued",
-        CapabilityStateDto::Running => "running",
-        CapabilityStateDto::Ready => "ready",
-        CapabilityStateDto::Partial => "partial",
-        CapabilityStateDto::Deferred => "deferred",
-        CapabilityStateDto::Failed => "failed",
-        CapabilityStateDto::Stale => "stale",
-        CapabilityStateDto::Cancelled => "cancelled",
-        CapabilityStateDto::NotApplicable => "notApplicable",
     }
 }
 

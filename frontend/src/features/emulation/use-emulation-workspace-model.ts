@@ -137,14 +137,7 @@ function isEmulationSource(source: DataSourceSummary, matrix: CapabilityMatrix |
   if (!kindOk) {
     return false;
   }
-  // Matrix row wins when present; the legacy ready/ready_metadata check keeps
-  // metadata-only sources emulable and covers old cases without matrix rows.
-  return isSourceCapabilityEligible(
-    matrix,
-    source.id,
-    'catalog',
-    source.importState === 'ready' || source.importState === 'ready_metadata',
-  );
+  return isSourceCapabilityEligible(matrix, source.id, 'catalog');
 }
 
 function toSourceView(source: DataSourceSummary): EmulationSourceView {

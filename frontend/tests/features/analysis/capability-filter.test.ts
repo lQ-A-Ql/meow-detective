@@ -56,10 +56,10 @@ describe('selectAnalysisCandidates', () => {
     expect(selectAnalysisCandidates(data, m)).toEqual([]);
   });
 
-  it('falls back to legacy importState ready when the matrix has no row', () => {
+  it('requires an explicit catalog capability even when importState is ready', () => {
     const data = [source('ready-one'), source('importing-one', { importState: 'importing' })];
-    expect(selectAnalysisCandidates(data, undefined).map((s) => s.id)).toEqual(['ready-one']);
-    expect(selectAnalysisCandidates(data, matrix([])).map((s) => s.id)).toEqual(['ready-one']);
+    expect(selectAnalysisCandidates(data, undefined)).toEqual([]);
+    expect(selectAnalysisCandidates(data, matrix([]))).toEqual([]);
   });
 
   it('rejects unsupported platforms regardless of matrix state', () => {

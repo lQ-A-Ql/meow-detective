@@ -6,6 +6,8 @@ import {
   useEmulationWorkspaceModel,
   type EmulationWorkspaceModel,
 } from '@/features/emulation/use-emulation-workspace-model';
+import { CAPABILITY_MATRIX_QUERY_KEY } from '@/features/capability/hooks';
+import type { DataSourceSummary } from '@/types/models';
 
 const mocks = vi.hoisted(() => ({
   currentCase: vi.fn(),
@@ -66,6 +68,17 @@ function queryResult(data: unknown) {
 function createWrapper() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const sources: DataSourceSummary[] = mocks.dataSources().data;
+  client.setQueryData([...CAPABILITY_MATRIX_QUERY_KEY, 'case-1'], {
+    sources: sources.map((source) => ({
+      dataSourceId: source.id,
+      capability: 'catalog',
+      state: 'ready',
+      revision: 1,
+      derived: false,
+      updatedAt: source.importedAt,
+    })),
   });
   return function Wrapper({ children }: { children: ReactNode }) {
     return createElement(QueryClientProvider, { client }, children);

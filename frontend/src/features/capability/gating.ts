@@ -27,27 +27,15 @@ export function capabilityStateFor(
   return findSourceCapability(matrix, dataSourceId, capability)?.state;
 }
 
-/**
- * Resolve source eligibility against the capability matrix.
- *
- * Legacy fallback: when the matrix carries no row for this source/capability
- * (old cases backfilled before the capability wave, or the `get_source_capabilities`
- * command failed), the caller's `legacyEligible` decision — the previous
- * `importState`-based check — wins so existing cases keep behaving exactly as
- * before. A present row always wins, even when it is `pending`/`failed`.
- */
+/** Admit a source only when its current capability row allows the operation. */
 export function isSourceCapabilityEligible(
   matrix: CapabilityMatrix | undefined,
   dataSourceId: string,
   capability: CapabilityKind,
-  legacyEligible: boolean,
   allowStates: ReadonlySet<CapabilityState> = CATALOG_OPEN_STATES,
 ): boolean {
   const row = findSourceCapability(matrix, dataSourceId, capability);
-  if (!row) {
-    return legacyEligible;
-  }
-  return allowStates.has(row.state);
+  return row !== undefined && allowStates.has(row.state);
 }
 
 export function isCapabilityActive(state: CapabilityState | undefined): boolean {

@@ -1,6 +1,6 @@
 //! Read-side gate for the timeline projection state marker and the ReadWrite
 //! deferred marker write. The marker family is `timeline_projection_state`;
-//! a missing marker means a legacy store and passes the gate.
+//! each published source must carry an explicit projection state.
 
 use super::{ReadOnlySourceStorageHandle, ReadWriteSourceStorageHandle, StorageRuntimeError};
 use persistence_fjall::{
@@ -10,8 +10,7 @@ use persistence_fjall::{
 };
 
 impl ReadOnlySourceStorageHandle {
-    /// Read the current projection marker. A legacy store without a marker
-    /// returns `None`.
+    /// Read the current projection marker.
     pub fn timeline_projection_state(
         &self,
         snapshot: &SourceReadSnapshot,
@@ -24,16 +23,19 @@ impl ReadOnlySourceStorageHandle {
         decode_timeline_projection_state(&envelope).map_err(StorageRuntimeError::Source)
     }
 
-    /// Reject reads while the projection is `Building` or `Deferred`; a
-    /// missing marker or `Complete` passes.
+    /// Admit reads only for an explicitly completed projection.
     pub fn require_timeline_projection_complete(
         &self,
         snapshot: &SourceReadSnapshot,
         source_id: &str,
     ) -> Result<(), StorageRuntimeError> {
-        let Some(payload) = self.timeline_projection_state(snapshot, source_id)? else {
-            return Ok(());
-        };
+        let payload = self
+            .timeline_projection_state(snapshot, source_id)?
+            .ok_or_else(|| StorageRuntimeError::TimelineProjectionNotReady {
+                source_id: source_id.to_owned(),
+                status: "missing".to_owned(),
+                reason: Some("timeline projection state is missing".to_owned()),
+            })?;
         match payload.status {
             persistence_fjall::TimelineProjectionState::Complete => Ok(()),
             status => Err(StorageRuntimeError::TimelineProjectionNotReady {

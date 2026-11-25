@@ -49,15 +49,7 @@ export function useSearchWorkspaceModel() {
   }
   const { data: capabilityMatrix } = useCapabilityMatrix();
   const indexSources = useMemo(
-    () =>
-      (dataSources ?? []).filter((source) =>
-        isSourceCapabilityEligible(
-          capabilityMatrix,
-          source.id,
-          'catalog',
-          !source.importState || source.importState === 'ready',
-        ),
-      ),
+    () => (dataSources ?? []).filter((source) => isSourceCapabilityEligible(capabilityMatrix, source.id, 'catalog')),
     [dataSources, capabilityMatrix],
   );
   const [indexTarget, setIndexTarget] = useState<{ caseId?: string; sourceId?: string }>({ caseId });

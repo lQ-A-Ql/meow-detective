@@ -29,25 +29,22 @@ function matrix(rows: SourceCapability[]): CapabilityMatrix {
 }
 
 describe('isSourceCapabilityEligible', () => {
-  it('falls back to the legacy decision when the matrix is missing entirely', () => {
-    expect(isSourceCapabilityEligible(undefined, 'source-1', 'catalog', true)).toBe(true);
-    expect(isSourceCapabilityEligible(undefined, 'source-1', 'catalog', false)).toBe(false);
+  it('requires the capability matrix', () => {
+    expect(isSourceCapabilityEligible(undefined, 'source-1', 'catalog')).toBe(false);
   });
 
-  it('falls back to legacy when the matrix has no row for the source', () => {
+  it('rejects a source missing from the capability matrix', () => {
     const m = matrix([row('source-other', 'catalog', 'ready')]);
-    expect(isSourceCapabilityEligible(m, 'source-1', 'catalog', true)).toBe(true);
-    expect(isSourceCapabilityEligible(m, 'source-1', 'catalog', false)).toBe(false);
+    expect(isSourceCapabilityEligible(m, 'source-1', 'catalog')).toBe(false);
   });
 
-  it('falls back to legacy when the matrix source list is empty', () => {
-    expect(isSourceCapabilityEligible(matrix([]), 'source-1', 'catalog', true)).toBe(true);
-    expect(isSourceCapabilityEligible(matrix([]), 'source-1', 'catalog', false)).toBe(false);
+  it('rejects an empty capability matrix', () => {
+    expect(isSourceCapabilityEligible(matrix([]), 'source-1', 'catalog')).toBe(false);
   });
 
-  it('a present pending row wins over a legacy-eligible source', () => {
+  it('rejects a pending capability', () => {
     const m = matrix([row('source-1', 'catalog', 'pending')]);
-    expect(isSourceCapabilityEligible(m, 'source-1', 'catalog', true)).toBe(false);
+    expect(isSourceCapabilityEligible(m, 'source-1', 'catalog')).toBe(false);
   });
 
   it('admits catalog ready and partial, rejects failed/deferred/pending', () => {
@@ -55,10 +52,10 @@ describe('isSourceCapabilityEligible', () => {
     const partial = matrix([row('s-partial', 'catalog', 'partial')]);
     const failed = matrix([row('s-failed', 'catalog', 'failed')]);
     const deferred = matrix([row('s-deferred', 'catalog', 'deferred')]);
-    expect(isSourceCapabilityEligible(ready, 's-ready', 'catalog', false)).toBe(true);
-    expect(isSourceCapabilityEligible(partial, 's-partial', 'catalog', false)).toBe(true);
-    expect(isSourceCapabilityEligible(failed, 's-failed', 'catalog', true)).toBe(false);
-    expect(isSourceCapabilityEligible(deferred, 's-deferred', 'catalog', true)).toBe(false);
+    expect(isSourceCapabilityEligible(ready, 's-ready', 'catalog')).toBe(true);
+    expect(isSourceCapabilityEligible(partial, 's-partial', 'catalog')).toBe(true);
+    expect(isSourceCapabilityEligible(failed, 's-failed', 'catalog')).toBe(false);
+    expect(isSourceCapabilityEligible(deferred, 's-deferred', 'catalog')).toBe(false);
   });
 
   it('scopes the lookup to the requested capability kind', () => {

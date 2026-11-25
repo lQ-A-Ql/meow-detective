@@ -2,8 +2,8 @@
 //!
 //! Every data source of the case is listed, including sources whose storage
 //! cannot be opened (logged and skipped instead of failing the whole query).
-//! A missing marker means `complete` for legacy-case compatibility; the overall
-//! state is the worst per-source state (deferred > building > complete).
+//! Missing projection markers are reported as unready. The overall state is
+//! the worst per-source state (deferred > building > complete).
 
 use domain::{CaseId, DataSourceId};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
@@ -58,12 +58,12 @@ fn read_source_status(
     let Some(payload) = handle.timeline_projection_state(&snapshot, &source_id.0)? else {
         return Ok(Some(TimelineProjectionSourceStatusDto {
             data_source_id: source_id.0.clone(),
-            state: TimelineProjectionStateDto::Complete,
+            state: TimelineProjectionStateDto::Deferred,
             identity: None,
             inserted_events: 0,
             required_bytes: None,
             available_bytes: None,
-            reason: None,
+            reason: Some("timeline projection state is missing".into()),
             updated_at: None,
         }));
     };

@@ -7,7 +7,7 @@ use persistence_source::runtime::{
 };
 
 #[test]
-fn legacy_missing_marker_passes_and_deferred_blocks_reads() {
+fn missing_marker_and_deferred_state_both_block_reads() {
     let root = tempfile::tempdir().unwrap();
     {
         let rw = ReadWriteStorageRuntime::open(root.path()).unwrap();
@@ -20,9 +20,9 @@ fn legacy_missing_marker_passes_and_deferred_blocks_reads() {
         .timeline_projection_state(&snapshot, "source-01")
         .unwrap()
         .is_none());
-    reader
+    assert!(reader
         .require_timeline_projection_complete(&snapshot, "source-01")
-        .unwrap();
+        .is_err());
 
     {
         let rw = ReadWriteStorageRuntime::open(root.path()).unwrap();

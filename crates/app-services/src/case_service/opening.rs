@@ -38,14 +38,6 @@ pub fn open_case(root: &Path) -> Result<ActiveCase> {
             Some(&active.meta.id.0),
         )
     });
-    active.with_conn(|conn| {
-        crate::capability_service::backfill_case_capabilities(
-            conn,
-            &active.case_root,
-            &active.meta.id,
-        )
-        .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
-    })?;
     let recovered = active.with_conn(|conn| {
         crate::capability_service::requeue_running(conn, &active.meta.id)
             .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
