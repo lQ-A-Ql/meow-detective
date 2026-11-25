@@ -15,6 +15,26 @@ fn recovery_validates_complete_suffix_and_preserves_original_bytes() {
     assert!(recover_wtmp_suffix(&vec![0xff; 801]).is_err());
 }
 
+#[test]
+fn recovery_keeps_the_longest_validated_biarch_suffix() {
+    let mut input = vec![b'\n'];
+    for pid in 100..108 {
+        input.extend(build_wtmp_record_32(
+            6,
+            pid,
+            "alice",
+            "ssh:notty",
+            "192.0.2.1",
+            1_700_000_000,
+        ));
+    }
+    assert_eq!(input.len(), 3073);
+    let (offset, records) = recover_wtmp_suffix(&input).unwrap();
+    assert_eq!(offset, 1);
+    assert_eq!(records.len(), 8);
+    assert!(records.iter().all(|record| record.user == "alice"));
+}
+
 fn build_wtmp_record_64(
     ut_type: i32,
     ut_pid: i32,

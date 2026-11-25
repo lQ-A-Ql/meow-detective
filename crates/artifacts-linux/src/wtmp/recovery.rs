@@ -1,10 +1,9 @@
 use super::*;
 
-/// Recover a uniquely aligned complete suffix using the existing utmp layouts.
+/// Recover the longest fully validated suffix with one unambiguous utmp layout.
 pub fn recover_wtmp_suffix(
     data: &[u8],
 ) -> Result<(usize, Vec<LoginRecord>), crate::LinuxArtifactError> {
-    let mut accepted = None;
     for offset in 1..data.len().min(WTMP_SIZE_64) {
         let suffix = &data[offset..];
         let layouts = [layout_32(), layout_musl(), layout_64()];
@@ -21,7 +20,7 @@ pub fn recover_wtmp_suffix(
         if valid.next().is_none() {
             continue;
         }
-        if valid.next().is_some() || accepted.is_some() {
+        if valid.next().is_some() {
             return Err(crate::LinuxArtifactError::ParseError {
                 parser: "wtmp",
                 message: "damaged wtmp has ambiguous record alignment".into(),
@@ -29,10 +28,10 @@ pub fn recover_wtmp_suffix(
         }
         let records = parse_wtmp(suffix)?;
         if !records.is_empty() {
-            accepted = Some((offset, records));
+            return Ok((offset, records));
         }
     }
-    accepted.ok_or_else(|| crate::LinuxArtifactError::ParseError {
+    Err(crate::LinuxArtifactError::ParseError {
         parser: "wtmp",
         message: "damaged wtmp has no uniquely validated complete suffix".into(),
     })
