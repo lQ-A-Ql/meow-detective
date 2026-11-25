@@ -7,19 +7,21 @@ pub(super) fn persist(
     case_connection: &rusqlite::Connection,
 ) -> Result<(), AnalysisServiceError> {
     let source = DataSourceId(work.row.data_source_id.clone());
+    let case_id = CaseId(work.row.case_id.clone());
+    let ready = source_kernel::source_db::open_ready_source_by_id(
+        case_connection,
+        &work.case_root,
+        &case_id,
+        &source,
+    )?;
     let facts = analysis_core::linux_evidence_facts::collect_linux_evidence_facts(
         case_connection,
         &work.case_root,
-        &CaseId(work.row.case_id.clone()),
+        &case_id,
         &source,
     );
-    let connection = source_kernel::source_db::open_registered_source_db(
-        case_connection,
-        &work.case_root,
-        &source,
-    )?;
     analysis_core::linux_evidence_facts::persist_linux_evidence_facts(
-        &connection,
+        &ready.connection,
         &source,
         &facts,
     )?;

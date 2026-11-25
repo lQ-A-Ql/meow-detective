@@ -16,10 +16,10 @@
     {
       "id": "D03", "name": "NTFS record and runs",
       "owners": ["crates/fs-ntfs/src/data_run_decoder.rs", "crates/fs-ntfs/src/data_runs.rs", "crates/fs-ntfs/src/utils.rs", "crates/fs-ntfs/src/record.rs"],
-      "retired": ["crates/app-services/src/parallel_enum/ntfs/run_numbers.rs"],
+      "retired": ["crates/app-services/src/parallel_enum/ntfs/run_numbers.rs", "crates/evidence-access/src/file_service/mft"],
       "references": [
-        {"path":"crates/evidence-access/src/file_service/mft/stream.rs","marker":"fs_ntfs"},
-        {"path":"crates/import-core/src/parallel_enum/ntfs/mft_scan.rs","marker":"fs_ntfs"}
+        {"path":"crates/evidence-access/src/file_service/viewer/range_fs/ntfs.rs","marker":"fs_ntfs::NtfsReader"},
+        {"path":"crates/import-core/src/parallel_enum/ntfs/mft_scan.rs","marker":"fs_ntfs::mft_scanner"}
       ]
     },
     {
