@@ -3,8 +3,6 @@
 mod fixture;
 #[path = "support/registry_hive_entry.rs"]
 mod hive_entry_fixture;
-#[path = "support/registry_browser_hive.rs"]
-mod hive_fixture;
 use app_services::{
     datasource_service::{detect_image_filesystem, ImageFilesystemKind},
     registry_browser_service::*,
