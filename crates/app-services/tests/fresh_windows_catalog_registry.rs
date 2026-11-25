@@ -23,6 +23,16 @@ use transport::{commands::GetFileRowsRequest, dto::RegistryHiveListRequestDto};
 #[test]
 #[ignore = "requires FORENSICS_FRESH_WINDOWS_E01 and FORENSICS_FRESH_WINDOWS_OUTPUT"]
 fn fresh_windows_catalog_and_registry_pages() {
+    run_fresh(true);
+}
+
+#[test]
+#[ignore = "requires FORENSICS_FRESH_WINDOWS_E01 and FORENSICS_FRESH_WINDOWS_OUTPUT"]
+fn fresh_windows_directory_pages() {
+    run_fresh(false);
+}
+
+fn run_fresh(build_timeline: bool) {
     tracing_subscriber::fmt()
         .with_env_filter("error,import_core=info")
         .with_ansi(false)
@@ -110,32 +120,34 @@ fn fresh_windows_catalog_and_registry_pages() {
             Ok(source_id)
         })
         .unwrap();
-    eprintln!("FRESH_WINDOWS_STAGE managed-timeline");
-    let runtime = app_services::post_import_service::PostImportRuntime {
-        tasks: Arc::new(app_services::task_runtime::TaskManager::new()),
-        bitlocker: Arc::new(BitLockerUnlockRegistry::default()),
-        events: None,
-    };
-    let timeline_started = Instant::now();
-    let timeline = app_services::post_import_service::rebuild_timeline(
-        &runtime,
-        &active.meta.id,
-        &active.case_root,
-        Some(&source_id.0),
-    )
-    .unwrap();
-    std::fs::write(
-        output.join("timeline.json"),
-        serde_json::to_vec_pretty(&json!({
-            "elapsedMs": timeline_started.elapsed().as_millis(), "status": timeline,
-        }))
-        .unwrap(),
-    )
-    .unwrap();
-    assert_eq!(
-        timeline.state,
-        transport::dto::TimelineProjectionStateDto::Complete
-    );
+    if build_timeline {
+        eprintln!("FRESH_WINDOWS_STAGE managed-timeline");
+        let runtime = app_services::post_import_service::PostImportRuntime {
+            tasks: Arc::new(app_services::task_runtime::TaskManager::new()),
+            bitlocker: Arc::new(BitLockerUnlockRegistry::default()),
+            events: None,
+        };
+        let timeline_started = Instant::now();
+        let timeline = app_services::post_import_service::rebuild_timeline(
+            &runtime,
+            &active.meta.id,
+            &active.case_root,
+            Some(&source_id.0),
+        )
+        .unwrap();
+        std::fs::write(
+            output.join("timeline.json"),
+            serde_json::to_vec_pretty(&json!({
+                "elapsedMs": timeline_started.elapsed().as_millis(), "status": timeline,
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+        assert_eq!(
+            timeline.state,
+            transport::dto::TimelineProjectionStateDto::Complete
+        );
+    }
     drop(active);
     let input_after = input_metadata(&image);
     assert_eq!(
@@ -198,6 +210,7 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
         .find(|root| root.data_source_id.as_deref() == Some(source_id.0.as_str()))
         .unwrap();
     let started = Instant::now();
+    let measurement = ProcessMeasurement::start().unwrap();
     let children = file_service::get_file_children_for_case(
         &connection,
         case_root,
@@ -209,6 +222,8 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
     )
     .unwrap();
     let tree_elapsed_ms = started.elapsed().as_millis();
+    let tree_reads = measurement.snapshot();
+    drop(measurement);
     eprintln!("FRESH_WINDOWS_STAGE root-rows");
     let request = GetFileRowsRequest {
         parent_id: Some(root.id.clone()),
@@ -216,8 +231,11 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
         show_hidden: true,
         ..Default::default()
     };
+    let measurement = ProcessMeasurement::start().unwrap();
     let rows =
         file_service::get_file_rows_for_case(&connection, case_root, &meta.id, &request).unwrap();
+    let row_reads = measurement.snapshot();
+    drop(measurement);
     let visible_children = file_service::get_file_children_for_case(
         &connection,
         case_root,
@@ -233,6 +251,7 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
         .children
         .iter()
         .find(|node| node.name == "$DeletedOrphans");
+    let measurement = ProcessMeasurement::start().unwrap();
     let orphan_children = deleted_group.map(|group| {
         file_service::get_file_children_for_case(
             &connection,
@@ -245,6 +264,8 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
         )
         .unwrap()
     });
+    let orphan_reads = measurement.snapshot();
+    drop(measurement);
     eprintln!("FRESH_WINDOWS_STAGE hardware-summary");
     let started = Instant::now();
     let summary = analysis_service::get_source_registry_structured_summary(
@@ -288,6 +309,11 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
         "roots": roots, "children": children, "visibleChildren": visible_children,
         "rows": rows, "orphanChildren": orphan_children, "registry": summary,
         "hives": hives, "referenceRecord": raw_hidden,
+        "catalogQueryReads": {
+            "tree": {"pointReads": tree_reads.point_reads, "scanEntries": tree_reads.scan_entries},
+            "rows": {"pointReads": row_reads.point_reads, "scanEntries": row_reads.scan_entries},
+            "orphanChildren": {"pointReads": orphan_reads.point_reads, "scanEntries": orphan_reads.scan_entries}
+        },
         "timingsMs": {"fileTree": tree_elapsed_ms, "registrySummary": hardware_elapsed_ms,
             "hiveDiscovery": hive_elapsed_ms},
         "hiveDiscoveryReads": {"pointReads": hive_reads.point_reads,
@@ -320,6 +346,14 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
         "deleted orphan group cannot be expanded in the file tree"
     );
     assert!(orphan_children.unwrap().total_count > 0);
+    assert!(
+        orphan_reads.scan_entries <= 100,
+        "orphan page scanned the full directory"
+    );
+    assert!(
+        orphan_reads.point_reads <= 200,
+        "orphan page loaded excessive catalog records"
+    );
     assert!(visible_children
         .children
         .iter()
