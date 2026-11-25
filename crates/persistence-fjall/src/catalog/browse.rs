@@ -60,7 +60,10 @@ impl CatalogRecordStore {
             )
         })?;
         if query.limit == 0 || query.offset as u64 >= total {
-            return Ok(CatalogBrowsePage { records: Vec::new(), total });
+            return Ok(CatalogBrowsePage {
+                records: Vec::new(),
+                total,
+            });
         }
         let mut selected = Vec::new();
         if query.directories_only {

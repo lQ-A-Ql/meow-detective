@@ -187,14 +187,29 @@ fn streamed_replacement_counts_commit_and_rollback_with_catalog_records() {
     parent.id = "parent".into();
     parent.parent_id = None;
     let mut first = Some(vec![record(1, "first"), record(2, "second")]);
-    store.replace_subtree_streamed::<std::io::Error, _>(
-        "source", &parent, 0, PersistMode::SyncAll, || Ok(first.take()),
-    ).unwrap();
-    let before = store.browse(&store.read_snapshot(), &query()).unwrap().records;
+    store
+        .replace_subtree_streamed::<std::io::Error, _>(
+            "source",
+            &parent,
+            0,
+            PersistMode::SyncAll,
+            || Ok(first.take()),
+        )
+        .unwrap();
+    let before = store
+        .browse(&store.read_snapshot(), &query())
+        .unwrap()
+        .records;
     let mut pending = Some(vec![record(3, "third")]);
     let interrupted = store.replace_subtree_streamed::<std::io::Error, _>(
-        "source", &parent, 0, PersistMode::SyncAll, || {
-            if let Some(records) = pending.take() { return Ok(Some(records)); }
+        "source",
+        &parent,
+        0,
+        PersistMode::SyncAll,
+        || {
+            if let Some(records) = pending.take() {
+                return Ok(Some(records));
+            }
             std::fs::File::open(root.path().join("missing-evidence-input"))?;
             Ok(None)
         },
@@ -204,9 +219,15 @@ fn streamed_replacement_counts_commit_and_rollback_with_catalog_records() {
     assert_eq!(page.total, 2);
     assert_eq!(page.records, before);
     let mut replacement = Some(vec![record(4, "fourth")]);
-    store.replace_subtree_streamed::<std::io::Error, _>(
-        "source", &parent, 0, PersistMode::SyncAll, || Ok(replacement.take()),
-    ).unwrap();
+    store
+        .replace_subtree_streamed::<std::io::Error, _>(
+            "source",
+            &parent,
+            0,
+            PersistMode::SyncAll,
+            || Ok(replacement.take()),
+        )
+        .unwrap();
     let page = store.browse(&store.read_snapshot(), &query()).unwrap();
     assert_eq!(page.total, 1);
     assert_eq!(page.records[0].name, "fourth");

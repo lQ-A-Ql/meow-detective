@@ -64,7 +64,11 @@ pub(super) fn stream_adjust(
     record: &FileEntryRecord,
     delta: i64,
 ) -> Result<()> {
-    let key = key(&record.data_source_id, record.parent_id.as_deref(), bucket(record))?;
+    let key = key(
+        &record.data_source_id,
+        record.parent_id.as_deref(),
+        bucket(record),
+    )?;
     let previous = match writer.get(KeyspaceName::Meta, &key)? {
         None => 0,
         Some(bytes) => u64::from_be_bytes(bytes.try_into().map_err(|_| {
