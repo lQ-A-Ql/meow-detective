@@ -2,6 +2,24 @@ use super::*;
 use crate::builders::registry;
 
 #[test]
+fn fixture_paths_follow_the_running_checkout_from_a_package_directory() {
+    let root = repo_root();
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .current_dir(root.join("crates/testing"))
+        .arg("fixtures::tests::tiny_registry_system_fixture_matches_builder")
+        .arg("--exact")
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+}
+
+#[test]
 fn tiny_logical_fixture_exists() {
     let root = tiny_logical_dir();
     assert!(

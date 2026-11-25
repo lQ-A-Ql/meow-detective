@@ -1,6 +1,6 @@
 //! Shared test fixture path helpers.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 const TINY_LOGICAL_REL: &str = "testdata/fixtures/public-small/logical";
 const TINY_RAW_REL: &str = "testdata/fixtures/public-small/raw/tiny.raw";
@@ -11,12 +11,17 @@ const TINY_REGISTRY_SYSTEM_REL: &str =
 const TINY_REGISTRY_SOFTWARE_REL: &str =
     "testdata/fixtures/public-small/logical/Windows/System32/config/SOFTWARE";
 
-/// Returns the repository root as seen by the `testing` crate.
+/// Locate the current checkout from the test process working directory.
 pub fn repo_root() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../..")
+    let directory = std::env::current_dir().expect("read test working directory");
+    directory
+        .ancestors()
+        .find(|path| {
+            path.join("Cargo.toml").is_file() && path.join("crates/testing/Cargo.toml").is_file()
+        })
+        .expect("tests must run inside the repository checkout")
         .canonicalize()
-        .expect("testing crate should live under <repo>/crates/testing")
+        .expect("canonicalize current repository checkout")
 }
 
 /// Tiny logical directory fixture with a few files and nested paths.
