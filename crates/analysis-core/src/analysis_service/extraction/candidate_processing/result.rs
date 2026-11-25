@@ -52,3 +52,15 @@ impl CandidateCompletionKind {
         }
     }
 }
+
+pub(super) fn ready_corrupt_input(
+    candidate: EvidenceCandidate,
+    capability: AnalysisCapability,
+    warning: String,
+) -> super::PreparedWork<super::PreparedCandidate, CandidateCompletion> {
+    super::PreparedWork::Ready(CandidateCompletion {
+        candidate,
+        capability,
+        kind: CandidateCompletionKind::corrupt_input(warning),
+    })
+}

@@ -123,6 +123,7 @@ pub(super) fn extract_foxmail_index_candidate(
 ) -> ExtractionOutcome {
     let parsed = parse_index(bytes);
     let mut outcome = ExtractionOutcome::default();
+    outcome.diagnostic_counts.corrupt_inputs = u64::from(parsed.invalid_record_count > 0);
     if parsed.records.is_empty() {
         if parsed.invalid_record_count > 0 {
             outcome.warnings.push(format!(
@@ -141,6 +142,7 @@ pub(super) fn extract_foxmail_index_candidate(
     for record in parsed.records {
         append_foxmail_index_record(&mut outcome, candidate, record);
     }
+    outcome.diagnostic_counts.capability_limits = 1;
     outcome.warnings.push(format!(
         "Foxmail index {} yielded metadata only; message bodies remain in private binary mail files",
         candidate.path

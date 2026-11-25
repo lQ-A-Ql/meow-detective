@@ -1,3 +1,4 @@
+use super::result::ready_corrupt_input;
 use super::*;
 use crate::analysis_service::capability::CandidateReadPolicy;
 use crate::analysis_service::extraction::linux::linux_candidate_read_limit;
@@ -87,6 +88,9 @@ where
         Err(CandidateExtractionError::Warning(warning)) => {
             return Ok(ready_warning(candidate, capability, warning));
         }
+        Err(CandidateExtractionError::CorruptInput(reason)) => {
+            return Ok(ready_corrupt_input(candidate, capability, reason))
+        }
         Err(CandidateExtractionError::Cancelled) => {
             return Err(AnalysisServiceError::Cancelled);
         }
@@ -128,6 +132,9 @@ where
             Ok(companions) => companions,
             Err(CandidateExtractionError::Warning(warning)) => {
                 return Ok(ready_warning(candidate, capability, warning));
+            }
+            Err(CandidateExtractionError::CorruptInput(reason)) => {
+                return Ok(ready_corrupt_input(candidate, capability, reason))
             }
             Err(CandidateExtractionError::Cancelled) => {
                 return Err(AnalysisServiceError::Cancelled);
@@ -278,6 +285,9 @@ where
                 Err(CandidateExtractionError::Warning(_)) => {
                     return Ok(image_read_failure(candidate, capability));
                 }
+                Err(CandidateExtractionError::CorruptInput(reason)) => {
+                    return Ok(ready_corrupt_input(candidate, capability, reason))
+                }
                 Err(CandidateExtractionError::Cancelled) => {
                     return Err(AnalysisServiceError::Cancelled);
                 }
@@ -393,6 +403,9 @@ where
         Ok(bytes) => bytes,
         Err(CandidateExtractionError::Warning(warning)) => {
             return Ok(ready_deferred(candidate, capability, warning));
+        }
+        Err(CandidateExtractionError::CorruptInput(reason)) => {
+            return Ok(ready_corrupt_input(candidate, capability, reason))
         }
         Err(CandidateExtractionError::Cancelled) => {
             return Err(AnalysisServiceError::Cancelled);

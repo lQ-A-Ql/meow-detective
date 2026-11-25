@@ -69,7 +69,7 @@
 | FJ-12-K | 大 Catalog 的计数、排序、分页及导入缓存受界限约束 | 已完成 | Fjall 单页上限 8192（包含内部 lookahead）；文件浏览排序、跳转、根目录和子目录窗口上限 8192；Artifact 查询集合上限 100000、分页上限 1024；Timeline 报告、Correlation Artifact ID 和 FileRepo 全量查询均有界；分页与超限失败回归通过 | 无 |
 | FJ-12-L | 相关测试、Clippy、格式和架构门禁通过，文档及分批提交完整 | 已完成 | `app-services --lib` 1167 通过、16 忽略；`persistence-sqlite --lib` 140 通过、1 忽略；Fjall Catalog 8 项、文件浏览、Artifact 超限、source detail fail-closed 回归通过；格式、Clippy、模块规模、函数规模、测试布局和 SQL 边界门禁通过；修复按功能分批提交 | 私有 E01、PVE、Kubernetes 和真实掉电样本未执行 |
 | FJ-12-M | 至少 4 个 worker 同时执行原生写入，SQLite 提交生命周期控制 | 并发通过 | 4、8 线程各验证 524,288 条真实事件，正文摘要一致；五个 E01 均使用 8 个线程，调用峰值重叠 5～7，进程峰值 304～1,188 MiB；只读及中断发布回归通过 | Windows 1 制品失败 330 项，文件头验证未通过，完整验收保留未通过状态 |
-| FJ-12-N | 完整样本告警逐条定位并具备重复诊断入口 | 诊断完成 | `065e3936` 增加显式启用的只读保留案件诊断，三个 Windows 输入诊断通过，803 项告警完成分类，九个 Prefetch 输入完成独立对照 | MFT 父路径、压缩范围读取、解析准入及日志完整性修复待实施 |
+| FJ-12-N | 完整样本告警逐条定位并具备重复诊断入口 | 修复已实施 | `2f14c2c1`、`6def53f0`、`1a5dabc7`、`767788aa`、`7a5d13e1`、`99b581ae`；四个完整样本通过，Windows 1 压缩读取及真实 JumpList v6 定向验证通过 | Windows 1 两次完整导入达到 15 分钟上限，当前受影响分析模块的保留案件验证进行中 |
 
 ## 真实样本告警与错误
 
@@ -85,7 +85,13 @@
 | Linux 日志 | 四个 audit 轮转日志和一个 syslog 达到每来源 10,000 条限制。修复采用现有解析器增量输出、有界批次和可核验的尾部记录。 |
 | 文件头验收 | Windows 1 的 4,096 条窗口由 4,088 个删除记录、5 个空文件和 3 个元数据文件组成。真实读取尝试为零，验收需从有效普通文件候选取得读取证据。 |
 
-开发计划和 WR 验收表保存在工作站本地的 `docs/real-sample-warning-repair-design-2026-11-25.md`，原始逐条分类位于本地 `artifacts/warning-diagnosis/warning-categories.json`。修复顺序为父级身份、压缩读取及解析准入、日志完整性和结果分类。旧父级重建、压缩全文件缓冲、错误字节替代、Prefetch 多算法尝试及重复准入规则随实施清理。并发写入结论继续采用 FJ-12-M 的实际原生调用证据。
+开发计划和 WR 验收表保存在工作站本地的 `docs/real-sample-warning-repair-design-2026-11-25.md`，原始逐条分类位于本地 `artifacts/warning-diagnosis/warning-categories.json`。MFT 父级身份、压缩读取及解析准入、日志完整性和结果分类已经实施。并发写入结论继续采用 FJ-12-M 的实际原生调用证据。
+
+当前运行结果保存在 `artifacts/warning-diagnosis/repair-acceptance-summary.json`。Windows 2、3 及 Linux 1、2 完整导入、时间线、制品、文件头和查询校验通过。Linux 1 的四个 audit 日志及 Linux 2 的 syslog 已经处理完整输入，制品分别为 118,130 和 36,746 条。Linux 1 的 btmp 保留原始字节，从 offset 1 恢复 8 条记录，恢复计数为 1，损坏输入及读取失败计数为零。
+
+Windows 1 完整导入两次均在 15 分钟终止。第二次目录阶段为 184.22 秒，timeline 为 441.74 秒，构建 3,608,295 条文件事件及图谱，随后进入分析生成目录复制和候选提取。该完整样本保持未通过。受影响解析模块另通过显式保留案件入口验证，每次继续采用 15 分钟上限。
+
+JumpList v6 通过 MIT `JumpList 2026.10.10` 独立实现核验。Windows 2 的 6 条记录在编号、原始路径、FILETIME、交互计数、主机名和 LNK 关联上完全相同，两个零长度 DestList 均返回空结果。对照报告为 `artifacts/warning-diagnosis/jumplist-comparison.json`。
 
 ## 当前验证
 

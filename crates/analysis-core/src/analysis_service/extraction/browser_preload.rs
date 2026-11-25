@@ -359,6 +359,9 @@ pub(super) fn read_locator(
             .map_err(|error| match error {
                 CandidateExtractionError::Cancelled => AnalysisServiceError::Cancelled,
                 CandidateExtractionError::Warning(warning) => AnalysisServiceError::Read(warning),
+                CandidateExtractionError::CorruptInput(reason) => {
+                    AnalysisServiceError::CorruptInput(reason)
+                }
             })?;
     if bytes.len() as u64 != locator.size {
         return Err(AnalysisServiceError::Read(

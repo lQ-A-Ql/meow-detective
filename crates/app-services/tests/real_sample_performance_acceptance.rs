@@ -49,6 +49,25 @@ fn retained_source_analysis_diagnostic() {
 
 #[test]
 #[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
+fn retained_source_windows_warning_repair_acceptance() {
+    analysis_diagnostic::run_windows_warning_repair(&[
+        "Email",
+        "EventLogs",
+        "ProgramExecution",
+        "UserActivity",
+        "Thumbnails",
+        "ResourceUsage",
+    ]);
+}
+
+#[test]
+#[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
+fn retained_source_windows_email_repair_acceptance() {
+    analysis_diagnostic::run_windows_warning_repair(&["Email"]);
+}
+
+#[test]
+#[ignore = "requires explicit FORENSICS_ANALYSIS_CASE_ROOT, FORENSICS_ANALYSIS_SOURCE_ID and FORENSICS_PERF_OUTPUT"]
 fn retained_source_registry_metadata() {
     analysis_diagnostic::dump_registry_metadata();
 }

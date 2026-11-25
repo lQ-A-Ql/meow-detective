@@ -12,9 +12,9 @@ pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "2.1.0";
 pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "2.0.0";
 pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "2.0.0";
 pub(crate) const LINUX_LOGIN_EXTRACTOR_VERSION: &str = "2.0.0";
-pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "2.0.1";
 pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "2.0.0";
-pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "2.0.1";
 pub(crate) const IMAGE_METADATA_EXTRACTOR_VERSION: &str = "2.0.0";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
@@ -30,10 +30,7 @@ pub(crate) fn producer_version(producer: &str) -> &'static str {
         LINUX_SYSTEM_CONFIG_VERSION
     } else if producer == "linux.lastlog" {
         LINUX_LOGIN_EXTRACTOR_VERSION
-    } else if matches!(
-        producer,
-        "email.eml_emlx" | "email.mbox" | "email.foxmail_box"
-    ) {
+    } else if producer.starts_with("email.") {
         EMAIL_EXTRACTOR_VERSION
     } else if producer.starts_with("browser.") {
         BROWSER_EXTRACTOR_VERSION
@@ -42,7 +39,8 @@ pub(crate) fn producer_version(producer: &str) -> &'static str {
     }
 }
 
-pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[super::ANALYSIS_EXTRACTOR_VERSION];
+pub(crate) const CHECKPOINT_VERSIONS: &[&str] =
+    &[super::ANALYSIS_EXTRACTOR_VERSION, EMAIL_EXTRACTOR_VERSION];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CandidateReadPolicy {

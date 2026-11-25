@@ -193,6 +193,9 @@ pub(super) fn run() {
                 "evtxPathValidation": evtx,
                 "inputs": inputs,
                 "technical": technical,
+                "partitions": handle.partition_list_by_source(
+                    &snapshot, &source.id.0, None, ScanDirection::Forward, 128,
+                ).unwrap().records,
             }))
         })
         .unwrap();

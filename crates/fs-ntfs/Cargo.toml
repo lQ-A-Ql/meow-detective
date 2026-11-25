@@ -19,5 +19,6 @@ compcol.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
+image-e01.workspace = true
 compcol.workspace = true
 tempfile.workspace = true

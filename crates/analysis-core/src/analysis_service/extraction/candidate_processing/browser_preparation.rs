@@ -27,6 +27,11 @@ where
                 candidate, capability, warning,
             ))
         }
+        Err(CandidateExtractionError::CorruptInput(reason)) => {
+            return Ok(super::result::ready_corrupt_input(
+                candidate, capability, reason,
+            ))
+        }
         Err(CandidateExtractionError::Cancelled) => return Err(AnalysisServiceError::Cancelled),
     };
     let weight_bytes = bytes.len().saturating_add(

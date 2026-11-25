@@ -58,6 +58,19 @@ impl crate::NtfsReader {
         layout: &CompressionRuns<'_>,
         first_vcn: u64,
     ) -> io::Result<Vec<u8>> {
+        let (physical, encoded) = self.read_physical_compression_unit(layout, first_vcn)?;
+        if encoded {
+            decode_lznt1(&physical, layout.unit_bytes as usize)
+        } else {
+            Ok(physical)
+        }
+    }
+
+    fn read_physical_compression_unit(
+        &self,
+        layout: &CompressionRuns<'_>,
+        first_vcn: u64,
+    ) -> io::Result<(Vec<u8>, bool)> {
         let last_vcn = first_vcn
             .checked_add(layout.unit_clusters)
             .ok_or_else(|| invalid_fs_data("compression unit VCN overflow"))?
@@ -106,14 +119,15 @@ impl crate::NtfsReader {
             return Err(invalid_fs_data("compression unit allocation is incomplete"));
         }
         if physical.is_empty() {
-            return Ok(vec![0; layout.unit_bytes as usize]);
+            return Ok((vec![0; layout.unit_bytes as usize], false));
         }
-        if sparse {
-            return decode_lznt1(&physical, layout.unit_bytes as usize);
-        }
-        Ok(physical)
+        Ok((physical, sparse))
     }
 }
+
+#[cfg(test)]
+#[path = "../../tests/unit/real_compressed_units.rs"]
+mod tests;
 
 fn compression_runs(
     extents: &[DataAttributeExtent],

@@ -16,6 +16,7 @@ pub(crate) fn encrypted_candidate_warning(candidate: &EvidenceCandidate) -> Opti
 #[derive(Debug)]
 pub(super) enum CandidateExtractionError {
     Warning(String),
+    CorruptInput(String),
     Cancelled,
 }
 
@@ -68,7 +69,12 @@ pub(super) fn read_candidate_source_with_progress(
     loop {
         check_candidate_cancelled(cancel_token)?;
         let read = limited.read(&mut buffer).map_err(|error| {
-            CandidateExtractionError::Warning(format!("{} read failed: {error}", candidate.path))
+            let reason = format!("{} read failed: {error}", candidate.path);
+            if error.kind() == std::io::ErrorKind::InvalidData {
+                CandidateExtractionError::CorruptInput(reason)
+            } else {
+                CandidateExtractionError::Warning(reason)
+            }
         })?;
         if read == 0 {
             break;

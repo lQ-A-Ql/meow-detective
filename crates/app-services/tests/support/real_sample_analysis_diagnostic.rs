@@ -14,15 +14,31 @@ use std::{
 
 pub(super) fn run() {
     let (active, source, platform, output) = open_diagnostic();
-    let source_id = source.id.clone();
-    let case_root = active.case_root.clone();
-    write_registry_metadata(&active, &source_id, &output);
-    let run_id = uuid::Uuid::new_v4().to_string();
     let categories: &[&str] = match platform {
         DataSourcePlatform::Windows => &["Registry", "BrowserHistory", "Email", "EventLogs"],
         DataSourcePlatform::Linux => &["LinuxArtifacts"],
         _ => panic!("diagnostic requires a Windows or Linux source"),
     };
+    run_selected(active, source, platform, output, categories);
+}
+
+pub(super) fn run_windows_warning_repair(categories: &[&str]) {
+    let (active, source, platform, output) = open_diagnostic();
+    assert_eq!(platform, DataSourcePlatform::Windows);
+    run_selected(active, source, platform, output, categories);
+}
+
+fn run_selected(
+    active: ActiveCase,
+    source: domain::DataSource,
+    platform: DataSourcePlatform,
+    output: PathBuf,
+    categories: &[&str],
+) {
+    let source_id = source.id.clone();
+    let case_root = active.case_root.clone();
+    write_registry_metadata(&active, &source_id, &output);
+    let run_id = uuid::Uuid::new_v4().to_string();
     let before = source_bindings(&active);
     let input_before = std::fs::metadata(&source.source_path).unwrap();
     super::write_report(
