@@ -10,6 +10,7 @@ chrono.workspace = true
 crossbeam-channel.workspace = true
 fjall.workspace = true
 hex.workspace = true
+memcomparable.workspace = true
 postcard.workspace = true
 serde.workspace = true
 serde_json.workspace = true

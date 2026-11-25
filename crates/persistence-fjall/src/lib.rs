@@ -19,7 +19,8 @@ mod timeline;
 
 pub use artifact::{ArtifactPage, ArtifactRecord, ArtifactRecordStore};
 pub use catalog::{
-    CatalogEntryType, CatalogPage, CatalogRecordStore, CatalogStreamError, FileEntryRecord,
+    CatalogBrowsePage, CatalogBrowseQuery, CatalogEntryType, CatalogPage, CatalogRecordStore,
+    CatalogSort, CatalogStreamError, FileEntryRecord,
 };
 pub use codec::{
     decode_key, digest, encode_key, KeyPart, VersionedEnvelope, ENVELOPE_FORMAT_VERSION,

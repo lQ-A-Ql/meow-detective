@@ -10,6 +10,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::Path;
 
+mod browse;
+mod browse_counts;
+mod browse_keys;
 mod catalog_batch;
 mod catalog_directory;
 mod catalog_keys;
@@ -20,6 +23,8 @@ mod metrics;
 mod parallel;
 pub(crate) use parallel::encoded_record_bytes;
 mod partition_subtree;
+pub use browse::{CatalogBrowsePage, CatalogBrowseQuery};
+pub use browse_keys::CatalogSort;
 pub(super) use catalog_keys::{
     decode_record, directory_key, hash_key, index_write, orphan_key, parent_key, path_key,
     record_key, root_directory_key, tombstone_key,
@@ -130,6 +135,9 @@ impl CatalogRecordStore {
                     key: key.clone(),
                 });
                 self.index_deletes(&mut actions, &previous)?;
+                let mut browse_deltas = browse_counts::Deltas::new();
+                browse_counts::adjust(&mut browse_deltas, &previous, -1)?;
+                browse_counts::append(snapshot, &mut actions, browse_deltas)?;
                 let mut deltas = crate::record_metrics::CountDeltas::new();
                 crate::record_metrics::adjust(&mut deltas, "catalog", source_id, -1)?;
                 if previous.entry_type == CatalogEntryType::File {
@@ -336,6 +344,7 @@ impl CatalogRecordStore {
     }
 
     fn index_writes(actions: &mut Vec<WriteAction>, record: &FileEntryRecord) -> Result<()> {
+        browse_keys::write_indexes(actions, record, false)?;
         let record_key = record_key(&record.data_source_id, &record.id)?;
         actions.push(index_write(
             id_feed::key(&record.data_source_id, &record.id)?,
@@ -367,6 +376,7 @@ impl CatalogRecordStore {
         actions: &mut Vec<WriteAction>,
         record: &FileEntryRecord,
     ) -> Result<()> {
+        browse_keys::write_indexes(actions, record, true)?;
         actions.push(WriteAction::Delete {
             keyspace: KeyspaceName::CatalogIndexes,
             key: id_feed::key(&record.data_source_id, &record.id)?,

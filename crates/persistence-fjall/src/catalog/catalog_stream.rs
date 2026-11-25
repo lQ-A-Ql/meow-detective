@@ -94,6 +94,7 @@ impl CatalogRecordStore {
                     let mut actions = Vec::new();
                     record_metrics::append(snapshot, &mut actions, metrics)?;
                     record_metrics::advance(snapshot, &mut actions, "catalog")?;
+                    super::browse_counts::mark(&mut actions, source_id)?;
                     for action in actions {
                         stream_action(writer, action);
                     }
@@ -174,6 +175,7 @@ impl CatalogRecordStore {
             self.delete_record_actions(writer, previous, metrics)?;
         }
         record_metrics::adjust(metrics, "catalog", &record.data_source_id, 1)?;
+        super::browse_counts::stream_adjust(writer, record, 1)?;
         if record.entry_type == CatalogEntryType::File {
             record_metrics::adjust(metrics, "catalog.files", &record.data_source_id, 1)?;
         }
@@ -247,6 +249,7 @@ impl CatalogRecordStore {
         }
         unindex_orphan(writer, record)?;
         record_metrics::adjust(metrics, "catalog", &record.data_source_id, -1)?;
+        super::browse_counts::stream_adjust(writer, record, -1)?;
         if record.entry_type == CatalogEntryType::File {
             record_metrics::adjust(metrics, "catalog.files", &record.data_source_id, -1)?;
         }

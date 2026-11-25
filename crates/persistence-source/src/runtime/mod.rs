@@ -2,6 +2,7 @@
 //! and source-scoped projection helpers.
 
 mod artifact_root;
+mod catalog_browse;
 mod extensions;
 mod open;
 pub mod partition_marker;

@@ -157,15 +157,9 @@ impl FileRepo<'_> {
         parent_id: &FileEntryId,
         show_hidden: bool,
     ) -> DbResult<u64> {
-        if let Some(entries) = self
-            .find_child_directories_visible(parent_id, show_hidden)
-            .map(Some)?
-        {
-            return Ok(entries.len() as u64);
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
+        Ok(self
+            .indexed_page(Some(parent_id), 0, 0, show_hidden, None)?
+            .total)
     }
 
     pub fn find_child_directories_page_visible(
@@ -175,44 +169,16 @@ impl FileRepo<'_> {
         limit: u32,
         show_hidden: bool,
     ) -> DbResult<Vec<FileEntry>> {
-        if let Some(entries) = self
-            .find_child_directories_visible(parent_id, show_hidden)
-            .map(Some)?
-        {
-            return Ok(entries
-                .into_iter()
-                .skip(offset as usize)
-                .take(limit as usize)
-                .collect());
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
-    }
-
-    pub fn child_directories_need_natural_sort(
-        &self,
-        parent_id: &FileEntryId,
-        show_hidden: bool,
-    ) -> DbResult<bool> {
-        if crate::detail::source_id(self.conn)?.is_some() {
-            return Ok(self
-                .find_child_directories_visible(parent_id, show_hidden)?
-                .iter()
-                .any(|entry| entry.name.bytes().any(|byte| byte.is_ascii_digit())));
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
+        Ok(self
+            .indexed_page(Some(parent_id), offset, limit, show_hidden, None)?
+            .records
+            .into_iter()
+            .map(crate::detail::file_entry)
+            .collect())
     }
 
     pub fn count_child_directories(&self, parent_id: &FileEntryId) -> DbResult<u64> {
-        if let Some(entries) = self.find_child_directories(parent_id).map(Some)? {
-            return Ok(entries.len() as u64);
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
+        self.count_child_directories_visible(parent_id, true)
     }
 
     pub fn find_roots(&self, data_source_id: &DataSourceId) -> DbResult<Vec<FileEntry>> {
@@ -269,12 +235,7 @@ impl FileRepo<'_> {
     }
 
     pub fn has_child_directories(&self, parent_id: &FileEntryId) -> DbResult<bool> {
-        if let Some(entries) = self.find_child_directories(parent_id).map(Some)? {
-            return Ok(!entries.is_empty());
-        }
-        Err(persistence_sqlite::DbError::System(
-            "source identity is missing".into(),
-        ))
+        Ok(self.count_child_directories_visible(parent_id, true)? > 0)
     }
 
     pub fn has_child_directories_batch_visible(
@@ -293,34 +254,11 @@ impl FileRepo<'_> {
         let snapshot = catalog.read_snapshot();
         let mut result = HashMap::new();
         for parent_id in parent_ids {
-            let mut cursor = None;
-            let mut found = false;
-            loop {
-                persistence_sqlite::read_operation::ensure_active()?;
-                let page = catalog
-                    .list_directories_by_parent(
-                        &snapshot,
-                        &owner,
-                        Some(&parent_id.0),
-                        cursor.as_deref(),
-                        persistence_fjall::ScanDirection::Forward,
-                        if show_hidden { 1 } else { 64 },
-                    )
-                    .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-                if page
-                    .records
-                    .iter()
-                    .any(|record| show_hidden || (!record.hidden && !record.system))
-                {
-                    found = true;
-                    break;
-                }
-                cursor = page.next_cursor;
-                if cursor.is_none() {
-                    break;
-                }
-            }
-            result.insert(parent_id.0.clone(), found);
+            persistence_sqlite::read_operation::ensure_active()?;
+            let count = catalog
+                .child_directory_count(&snapshot, &owner, Some(&parent_id.0), show_hidden)
+                .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+            result.insert(parent_id.0.clone(), count > 0);
         }
         Ok(result)
     }

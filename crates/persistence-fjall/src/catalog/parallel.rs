@@ -18,6 +18,13 @@ impl CatalogRecordStore {
         cancel: &AtomicBool,
         producer: impl FnMut() -> Result<Option<Vec<FileEntryRecord>>>,
     ) -> Result<NativeWriteReport> {
+        self.source_store.database().write_batch(
+            &[WriteAction::Delete {
+                keyspace: KeyspaceName::Meta,
+                key: super::browse_counts::marker(source)?,
+            }],
+            PersistMode::Buffer,
+        )?;
         let session = self
             .source_store
             .database()
@@ -87,6 +94,7 @@ impl CatalogRecordStore {
     }
 
     fn rebuild_parallel_metrics(&self, source: &str, cancel: &AtomicBool) -> Result<()> {
+        self.clear_browse_counts(source, cancel)?;
         let snapshot = self.read_snapshot();
         let mut cursor = None;
         let mut count = 0u64;
@@ -101,7 +109,9 @@ impl CatalogRecordStore {
                 512,
             )?;
             let mut actions = Vec::new();
+            let mut browse_deltas = super::browse_counts::Deltas::new();
             for record in page.records {
+                super::browse_counts::adjust(&mut browse_deltas, &record, 1)?;
                 count += 1;
                 if record.entry_type == CatalogEntryType::File {
                     files += 1;
@@ -128,11 +138,12 @@ impl CatalogRecordStore {
                     });
                 }
             }
-            if !actions.is_empty() {
-                self.source_store
-                    .database()
-                    .write_batch(&actions, PersistMode::Buffer)?;
-            }
+            self.source_store
+                .database()
+                .write_transaction(PersistMode::Buffer, |latest| {
+                    super::browse_counts::append(latest, &mut actions, browse_deltas)?;
+                    Ok(actions)
+                })?;
             cursor = page.next_cursor;
             if cursor.is_none() {
                 break;
@@ -155,9 +166,38 @@ impl CatalogRecordStore {
                     record_metrics::set(&mut actions, domain, Some(source), next)?;
                 }
                 record_metrics::advance(snapshot, &mut actions, "catalog")?;
+                super::browse_counts::mark(&mut actions, source)?;
                 Ok(actions)
             })?;
         Ok(())
+    }
+
+    fn clear_browse_counts(&self, source: &str, cancel: &AtomicBool) -> Result<()> {
+        let prefix = super::browse_counts::source_prefix(source)?;
+        loop {
+            crate::source_store::ensure_not_cancelled(cancel)?;
+            let snapshot = self.read_snapshot();
+            let entries = snapshot.keyset(
+                KeyspaceName::Meta,
+                &prefix,
+                None,
+                ScanDirection::Forward,
+                512,
+            )?;
+            if entries.is_empty() {
+                return Ok(());
+            }
+            let actions = entries
+                .into_iter()
+                .map(|entry| WriteAction::Delete {
+                    keyspace: KeyspaceName::Meta,
+                    key: entry.key,
+                })
+                .collect::<Vec<_>>();
+            self.source_store
+                .database()
+                .write_batch(&actions, PersistMode::Buffer)?;
+        }
     }
 }
 

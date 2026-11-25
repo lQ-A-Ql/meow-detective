@@ -4373,6 +4373,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88904434abc2901f197fe8cc55f0445e7ded921dba5911dad2e2b39b48e663c4"
 
 [[package]]
+name = "memcomparable"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "376101dbd964fc502d5902216e180f92b3d003b5cc3d2e40e044eb5470fca677"
+dependencies = [
+ "bytes",
+ "serde",
+ "thiserror 1.0.69",
+]
+
+[[package]]
 name = "memmap2"
 version = "0.9.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5117,6 +5128,7 @@ dependencies = [
  "crossbeam-channel",
  "fjall",
  "hex",
+ "memcomparable",
  "postcard",
  "serde",
  "serde_json",

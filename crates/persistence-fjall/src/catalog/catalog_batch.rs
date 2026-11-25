@@ -34,6 +34,7 @@ impl CatalogRecordStore {
             .collect::<HashSet<_>>();
         let mut actions = Vec::with_capacity(records.len().saturating_mul(8));
         let mut deltas = crate::record_metrics::CountDeltas::new();
+        let mut browse_deltas = super::browse_counts::Deltas::new();
         for record in records {
             let key = record_key(&record.data_source_id, &record.id)?;
             let previous = self.read_record(snapshot, &key, &record.data_source_id, &record.id)?;
@@ -41,6 +42,7 @@ impl CatalogRecordStore {
                 continue;
             }
             if let Some(previous) = previous {
+                super::browse_counts::adjust(&mut browse_deltas, &previous, -1)?;
                 self.index_deletes(&mut actions, &previous)?;
                 if previous.entry_type == super::CatalogEntryType::File {
                     crate::record_metrics::adjust(
@@ -69,6 +71,7 @@ impl CatalogRecordStore {
                 1,
                 record,
             )?;
+            super::browse_counts::adjust(&mut browse_deltas, record, 1)?;
             actions.push(WriteAction::Put {
                 keyspace: KeyspaceName::CatalogRecords,
                 key,
@@ -99,6 +102,14 @@ impl CatalogRecordStore {
             return Ok(actions);
         }
         crate::record_metrics::append(snapshot, &mut actions, deltas)?;
+        super::browse_counts::append(snapshot, &mut actions, browse_deltas)?;
+        for source in batch_ids
+            .iter()
+            .map(|(source, _)| source)
+            .collect::<std::collections::BTreeSet<_>>()
+        {
+            super::browse_counts::mark(&mut actions, source)?;
+        }
         crate::record_metrics::advance(snapshot, &mut actions, "catalog")?;
         Ok(actions)
     }
