@@ -17,6 +17,7 @@ pub use crate::dto::analysis_classification::{
     EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
     FileClassificationBoardDto,
 };
+pub use crate::dto::analysis_diagnostics::AnalysisDiagnosticCountsDto;
 pub use crate::dto::analysis_email::{
     EmailAccountDto, EmailAttachmentDto, EmailExtractionSummaryDto, EmailHeaderDto, EmailMessageDto,
 };

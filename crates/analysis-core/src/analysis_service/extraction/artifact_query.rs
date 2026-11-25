@@ -1,4 +1,4 @@
-use crate::analysis_service::{candidates::EvidenceCandidate, error::AnalysisServiceError};
+use crate::analysis_service::error::AnalysisServiceError;
 use rusqlite::Connection;
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -14,92 +14,6 @@ pub(super) struct AnalysisArtifactRow {
     pub(super) extractor_id: Option<String>,
     pub(super) created_at: String,
     pub(super) attrs: BTreeMap<String, Value>,
-}
-
-const ANALYSIS_FAMILIES: &[&str] = &[
-    "Prefetch",
-    "LNK",
-    "JumpList",
-    "RecycleBin",
-    "Thumbcache",
-    "SRU",
-    "RegistryValue",
-    "RegistrySamUser",
-    "RegistryUserAssist",
-    "RegistryHive",
-    "RegistryNetworkAdapter",
-    "RegistryNetworkProfile",
-    "RegistryInstalledSoftware",
-    "RegistryPortableDevice",
-    "RegistrySystemService",
-    "RegistryUsbDevice",
-    "RegistryMountedDevice",
-    "RegistryShutdownTime",
-    "RegistryShimCache",
-    "RegistryMachineRunKey",
-    "RegistryWinlogonConfig",
-    "RegistryLsaPackage",
-    "RegistryOpenSaveMru",
-    "RegistryLastVisitedMru",
-    "RegistryRunMru",
-    "RegistryShellbag",
-    "RegistryMuiCache",
-    "RegistryAmcacheApplication",
-    "RegistryAmcacheApplicationFile",
-    "RegistryAppCompatLayer",
-    "RegistrySecurityPolicy",
-    "RegistryLsaSecret",
-    "RegistryCachedCredential",
-    "BrowserHistory",
-    "BrowserDownload",
-    "BrowserCookie",
-    "BrowserSessionTab",
-    "BrowserPassword",
-    "BrowserExtension",
-    "EmailMessage",
-    "EmailAccount",
-    "EvtxBootShutdown",
-    "EvtxSecurityEvent",
-    "EvtxApplicationEvent",
-    "LinuxJournal",
-    "LinuxWtmp",
-    "LinuxBashCommand",
-    "LinuxAptEvent",
-    "LinuxCronJob",
-    "LinuxSudoEvent",
-    "LinuxSystemConfig",
-    "LinuxWebSite",
-    "LinuxWebAccessLog",
-    "LinuxWebErrorLog",
-    "LinuxWebFinding",
-    "LinuxMysqlConfig",
-    "LinuxMysqlLogEntry",
-    "LinuxMysqlFinding",
-];
-
-pub(super) fn already_has_v1_artifacts(
-    conn: &Connection,
-    candidate: &EvidenceCandidate,
-) -> Result<bool, AnalysisServiceError> {
-    let prefix = match candidate.category.as_str() {
-        "Registry" => "Registry",
-        "BrowserHistory" => "Browser",
-        "Email" => "Email",
-        "EventLogs" => "Evtx",
-        "LinuxArtifacts" => "Linux",
-        _ => return Ok(false),
-    };
-    let families = ANALYSIS_FAMILIES
-        .iter()
-        .copied()
-        .filter(|family| family.starts_with(prefix))
-        .collect::<Vec<_>>();
-    Ok(count(conn, Some(&families), |artifact| {
-        artifact.source_object_id.as_ref() == Some(&candidate.file_id)
-            && (candidate.category != "Registry"
-                || artifact.extractor_version.as_deref()
-                    == Some(crate::analysis_service::capability::REGISTRY_EXTRACTOR_VERSION))
-    })? > 0)
 }
 
 pub(super) fn count_analysis_artifacts(conn: &Connection) -> Result<u64, AnalysisServiceError> {

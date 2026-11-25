@@ -214,12 +214,6 @@ fn emit_sites(
     parser: &str,
     outcome: &mut ExtractionOutcome,
 ) {
-    if sites.is_empty() {
-        outcome.warnings.push(format!(
-            "{} contains no auditable nginx/apache site records",
-            candidate.path
-        ));
-    }
     for site in sites {
         let mut attrs = base_attrs(candidate);
         attrs.insert(

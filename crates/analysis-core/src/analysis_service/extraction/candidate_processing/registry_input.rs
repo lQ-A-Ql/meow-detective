@@ -17,6 +17,9 @@ pub(super) fn parse(
             Vec::new(),
         ),
         None => match preload.failure_reason(candidate) {
+            Some(reason) if preload.has_invalid_input(candidate) => {
+                CandidateCompletionKind::corrupt_input(reason.to_owned())
+            }
             Some(reason) => CandidateCompletionKind::Warning(reason.to_owned()),
             None => CandidateCompletionKind::Failed(AnalysisServiceError::Other(
                 "Registry candidate has no preparation result".to_owned(),

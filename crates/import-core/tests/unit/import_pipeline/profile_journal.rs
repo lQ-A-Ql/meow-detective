@@ -196,6 +196,7 @@ fn analysis_result_io_failure_is_typed_and_retained() {
         sections: Vec::new(),
         generated_at: chrono::Utc::now().to_rfc3339(),
         warnings: Vec::new(),
+        diagnostic_counts: Default::default(),
     };
     let error = profiler
         .record_analysis_result("case", "source", "run", 0, &result)

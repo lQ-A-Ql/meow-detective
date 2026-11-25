@@ -24,6 +24,7 @@ pub struct DiagnosticAnalysisCandidateScan {
     pub source_size: u64,
     pub content_identity: String,
     pub warnings: Vec<String>,
+    pub diagnostic_counts: [u64; 5],
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,6 +38,7 @@ pub struct CompleteAnalysisCandidateScan {
     pub timeline_event_count: u64,
     pub output_digest: String,
     pub warnings: Vec<String>,
+    pub diagnostic_counts: [u64; 5],
 }
 
 pub struct AnalysisScanRepo<'a> {
@@ -363,23 +365,7 @@ fn decode_diagnostic_scan(value: &str) -> DbResult<DiagnosticAnalysisCandidateSc
             "decode analysis candidate diagnostic checkpoint: {error}"
         ))
     })?;
-    let warnings = value
-        .get("warnings")
-        .and_then(serde_json::Value::as_array)
-        .ok_or_else(|| {
-            DbError::System(
-                "analysis candidate diagnostic checkpoint has invalid warnings".to_string(),
-            )
-        })?
-        .iter()
-        .map(|warning| {
-            warning.as_str().map(str::to_string).ok_or_else(|| {
-                DbError::System(
-                    "analysis candidate diagnostic checkpoint has a non-string warning".to_string(),
-                )
-            })
-        })
-        .collect::<DbResult<Vec<_>>>()?;
+    let warnings = json_warnings(&value)?;
     if warnings.is_empty() {
         return Err(DbError::System(
             "analysis candidate diagnostic checkpoint has no warnings".to_string(),
@@ -392,6 +378,7 @@ fn decode_diagnostic_scan(value: &str) -> DbResult<DiagnosticAnalysisCandidateSc
         source_size: json_source_size(&value)?,
         content_identity: optional_json_string(&value, "contentIdentity"),
         warnings,
+        diagnostic_counts: json_diagnostic_counts(&value)?,
     })
 }
 
@@ -403,6 +390,7 @@ fn encode_diagnostic_scan(scan: &DiagnosticAnalysisCandidateScan) -> String {
         "sourceSize": scan.source_size,
         "contentIdentity": scan.content_identity,
         "warnings": scan.warnings,
+        "diagnosticCounts": scan.diagnostic_counts,
     })
     .to_string()
 }
@@ -422,7 +410,8 @@ fn decode_complete_scan(value: &str) -> DbResult<CompleteAnalysisCandidateScan> 
         artifact_count: json_u64(&value, "artifactCount")?,
         timeline_event_count: json_u64(&value, "timelineEventCount")?,
         output_digest: json_string(&value, "outputDigest")?,
-        warnings: optional_warnings(&value)?,
+        warnings: json_warnings(&value)?,
+        diagnostic_counts: json_diagnostic_counts(&value)?,
     })
 }
 
@@ -437,8 +426,18 @@ fn encode_complete_scan(scan: &CompleteAnalysisCandidateScan) -> String {
         "timelineEventCount": scan.timeline_event_count,
         "outputDigest": scan.output_digest,
         "warnings": scan.warnings,
+        "diagnosticCounts": scan.diagnostic_counts,
     })
     .to_string()
+}
+
+fn json_diagnostic_counts(value: &serde_json::Value) -> DbResult<[u64; 5]> {
+    serde_json::from_value(
+        value.get("diagnosticCounts").cloned().ok_or_else(|| {
+            DbError::System("analysis checkpoint has no diagnostic counts".into())
+        })?,
+    )
+    .map_err(|error| DbError::System(format!("invalid checkpoint diagnostic counts: {error}")))
 }
 
 fn json_string(value: &serde_json::Value, field: &str) -> DbResult<String> {
@@ -465,23 +464,14 @@ fn optional_json_string(value: &serde_json::Value, field: &str) -> String {
         .to_string()
 }
 
-fn optional_warnings(value: &serde_json::Value) -> DbResult<Vec<String>> {
-    let Some(warnings) = value.get("warnings") else {
-        return Ok(Vec::new());
-    };
-    let warnings = warnings.as_array().ok_or_else(|| {
-        DbError::System("complete analysis candidate checkpoint has invalid warnings".to_string())
-    })?;
-    warnings
-        .iter()
-        .map(|warning| {
-            warning.as_str().map(str::to_string).ok_or_else(|| {
-                DbError::System(
-                    "complete analysis candidate checkpoint has a non-string warning".to_string(),
-                )
-            })
-        })
-        .collect()
+fn json_warnings(value: &serde_json::Value) -> DbResult<Vec<String>> {
+    serde_json::from_value(
+        value
+            .get("warnings")
+            .cloned()
+            .ok_or_else(|| DbError::System("analysis checkpoint has no warnings field".into()))?,
+    )
+    .map_err(|error| DbError::System(format!("invalid checkpoint warnings: {error}")))
 }
 
 fn json_u64(value: &serde_json::Value, field: &str) -> DbResult<u64> {

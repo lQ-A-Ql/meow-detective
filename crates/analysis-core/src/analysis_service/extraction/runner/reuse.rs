@@ -92,7 +92,7 @@ fn replay_candidate(
         ..Default::default()
     };
     if let Some(warnings) = request.checkpoints.diagnostic.get(&key) {
-        result.warning = !warnings.is_empty();
+        result.warning = !warnings.warnings.is_empty();
         state.replay_diagnostic(capability, warnings);
     } else if request.checkpoints.clean.contains(&key) {
         state.replay_clean(capability);

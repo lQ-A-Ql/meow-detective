@@ -74,7 +74,7 @@ pub use evidence_core::MAGIC_HEADER_LIMIT;
 pub const MAX_REGISTRY_ANALYSIS_BYTES: usize = 256 * 1024 * 1024;
 pub const MAX_ANALYSIS_SOURCE_BYTES: usize = 128 * 1024 * 1024;
 // Preserve case-sensitive systemd paths and project Docker on-disk states.
-pub const ANALYSIS_EXTRACTOR_VERSION: &str = "1.3.3";
+pub const ANALYSIS_EXTRACTOR_VERSION: &str = "2.0.0";
 
 #[cfg(test)]
 #[path = "../../tests/unit/analysis_service/mod.rs"]

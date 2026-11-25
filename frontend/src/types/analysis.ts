@@ -190,6 +190,15 @@ export interface AnalysisExtractionRun {
   sections: AnalysisExtractionSectionRun[];
   generatedAt: string;
   warnings: string[];
+  diagnosticCounts: AnalysisDiagnosticCounts;
+}
+
+export interface AnalysisDiagnosticCounts {
+  capabilityLimits: number;
+  corruptInputs: number;
+  readFailures: number;
+  recoveredInputs: number;
+  emptyInputs: number;
 }
 
 export interface AnalysisExtractionSectionRun {

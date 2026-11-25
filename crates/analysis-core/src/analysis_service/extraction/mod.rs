@@ -11,6 +11,7 @@ mod containerd_images;
 pub(crate) mod email;
 pub(crate) mod evtx;
 pub(crate) mod linux;
+pub(crate) use linux::uses_streaming_text_log;
 mod linux_sections;
 mod native_output;
 mod observability;
@@ -106,6 +107,7 @@ pub struct ExtractionOutcome {
     pub artifacts: Vec<Artifact>,
     pub timeline_events: Vec<TimelineEvent>,
     pub warnings: Vec<String>,
+    pub diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto,
 }
 
 /// One plugin `meow_plugin_extract` failure during an analysis run. Surfaced

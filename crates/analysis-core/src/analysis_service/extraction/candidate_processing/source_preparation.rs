@@ -66,7 +66,7 @@ where
     if capability.read_policy == CandidateReadPolicy::Full
         && plugin_input_exceeds_budget(&candidate)
     {
-        return Ok(ready_deferred(
+        return Ok(ready_capability_limit(
             candidate,
             capability,
             format!("plugin input and companions exceed the {MAX_PLUGIN_INPUT_BYTES} byte budget"),
@@ -77,6 +77,9 @@ where
     }
     if candidate.category == "EventLogs" {
         return prepare_evtx_source(coordinator, candidate, capability, read_limit);
+    }
+    if super::super::uses_streaming_text_log(&candidate) {
+        return super::linux_text_log::prepare(coordinator, candidate, capability);
     }
 
     let bytes = match read_candidate_bytes(coordinator, &candidate, capability, read_limit) {
@@ -255,7 +258,7 @@ where
                     "{} image structure exceeds the buffered fallback limit",
                     candidate.path
                 );
-                return Ok(ready_deferred(candidate, capability, warning));
+                return Ok(ready_capability_limit(candidate, capability, warning));
             }
             let bytes = match read_candidate_source_with_progress(
                 &candidate,
@@ -356,7 +359,13 @@ where
                 Err(AnalysisServiceError::Cancelled) => {
                     return Err(AnalysisServiceError::Cancelled)
                 }
-                Err(error) => CandidateCompletionKind::Deferred(error.to_string()),
+                Err(AnalysisServiceError::CorruptInput(error)) => {
+                    CandidateCompletionKind::corrupt_input(error)
+                }
+                Err(error @ (AnalysisServiceError::Io(_) | AnalysisServiceError::Read(_))) => {
+                    CandidateCompletionKind::Deferred(error.to_string())
+                }
+                Err(error) => CandidateCompletionKind::Failed(error),
             };
             return Ok(PreparedWork::Ready(CandidateCompletion {
                 candidate,
@@ -394,7 +403,7 @@ where
             "{} exceeds the {} byte buffered EVTX limit and the evidence reader is not seekable",
             candidate.path, read_limit
         );
-        return Ok(ready_deferred(candidate, capability, warning));
+        return Ok(ready_capability_limit(candidate, capability, warning));
     }
     let weight_bytes = bytes.len();
     Ok(PreparedWork::Parallel {
@@ -438,6 +447,18 @@ pub(super) fn ready_deferred(
         candidate,
         capability,
         kind: CandidateCompletionKind::Deferred(warning),
+    })
+}
+
+fn ready_capability_limit(
+    candidate: EvidenceCandidate,
+    capability: AnalysisCapability,
+    warning: String,
+) -> PreparedWork<PreparedCandidate, CandidateCompletion> {
+    PreparedWork::Ready(CandidateCompletion {
+        candidate,
+        capability,
+        kind: CandidateCompletionKind::capability_limit(warning),
     })
 }
 

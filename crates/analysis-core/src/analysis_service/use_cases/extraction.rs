@@ -378,7 +378,9 @@ fn read_candidate_source(
         candidate.size,
         candidate.encrypted,
     );
-    if matches!(candidate.category.as_str(), "EventLogs" | "ImageMetadata") {
+    if matches!(candidate.category.as_str(), "EventLogs" | "ImageMetadata")
+        || crate::analysis_service::extraction::uses_streaming_text_log(candidate)
+    {
         reader
             .open_file_range_with_metadata(hint)
             .map(candidate_source_from_range_reader)

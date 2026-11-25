@@ -1,16 +1,13 @@
-use super::artifact_query::already_has_v1_artifacts;
 use super::candidate_processing::{capability_for_candidate, CandidateSource, ExistingCheckpoints};
 use super::registry_preload::{preload_registry_context, RegistryPreloadContext};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::capability::AnalysisCapability;
 use domain::FileEntryId;
-use rusqlite::Connection;
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 use std::sync::atomic::AtomicBool;
 
 pub(super) fn prepare_registry_preload(
-    conn: &Connection,
     candidates: &[EvidenceCandidate],
     selected: &[AnalysisCapability],
     checkpoints: &ExistingCheckpoints<'_>,
@@ -58,13 +55,7 @@ pub(super) fn prepare_registry_preload(
         |candidate| {
             let checkpoint_exists = capability_for_candidate(selected, candidate)
                 .is_some_and(|capability| checkpoints.has_candidate(candidate, capability));
-            if checkpoint_exists {
-                Ok(true)
-            } else if checkpoints.storage_available {
-                Ok(false)
-            } else {
-                already_has_v1_artifacts(conn, candidate)
-            }
+            Ok(checkpoint_exists)
         },
     )
 }

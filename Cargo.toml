@@ -167,6 +167,8 @@ containers-bolt = { path = "crates/containers-bolt", default-features = false }
 bbolt-rs = { version = "=1.3.10", features = ["compat"] }
 etc-os-release = { version = "=0.1.1", default-features = false }
 shlex = "=2.0.1"
+ssh-key = { version = "=0.6.7", default-features = false, features = ["std", "ecdsa"] }
+compcol = { version = "=0.8.0", default-features = false, features = ["std", "lznt1"] }
 libc = "0.2"
 ceph-wire = { path = "crates/ceph-wire" }
 rocksdb-wire = { path = "crates/rocksdb-wire" }

@@ -1,4 +1,4 @@
-use super::common::{insert_opt, truncate, MAX_TEXT_LOG_EVENTS_PER_SOURCE};
+use super::common::{insert_opt, truncate};
 use super::timezone::LinuxLogTimeContext;
 use crate::analysis_service::artifact_builders::{base_attrs, make_artifact, make_timeline_event};
 use crate::analysis_service::candidates::EvidenceCandidate;
@@ -6,6 +6,55 @@ use crate::analysis_service::extraction::ExtractionOutcome;
 use artifacts_linux::LogClock;
 use chrono::{DateTime, Datelike, NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use serde_json::Value;
+
+mod stream;
+pub(in crate::analysis_service::extraction) use stream::persist_reader;
+
+pub(crate) fn uses_streaming(candidate: &EvidenceCandidate) -> bool {
+    candidate.category == "LinuxArtifacts"
+        && is_text_log_path(
+            &crate::analysis_service::candidates::normalize_evidence_path(&candidate.path),
+        )
+}
+
+pub(super) fn extract_complete(
+    candidate: &EvidenceCandidate,
+    bytes: &[u8],
+    log_time: &LinuxLogTimeContext,
+) -> ExtractionOutcome {
+    let mut outcome = ExtractionOutcome::default();
+    let result = stream::visit(
+        Box::new(std::io::Cursor::new(bytes)),
+        candidate,
+        log_time,
+        &std::sync::atomic::AtomicBool::new(false),
+        |mut chunk, _| {
+            outcome.artifacts.append(&mut chunk.artifacts);
+            outcome.timeline_events.append(&mut chunk.timeline_events);
+            Ok(())
+        },
+    );
+    match result {
+        Ok(summary) => {
+            outcome.diagnostic_counts.capability_limits = u64::from(!summary.warnings.is_empty());
+            outcome.warnings = summary.warnings;
+        }
+        Err(error) => {
+            outcome.artifacts.clear();
+            outcome.timeline_events.clear();
+            match error {
+                crate::analysis_service::AnalysisServiceError::Unsupported(_) => {
+                    outcome.diagnostic_counts.capability_limits = 1
+                }
+                _ => outcome.diagnostic_counts.corrupt_inputs = 1,
+            }
+            outcome
+                .warnings
+                .push(format!("{}: {error}", candidate.path));
+        }
+    }
+    outcome
+}
 
 pub(in crate::analysis_service::extraction) fn is_text_log_path(normalized: &str) -> bool {
     [
@@ -55,38 +104,107 @@ pub(super) fn extract_with_filter(
     outcome: &mut ExtractionOutcome,
     log_time: &LinuxLogTimeContext,
 ) {
-    let text = String::from_utf8_lossy(bytes);
-    let mut emitted = 0usize;
-    let mut unanchored = 0usize;
-    let mut context = TimestampContext {
-        reference: candidate.modified_at,
-        fallback_year: None,
-        clock: log_time.clock(),
-    };
-    for (line_number, line) in text.lines().enumerate() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || skip(trimmed) {
-            continue;
+    let mut parser = TextLogParser::new(candidate, parser, label, log_time);
+    let mut offset = 0;
+    for (line_number, line) in bytes.split_inclusive(|byte| *byte == b'\n').enumerate() {
+        let text = String::from_utf8_lossy(line);
+        let trimmed = text.trim();
+        if !trimmed.is_empty() && !skip(trimmed) {
+            let mut parsed = parser.parse_bytes(line_number as u64 + 1, offset, line);
+            outcome.artifacts.append(&mut parsed.artifacts);
+            outcome.timeline_events.append(&mut parsed.timeline_events);
         }
-        if emitted >= MAX_TEXT_LOG_EVENTS_PER_SOURCE {
-            outcome.warnings.push(format!(
-                "{} text log emitted first {} records only",
-                candidate.path, MAX_TEXT_LOG_EVENTS_PER_SOURCE
-            ));
-            break;
-        }
+        offset += line.len() as u64;
+    }
+    let warnings = parser.finish();
+    outcome.diagnostic_counts.capability_limits += u64::from(!warnings.is_empty());
+    outcome.warnings.extend(warnings);
+}
 
-        let parsed = parse_syslog_like_line(trimmed, &mut context);
+struct TextLogParser<'a> {
+    candidate: &'a EvidenceCandidate,
+    parser: &'a str,
+    label: &'a str,
+    log_time: &'a LinuxLogTimeContext,
+    context: TimestampContext<'a>,
+    unanchored: u64,
+    offset_scope: &'static str,
+}
+
+impl<'a> TextLogParser<'a> {
+    fn new(
+        candidate: &'a EvidenceCandidate,
+        parser: &'a str,
+        label: &'a str,
+        log_time: &'a LinuxLogTimeContext,
+    ) -> Self {
+        Self {
+            candidate,
+            parser,
+            label,
+            log_time,
+            context: TimestampContext {
+                reference: candidate.modified_at,
+                fallback_year: None,
+                clock: log_time.clock(),
+            },
+            unanchored: 0,
+            offset_scope: if candidate.path.to_ascii_lowercase().ends_with(".gz") {
+                "gzipDecodedContent"
+            } else {
+                "sourceFileContent"
+            },
+        }
+    }
+
+    fn parse_bytes(&mut self, line_number: u64, offset: u64, bytes: &[u8]) -> ExtractionOutcome {
+        let text = String::from_utf8_lossy(bytes);
+        if text.trim().is_empty() {
+            return ExtractionOutcome::default();
+        }
+        let mut outcome = self.parse(line_number, offset, text.trim());
+        if matches!(text, std::borrow::Cow::Owned(_)) {
+            use base64::Engine;
+            let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+            for artifact in &mut outcome.artifacts {
+                artifact
+                    .attrs
+                    .insert("rawLineBase64".into(), encoded.clone().into());
+                artifact
+                    .attrs
+                    .insert("textEncoding".into(), "unknown".into());
+            }
+            for event in &mut outcome.timeline_events {
+                event
+                    .attrs
+                    .insert("rawLineBase64".into(), encoded.clone().into());
+                event.attrs.insert("textEncoding".into(), "unknown".into());
+            }
+        }
+        outcome
+    }
+
+    fn parse(&mut self, line_number: u64, offset: u64, line: &str) -> ExtractionOutcome {
+        let Self {
+            candidate,
+            parser,
+            label,
+            log_time,
+            context,
+            unanchored,
+            offset_scope,
+        } = self;
+        let parsed = parse_syslog_like_line(line, context);
+        let mut outcome = ExtractionOutcome::default();
         let mut attrs = base_attrs(candidate);
         attrs.insert(
             "tzAssumed".to_string(),
             Value::String(log_time.tz_label().to_string()),
         );
         attrs.insert("message".to_string(), Value::String(parsed.message.clone()));
-        attrs.insert(
-            "lineNumber".to_string(),
-            Value::Number((line_number as u64 + 1).into()),
-        );
+        attrs.insert("lineNumber".to_string(), Value::Number(line_number.into()));
+        attrs.insert("byteOffset".to_string(), Value::Number(offset.into()));
+        attrs.insert("byteOffsetScope".into(), (*offset_scope).into());
         attrs.insert("logKind".to_string(), Value::String(label.to_string()));
         insert_opt(&mut attrs, "hostname", parsed.hostname.clone());
         insert_opt(
@@ -107,7 +225,7 @@ pub(super) fn extract_with_filter(
             );
         }
         if let Some(unanchored_date) = parsed.unanchored_date.clone() {
-            unanchored += 1;
+            *unanchored += 1;
             attrs.insert("logDate".to_string(), Value::String(unanchored_date));
         }
 
@@ -131,13 +249,17 @@ pub(super) fn extract_with_filter(
                 parser,
             ));
         }
-        emitted += 1;
+        outcome
     }
-    if unanchored > 0 {
-        outcome.warnings.push(format!(
+
+    fn finish(self) -> Vec<String> {
+        if self.unanchored == 0 {
+            return Vec::new();
+        }
+        vec![format!(
             "{} {} classic syslog lines have no year anchor (file mtime and RFC3339 lines unavailable); timestamp left empty",
-            candidate.path, unanchored
-        ));
+            self.candidate.path, self.unanchored
+        )]
     }
 }
 

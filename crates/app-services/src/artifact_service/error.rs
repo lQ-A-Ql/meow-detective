@@ -84,6 +84,7 @@ impl From<AnalysisServiceError> for ArtifactServiceError {
             AnalysisServiceError::Bolt(error) => Self::Bolt(error),
             AnalysisServiceError::Db(error) => Self::Db(error),
             AnalysisServiceError::Io(error) => Self::Io(error),
+            AnalysisServiceError::CorruptInput(message) => Self::Extractor(message),
             AnalysisServiceError::Read(message)
             | AnalysisServiceError::Extraction(message)
             | AnalysisServiceError::NotFound(_, message)

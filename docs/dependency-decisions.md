@@ -171,3 +171,22 @@ The rust-unic path is part of Tauri capability/configuration URL-pattern handlin
 Under the [dependency advisory policy](dependency-advisory-policy.md), this is the first self-approved Low-severity renewal. All six exceptions name Dependency Maintenance and expire on **2026-11-15** (30 days after review). At the next review, replace the upstream dependency path or escalate any further renewal; do not silently extend the dates again. Re-review the GTK build path for any Linux desktop distribution.
 
 Validation uses `cargo tree --locked --target x86_64-pc-windows-msvc -i unic-ucd-ident`, `cargo tree --locked --target x86_64-unknown-linux-gnu -i proc-macro-error`, the current RustSec database, `cargo deny check advisories bans licenses sources`, and `scripts/check-deny-exceptions.ps1`.
+
+## Evidence decoding providers reviewed on 2026-11-25
+
+| Dependency | License | Enabled surface | Evidence-processing use |
+|---|---|---|---|
+| `ssh-key = 0.6.7` | MIT OR Apache-2.0 | `std`, `ecdsa` | RustCrypto OpenSSH key, authorized_keys and known_hosts decoding. Public fingerprints, comments and configuration options are retained in Linux artifacts. |
+| `compcol = 0.8.0` | MIT | `std`, `lznt1` | LZNT1 decoding on non-Windows hosts through its streaming `DecoderReader`, with a caller-enforced compression-unit output bound. |
+| Existing `windows-sys = 0.61.2` | MIT OR Apache-2.0 | `Wdk_Storage_FileSystem` | Windows LZNT1 and XPRESS Huffman decompression through ntdll. Workspace size is requested from the provider, and the output length is checked. |
+
+The provider versions and features are declared in workspace dependencies. The
+Windows NTFS reader uses the native LZNT1 provider. A test decodes the same input
+with the portable provider and compares every output byte, then checks output
+overflow and truncated-input rejection. Complete reads, range reads and
+seekable NTFS streams share the compression-unit mapping.
+
+The review used the tagged `RustCrypto/SSH` `ssh-key/v0.6.7` Cargo manifest and
+key/configuration APIs, the published `compcol 0.8.0` Cargo manifest and LZNT1
+decoder implementation, and the Microsoft `RtlDecompressBuffer`,
+`RtlDecompressBufferEx` and `RtlGetCompressionWorkSpaceSize` specifications.

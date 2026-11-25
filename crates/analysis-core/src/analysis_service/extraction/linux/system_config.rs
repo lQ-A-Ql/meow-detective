@@ -140,7 +140,7 @@ fn extract_text_config_filtered(
     }
 
     let text = String::from_utf8_lossy(bytes);
-    let emitted = extract_key_value_or_lines_with_kind(
+    extract_key_value_or_lines_with_kind(
         candidate,
         &text,
         parser,
@@ -149,12 +149,6 @@ fn extract_text_config_filtered(
         skip_line,
         outcome,
     );
-    if emitted == 0 {
-        outcome.warnings.push(format!(
-            "{} contained no auditable non-comment Linux config records",
-            candidate.path
-        ));
-    }
 }
 
 fn is_ini_section_header(line: &str) -> bool {

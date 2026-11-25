@@ -124,6 +124,7 @@ pub struct AnalysisExtractionRunDto {
     pub sections: Vec<AnalysisExtractionSectionRunDto>,
     pub generated_at: String,
     pub warnings: Vec<String>,
+    pub diagnostic_counts: super::AnalysisDiagnosticCountsDto,
 }
 
 #[cfg(test)]

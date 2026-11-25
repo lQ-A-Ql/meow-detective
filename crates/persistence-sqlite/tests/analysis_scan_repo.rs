@@ -55,6 +55,7 @@ fn diagnostic_candidate_scan_round_trips_with_warning_details() {
             "unsupported SSH key material".to_string(),
             "manual review required".to_string(),
         ],
+        diagnostic_counts: [1, 0, 0, 0, 0],
     };
 
     repository
@@ -88,6 +89,7 @@ fn complete_candidate_scan_round_trips_output_identity() {
         timeline_event_count: 2,
         output_digest: "a".repeat(64),
         warnings: vec!["partial parser warning".to_string()],
+        diagnostic_counts: [0, 1, 0, 0, 0],
     };
 
     repository
@@ -118,6 +120,7 @@ fn checkpoint_state_transition_removes_superseded_variant() {
         source_size: 16384,
         content_identity: "content-v1".to_string(),
         warnings: vec!["temporary parse failure".to_string()],
+        diagnostic_counts: [0, 1, 0, 0, 0],
     };
     repository
         .insert_diagnostic_batch(std::slice::from_ref(&diagnostic))
@@ -132,6 +135,7 @@ fn checkpoint_state_transition_removes_superseded_variant() {
         timeline_event_count: 4,
         output_digest: "b".repeat(64),
         warnings: Vec::new(),
+        diagnostic_counts: [0; 5],
     };
 
     repository

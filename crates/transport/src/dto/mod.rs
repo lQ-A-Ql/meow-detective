@@ -6,6 +6,7 @@ mod analysis_android;
 mod analysis_base;
 mod analysis_browser;
 mod analysis_classification;
+mod analysis_diagnostics;
 mod analysis_email;
 mod analysis_evtx;
 mod analysis_kubernetes;
@@ -54,43 +55,7 @@ pub mod topology;
 pub mod v3_governance;
 pub mod viewer;
 pub mod viewer_steg;
-pub use analysis::{
-    AmcacheApplicationDto, AmcacheApplicationFileDto, AnalysisBootRecordDto,
-    AnalysisClassifiedFileDto, AnalysisExtractionPhaseDto, AnalysisExtractionProgressDto,
-    AnalysisExtractionRunDto, AnalysisExtractionSectionRunDto, AnalysisFieldProvenanceDto,
-    AnalysisFileClassificationDto, AnalysisNetworkAdapterDto, AnalysisParseStatusDto,
-    AnalysisProvenanceDto, AnalysisSystemInfoDto, AnalysisWorkProgressDto, AnalysisWorkStageDto,
-    AndroidAnalysisRunDto, AndroidDeviceFactDto, AndroidDeviceInfoDto, AndroidPackageDto,
-    AndroidPackageSummaryDto, AppCompatLayerDto, BenchmarkRequiredCheckDto,
-    BenchmarkRequirementStatusDto, BenchmarkSnapshotDto, BenchmarkSummaryDto, BrowserCookieDto,
-    BrowserDownloadDto, BrowserExtensionDto, BrowserHistorySummaryDto, BrowserPasswordDto,
-    BrowserSessionTabDto, BrowserVisitDto, CachedCredentialDto, ClassificationGroupDto,
-    ClassificationSubcategoryDto, ClassifiedFileRowDto, CorrelationCoverageStatusDto,
-    CorrelationFamilyCoverageDto, EmailAccountDto, EmailAttachmentDto, EmailExtractionSummaryDto,
-    EmailHeaderDto, EmailMessageDto, ErrorTaxonomyEntryDto, EvidenceCategoryDto,
-    EvidenceClassificationSummaryDto, EvidenceClassificationTotalsDto, EvidenceSourceDto,
-    EvtxApplicationEventDto, EvtxBootEventDto, EvtxEventSummaryDto, EvtxEventViewDto,
-    EvtxSecurityEventDto, FileClassificationBoardDto, GovernanceFactSourceDto,
-    GovernanceRuntimeCheckDto, GovernanceRuntimeResultsDto, GovernanceRuntimeSignalsDto,
-    GovernanceRuntimeSubcheckDto, InstalledSoftwareDto, KnownLimitationDto,
-    KnownLimitationStatusDto, KubernetesAnalysisRunDto, KubernetesClusterArtifactDto,
-    KubernetesClusterNodeDto, KubernetesClusterSummaryDto, LastVisitedMruEntryDto, LinuxAccountDto,
-    LinuxAptEventDto, LinuxArtifactSummaryDto, LinuxBashCommandDto, LinuxCronJobDto,
-    LinuxJournalEntryDto, LinuxLoginRecordDto, LinuxMysqlConfigDto, LinuxMysqlFindingDto,
-    LinuxMysqlLogEntryDto, LinuxSudoEventDto, LinuxSystemConfigDto, LinuxSystemInfoDto,
-    LinuxWebAccessLogDto, LinuxWebErrorLogDto, LinuxWebFindingDto, LinuxWebSiteDto, LsaPackageDto,
-    LsaSecretDto, MountedDeviceDto, MuiCacheEntryDto, NetworkProfileDto, OpenSaveMruEntryDto,
-    ParserSupportMatrixEntryDto, ParserSupportMatrixSummaryDto, PluginActionDescriptorDto,
-    PluginArtifactEntryDto, PluginFamilyCountDto, PluginFamilyEntriesDto, PluginModuleDto,
-    RegistryExtractionSummaryDto, RegistryHiveOverviewDto, RegistryNetworkAdapterDto,
-    RegistryStructuredSummaryDto, RegistryValueDto, ReleaseGateEntryDto, ReleaseGateStatusDto,
-    ReleaseScoreBreakdownEntryDto, ReleaseScorecardDto, RunMruEntryDto, SamUserAccountDto,
-    SecurityAuditEntryDto, SecurityAuditSummaryDto, SecurityPolicyDto, ShellbagEntryDto,
-    ShimCacheEntryDto, ShutdownTimeDto, SupportMaturityDto, SystemServiceDto, UsbDeviceHistoryDto,
-    UserAssistEntryDto, V2GovernanceSnapshotDto, VerificationChainStatusDto,
-    VerificationGuaranteeLevelDto, VerificationResultDto, WeChatKeyRecoveryResultDto,
-    WeChatRecoveredKeyDto, WinlogonConfigDto,
-};
+pub use analysis::*;
 pub use analysis_linux::LinuxSystemConfigPageDto;
 pub use analysis_linux_cluster::*;
 pub use analysis_linux_events::LinuxEvidenceEventDto;

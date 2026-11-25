@@ -1,5 +1,20 @@
 use super::*;
 
+#[test]
+fn recovery_validates_complete_suffix_and_preserves_original_bytes() {
+    let record = build_wtmp_record_64(7, 400, "alice", "pts/0", "host", 1_700_000_000, 0);
+    let mut input = vec![b'\n'];
+    input.extend_from_slice(&record);
+    let original = input.clone();
+    assert!(parse_wtmp(&input).is_err());
+    let (offset, records) = recover_wtmp_suffix(&input).unwrap();
+    assert_eq!(offset, 1);
+    assert_eq!(records.len(), 1);
+    assert_eq!(records[0].user, "alice");
+    assert_eq!(input, original);
+    assert!(recover_wtmp_suffix(&vec![0xff; 801]).is_err());
+}
+
 fn build_wtmp_record_64(
     ut_type: i32,
     ut_pid: i32,

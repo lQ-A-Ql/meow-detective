@@ -88,6 +88,7 @@ pub(super) struct ConcurrentOutputBatch<'a> {
     artifact_count: u64,
     timeline_event_count: u64,
     digest: OutputDigestAccumulator,
+    diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto,
 }
 
 impl<'a> ConcurrentOutputBatch<'a> {
@@ -99,10 +100,12 @@ impl<'a> ConcurrentOutputBatch<'a> {
             artifact_count: 0,
             timeline_event_count: 0,
             digest: OutputDigestAccumulator::default(),
+            diagnostic_counts: Default::default(),
         }
     }
 
     pub(super) fn push(&mut self, mut outcome: super::ExtractionOutcome) {
+        self.diagnostic_counts.merge(outcome.diagnostic_counts);
         for artifact in outcome.artifacts {
             self.digest.record_artifact(&artifact);
             self.artifacts.push(artifact);
@@ -149,11 +152,22 @@ impl<'a> ConcurrentOutputBatch<'a> {
         warnings: Vec<String>,
     ) -> Result<PersistedExtractionOutcome, AnalysisServiceError> {
         self.flush()?;
+        if !warnings.is_empty() && self.diagnostic_counts == Default::default() {
+            self.diagnostic_counts.corrupt_inputs = 1;
+        }
+        if warnings.is_empty()
+            && self.artifact_count == 0
+            && self.timeline_event_count == 0
+            && self.diagnostic_counts == Default::default()
+        {
+            self.diagnostic_counts.empty_inputs = 1;
+        }
         Ok(PersistedExtractionOutcome {
             artifact_count: self.artifact_count,
             timeline_event_count: self.timeline_event_count,
             warnings,
             output_digest: self.digest.finish(),
+            diagnostic_counts: self.diagnostic_counts,
         })
     }
 }

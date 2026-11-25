@@ -38,7 +38,6 @@ pub(super) struct CheckpointScans {
     clean: CleanScanKeys,
     diagnostic: DiagnosticScanKeys,
     complete: CompleteScanKeys,
-    storage_available: bool,
 }
 
 impl CheckpointScans {
@@ -47,7 +46,6 @@ impl CheckpointScans {
             clean: &self.clean,
             diagnostic: &self.diagnostic,
             complete: &self.complete,
-            storage_available: self.storage_available,
         }
     }
 }
@@ -61,7 +59,6 @@ pub(super) fn load_checkpoint_scans(
         clean: existing_clean_scan_keys(conn)?,
         diagnostic: existing_diagnostic_scan_keys(conn)?,
         complete: existing_complete_scan_keys(conn)?,
-        storage_available: AnalysisScanRepo::new(conn).storage_available()?,
     };
     let records = scans.clean.len() + scans.diagnostic.len() + scans.complete.len();
     progress.report_work(

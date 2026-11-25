@@ -19,12 +19,27 @@ fn extraction_run_serializes_section_progress_as_camel_case() {
         }],
         generated_at: "2026-07-10T00:00:00Z".to_string(),
         warnings: vec!["overall warning".to_string()],
+        diagnostic_counts: Default::default(),
     };
 
     let value = serde_json::to_value(dto).unwrap();
 
     assert_eq!(value["scannedCount"], 3);
     assert_eq!(value["checkpointHitCount"], 2);
+    assert_eq!(value["diagnosticCounts"]["capabilityLimits"], 0);
+    let counts = super::super::AnalysisDiagnosticCountsDto {
+        recovered_inputs: 1,
+        empty_inputs: 2,
+        ..Default::default()
+    };
+    let encoded = serde_json::to_value(counts).unwrap();
+    let decoded: super::super::AnalysisDiagnosticCountsDto =
+        serde_json::from_value(encoded).unwrap();
+    assert_eq!(decoded, counts);
+    assert_eq!(
+        super::super::AnalysisDiagnosticCountsDto::from(counts.into_checkpoint()),
+        counts
+    );
     assert_eq!(value["artifactCount"], 9);
     assert_eq!(value["timelineEventCount"], 4);
     assert_eq!(value["sections"][0]["key"], "LinuxJournal");

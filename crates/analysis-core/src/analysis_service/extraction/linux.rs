@@ -9,11 +9,15 @@ mod mysql;
 mod packages;
 mod pve;
 mod shell_history;
+mod ssh;
+pub(super) use ssh::is_key_path as is_ssh_key_path;
 mod sudo;
 mod system_config;
 mod systemd_projection;
 pub(super) use systemd_projection::append_resolved_unit;
 mod text_log;
+pub(super) use text_log::persist_reader as persist_text_log_reader;
+pub(crate) use text_log::uses_streaming as uses_streaming_text_log;
 mod timezone;
 mod web;
 
@@ -56,6 +60,9 @@ pub(super) fn extract_linux_candidate_with_time(
     bytes: &[u8],
     log_time: &LinuxLogTimeContext,
 ) -> ExtractionOutcome {
+    if uses_streaming_text_log(candidate) {
+        return text_log::extract_complete(candidate, bytes, log_time);
+    }
     let mut outcome = ExtractionOutcome::default();
     let normalized = normalize_evidence_path(&candidate.path);
     if crate::analysis_service::artifact_builders::is_docker_overlay_path(&normalized) {

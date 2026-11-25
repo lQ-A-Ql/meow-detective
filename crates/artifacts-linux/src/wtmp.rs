@@ -12,6 +12,8 @@
 use chrono::{DateTime, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::io::{Cursor, Read};
+mod recovery;
+pub use recovery::recover_wtmp_suffix;
 
 /// /var/log/wtmp record types (subset of ut_type).
 const EMPTY: i32 = 0;

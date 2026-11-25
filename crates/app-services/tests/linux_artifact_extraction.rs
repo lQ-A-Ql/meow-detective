@@ -871,6 +871,35 @@ fn linux_corrupt_gzip_still_fails_closed() {
 }
 
 #[test]
+fn linux_text_log_buffer_entry_keeps_the_tail_after_ten_thousand_records() {
+    let input = (1..=10001)
+        .map(|index| format!("2026-11-25T00:00:00Z host service: event {index}\n"))
+        .collect::<String>();
+    let compressed = gzip_compress(input.as_bytes());
+    let mut candidate = candidate("/var/log/syslog.gz");
+    candidate.size = compressed.len() as u64;
+    let outcome = extract_linux_candidate(&candidate, &compressed);
+    assert_eq!(outcome.artifacts.len(), 10001);
+    assert_eq!(outcome.artifacts.last().unwrap().attrs["lineNumber"], 10001);
+    assert!(outcome.warnings.is_empty());
+}
+
+#[test]
+fn linux_text_log_buffer_entry_rejects_incomplete_gzip_input() {
+    let input = (1..=500)
+        .map(|index| format!("2026-11-25T00:00:00Z host service: event {index}\n"))
+        .collect::<String>();
+    let mut compressed = gzip_compress(input.as_bytes());
+    compressed.truncate(compressed.len() - 24);
+    let mut candidate = candidate("/var/log/syslog.gz");
+    candidate.size = compressed.len() as u64;
+    let outcome = extract_linux_candidate(&candidate, &compressed);
+    assert!(outcome.artifacts.is_empty());
+    assert_eq!(outcome.diagnostic_counts.corrupt_inputs, 1);
+    assert!(!outcome.warnings.is_empty());
+}
+
+#[test]
 fn linux_bash_history_respects_per_source_cap() {
     let mut input = String::new();
     for index in 0..20_001 {

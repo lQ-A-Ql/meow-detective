@@ -10,6 +10,16 @@ pub(super) fn extract(candidate: &EvidenceCandidate, bytes: &[u8]) -> Extraction
         unreachable!("native Windows candidates have a registered capability");
     };
     let mut outcome = ExtractionOutcome::default();
+    if candidate.path.to_ascii_lowercase().ends_with(".lnk")
+        && (bytes.starts_with(b"PA30") || bytes.get(4..8) == Some(b"PA30"))
+    {
+        outcome.diagnostic_counts.capability_limits = 1;
+        outcome.warnings.push(format!(
+            "{} contains a Windows update delta requiring its base file",
+            candidate.path
+        ));
+        return outcome;
+    }
     if bytes.len() as u64 != candidate.size {
         outcome.warnings.push(format!(
             "{} native Windows input was truncated: expected {} bytes, received {}",
@@ -34,15 +44,8 @@ pub(super) fn extract(candidate: &EvidenceCandidate, bytes: &[u8]) -> Extraction
         };
         match extractor.run(context, &mut sink) {
             Ok(report) => {
-                if sink.artifacts.is_empty()
-                    && sink.timeline_events.is_empty()
-                    && report.errors.is_empty()
-                {
-                    outcome.warnings.push(format!(
-                        "{} {} produced no recognized records",
-                        candidate.path,
-                        extractor.id()
-                    ));
+                if candidate.category == "ResourceUsage" && !report.errors.is_empty() {
+                    outcome.diagnostic_counts.capability_limits += 1;
                 }
                 let producer = format!("{}{}", capability.producer_prefix(), extractor.id());
                 for artifact in &mut sink.artifacts {

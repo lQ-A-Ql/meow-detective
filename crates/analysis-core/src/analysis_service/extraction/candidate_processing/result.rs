@@ -16,12 +16,39 @@ pub(super) enum CandidateCompletionKind {
         plugin_failures: Vec<PluginExtractFailure>,
     },
     Deferred(String),
+    InputDiagnostic {
+        warning: String,
+        diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto,
+    },
     Blocked(String),
     Warning(String),
-    ReplayDiagnostic(Vec<String>),
+    ReplayDiagnostic(
+        persistence_sqlite::repositories::analysis_scan_repo::DiagnosticAnalysisCandidateScan,
+    ),
     ReplayClean,
     ReplayComplete(CompleteAnalysisCandidateScan),
-    ExistingV1,
     Failed(AnalysisServiceError),
     Cancelled,
+}
+
+impl CandidateCompletionKind {
+    pub(super) fn corrupt_input(warning: String) -> Self {
+        Self::InputDiagnostic {
+            warning,
+            diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto {
+                corrupt_inputs: 1,
+                ..Default::default()
+            },
+        }
+    }
+
+    pub(super) fn capability_limit(warning: String) -> Self {
+        Self::InputDiagnostic {
+            warning,
+            diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto {
+                capability_limits: 1,
+                ..Default::default()
+            },
+        }
+    }
 }

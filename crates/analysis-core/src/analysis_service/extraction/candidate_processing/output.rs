@@ -43,6 +43,29 @@ pub(super) fn preserve_failed_candidate(
     Ok(())
 }
 
+pub(super) fn record_input_diagnostic<F>(
+    coordinator: &mut CandidateCoordinator<'_, '_, '_, F>,
+    candidate: &EvidenceCandidate,
+    capability: AnalysisCapability,
+    warning: String,
+    diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto,
+) -> Result<CandidateProgressResult, AnalysisServiceError> {
+    preserve_failed_candidate(coordinator.context, candidate, capability)?;
+    let outcome = super::ExtractionOutcome {
+        warnings: vec![format!("{}: {warning}", candidate.path)],
+        diagnostic_counts,
+        ..Default::default()
+    };
+    let observation = coordinator.context.output.persist_outcome(outcome)?;
+    coordinator
+        .state
+        .record_persisted_outcome(capability, candidate, observation);
+    Ok(CandidateProgressResult {
+        warning: true,
+        ..Default::default()
+    })
+}
+
 pub(super) fn apply_outcome<F>(
     coordinator: &mut CandidateCoordinator<'_, '_, '_, F>,
     candidate: &EvidenceCandidate,
@@ -87,7 +110,7 @@ pub(super) fn apply_outcome<F>(
     {
         coordinator
             .state
-            .record_retained_failure(capability, observation.warnings);
+            .record_retained_failure(capability, observation);
     } else {
         retired += context
             .output

@@ -18,13 +18,15 @@ use transport::dto::{
 
 pub(super) type AnalysisCheckpointKey = (String, String, u64, String);
 pub(super) type CleanScanKeys = HashSet<AnalysisCheckpointKey>;
-pub(super) type DiagnosticScanKeys = HashMap<AnalysisCheckpointKey, Vec<String>>;
+pub(super) type DiagnosticScanKeys =
+    HashMap<AnalysisCheckpointKey, DiagnosticAnalysisCandidateScan>;
 
 pub(super) struct PersistedExtractionOutcome {
     pub(super) artifact_count: u64,
     pub(super) timeline_event_count: u64,
     pub(super) warnings: Vec<String>,
     pub(super) output_digest: String,
+    pub(super) diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto,
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +110,7 @@ pub(super) struct ExtractionState {
     pub(super) checkpoint_hit_count: u64,
     pub(super) retryable_failure_count: u64,
     plugin_failures: Vec<PluginExtractFailure>,
+    diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto,
 }
 
 impl ExtractionState {
@@ -132,6 +135,7 @@ impl ExtractionState {
             checkpoint_hit_count: 0,
             retryable_failure_count: 0,
             plugin_failures: Vec::new(),
+            diagnostic_counts: Default::default(),
         }
     }
 
@@ -156,6 +160,7 @@ impl ExtractionState {
                 timeline_event_count: outcome.timeline_event_count,
                 output_digest: outcome.output_digest.clone(),
                 warnings: outcome.warnings.clone(),
+                diagnostic_counts: outcome.diagnostic_counts.into_checkpoint(),
             });
         } else if outcome.warnings.is_empty() {
             self.clean_scans.push(CleanAnalysisCandidateScan {
@@ -173,6 +178,7 @@ impl ExtractionState {
                 source_size: candidate.size,
                 content_identity: candidate.content_identity.clone(),
                 warnings: outcome.warnings.clone(),
+                diagnostic_counts: outcome.diagnostic_counts.into_checkpoint(),
             });
         }
         self.record_persisted_observation(capability, &outcome);
@@ -202,13 +208,14 @@ impl ExtractionState {
     pub(super) fn replay_diagnostic(
         &mut self,
         capability: AnalysisCapability,
-        warnings: &[String],
+        scan: &DiagnosticAnalysisCandidateScan,
     ) {
         self.checkpoint_hit_count += 1;
         self.record_observation(
             capability,
             ExtractionOutcome {
-                warnings: warnings.to_vec(),
+                warnings: scan.warnings.clone(),
+                diagnostic_counts: scan.diagnostic_counts.into(),
                 ..ExtractionOutcome::default()
             },
         );
@@ -216,6 +223,7 @@ impl ExtractionState {
 
     pub(super) fn replay_clean(&mut self, capability: AnalysisCapability) {
         self.checkpoint_hit_count += 1;
+        self.diagnostic_counts.empty_inputs += 1;
         self.record_observation(capability, ExtractionOutcome::default());
     }
 
@@ -238,6 +246,7 @@ impl ExtractionState {
                 &scan.warnings,
             );
         self.warnings.extend(scan.warnings.iter().cloned());
+        self.diagnostic_counts.merge(scan.diagnostic_counts.into());
     }
 
     pub(super) fn record_warning(&mut self, capability: AnalysisCapability, warning: String) {
@@ -247,12 +256,10 @@ impl ExtractionState {
     pub(super) fn record_retained_failure(
         &mut self,
         capability: AnalysisCapability,
-        warnings: Vec<String>,
+        observation: PersistedExtractionOutcome,
     ) {
-        self.retryable_failure_count = self.retryable_failure_count.saturating_add(1);
-        for warning in warnings {
-            self.record_informational_warning(capability, warning);
-        }
+        self.retryable_failure_count += observation.diagnostic_counts.read_failures;
+        self.record_persisted_observation(capability, &observation);
     }
 
     /// Warning surfaced in the run DTO and section progress that does not
@@ -262,6 +269,7 @@ impl ExtractionState {
         capability: AnalysisCapability,
         warning: String,
     ) {
+        self.diagnostic_counts.capability_limits += 1;
         self.sections
             .entry(capability.key.to_string())
             .or_insert_with(|| SectionProgress::new(capability))
@@ -275,6 +283,7 @@ impl ExtractionState {
         capability: AnalysisCapability,
         warning: String,
     ) {
+        self.diagnostic_counts.read_failures += 1;
         self.retryable_failure_count += 1;
         self.sections
             .entry(capability.key.to_string())
@@ -303,10 +312,12 @@ impl ExtractionState {
                 .collect(),
             generated_at,
             warnings: self.warnings,
+            diagnostic_counts: self.diagnostic_counts,
         })
     }
 
     fn record_observation(&mut self, capability: AnalysisCapability, outcome: ExtractionOutcome) {
+        self.diagnostic_counts.merge(outcome.diagnostic_counts);
         self.scanned_count += 1;
         self.timeline_event_count += outcome.timeline_events.len() as u64;
         self.sections
@@ -321,6 +332,7 @@ impl ExtractionState {
         capability: AnalysisCapability,
         outcome: &PersistedExtractionOutcome,
     ) {
+        self.diagnostic_counts.merge(outcome.diagnostic_counts);
         self.scanned_count = self.scanned_count.saturating_add(1);
         self.timeline_event_count = self
             .timeline_event_count
@@ -380,12 +392,12 @@ pub(super) fn existing_diagnostic_scan_keys(
         if scan_has_no_outputs(conn, &scan.source_object_id, &scan.capability_key)? {
             valid.insert(
                 (
-                    scan.source_object_id,
-                    scan.capability_key,
+                    scan.source_object_id.clone(),
+                    scan.capability_key.clone(),
                     scan.source_size,
-                    scan.content_identity,
+                    scan.content_identity.clone(),
                 ),
-                scan.warnings,
+                scan,
             );
         }
     }

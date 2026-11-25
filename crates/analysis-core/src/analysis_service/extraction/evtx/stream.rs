@@ -56,7 +56,12 @@ pub(in crate::analysis_service::extraction) fn persist_reader(
             return AnalysisServiceError::Cancelled;
         }
         match error {
-            EvtxVisitError::Parser(error) => AnalysisServiceError::Extraction(error.to_string()),
+            EvtxVisitError::Parser(artifacts_windows::evtx::EvtxBootError::SourceIo {
+                path,
+                operation,
+                kind,
+            }) => AnalysisServiceError::Read(format!("{path} EVTX {operation}: {kind:?}")),
+            EvtxVisitError::Parser(error) => AnalysisServiceError::CorruptInput(error.to_string()),
             EvtxVisitError::Sink(error) => error,
         }
     })?;

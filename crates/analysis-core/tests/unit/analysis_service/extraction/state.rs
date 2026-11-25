@@ -56,6 +56,7 @@ fn persisted_warning_with_artifact_records_complete_observation() {
             timeline_event_count: 0,
             warnings: vec!["deterministic parser warning".to_string()],
             output_digest: "a".repeat(64),
+            diagnostic_counts: Default::default(),
         },
     );
 
@@ -89,6 +90,7 @@ fn checkpoint_replay_preserves_section_counts_and_warnings() {
         timeline_event_count: 2,
         output_digest: "a".repeat(64),
         warnings: vec!["deterministic parser warning".to_string()],
+        diagnostic_counts: [0, 1, 0, 0, 0],
     };
 
     state.replay_complete(capability, &scan);
@@ -145,6 +147,7 @@ fn stored_plugin_result(family: &str) -> AnalysisExtractionRunDto {
             timeline_event_count: 0,
             warnings: Vec::new(),
             output_digest: digest.finish(),
+            diagnostic_counts: Default::default(),
         },
         Vec::new(),
     );
@@ -182,6 +185,7 @@ fn failed_plugin_increments_retryable_count_without_creating_a_checkpoint() {
             timeline_event_count: 0,
             warnings: vec!["plugin input could not be decoded".into()],
             output_digest: crate::analysis_service::extraction::output_digest::OutputDigestAccumulator::default().finish(),
+            diagnostic_counts: Default::default(),
         },
         vec![PluginExtractFailure {
             plugin_id: "plugin.reader".into(),
@@ -297,6 +301,7 @@ fn registry_parser_upgrade_expires_only_registry_checkpoints() {
             source_size: 8192,
             content_identity: id.into(),
             warnings: vec!["format diagnostic".into()],
+            diagnostic_counts: [0, 1, 0, 0, 0],
         });
     }
     AnalysisScanRepo::new(conn)

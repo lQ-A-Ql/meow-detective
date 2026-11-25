@@ -14,6 +14,7 @@ const READ_BUFFER_BYTES: usize = 64 * 1024;
 pub(super) struct RegistryPreloadContext {
     snapshots: HashMap<(String, String), RegistrySnapshot<'static>>,
     failures: HashMap<(String, String), String>,
+    input_failures: HashSet<(String, String)>,
     boot_keys: HashMap<(String, Option<usize>), Option<[u8; 16]>>,
     boot_key_read_failures: HashMap<(String, Option<usize>), String>,
     pub(super) dependency_warnings: Vec<String>,
@@ -36,6 +37,10 @@ impl RegistryPreloadContext {
         self.failures
             .get(&registry_key(candidate))
             .map(String::as_str)
+    }
+
+    pub(super) fn has_invalid_input(&self, candidate: &EvidenceCandidate) -> bool {
+        self.input_failures.contains(&registry_key(candidate))
     }
 
     pub(super) fn boot_key(&self, candidate: &EvidenceCandidate) -> Option<[u8; 16]> {
@@ -67,6 +72,7 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
     ensure_not_cancelled(cancel_token)?;
     let mut snapshots = HashMap::new();
     let mut failures = HashMap::new();
+    let mut input_failures = HashSet::new();
     let mut boot_keys = HashMap::new();
     let mut boot_key_read_failures = HashMap::new();
     let mut warnings = Vec::new();
@@ -123,6 +129,7 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
             }
             Err(RegistryPreparationError::Input(reason)) => {
                 if is_pending {
+                    input_failures.insert(key.clone());
                     failures.insert(key, reason);
                 } else {
                     warnings.push(reason);
@@ -143,6 +150,7 @@ pub(super) fn preload_registry_context<E: std::fmt::Display>(
     Ok(RegistryPreloadContext {
         snapshots,
         failures,
+        input_failures,
         boot_keys,
         boot_key_read_failures,
         dependency_warnings: warnings,

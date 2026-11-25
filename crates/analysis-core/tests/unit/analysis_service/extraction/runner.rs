@@ -590,7 +590,6 @@ fn plugin_only_preparation_uses_partition_timezones_without_systemd_parsing() {
             .map_err(|error| error.to_string())
     };
     let preloads = prepare_run_preloads(
-        &connection,
         DataSourcePlatform::Linux,
         std::slice::from_ref(&candidate),
         &selected,
@@ -709,6 +708,7 @@ fn output_replacement_commits_artifacts_timeline_and_checkpoint_atomically() {
                 crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION,
             )],
             warnings: Vec::new(),
+            diagnostic_counts: Default::default(),
         },
     )
     .expect("replace analysis outputs");
@@ -786,6 +786,7 @@ fn output_replacement_rolls_back_when_timeline_insert_fails() {
                 crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION,
             )],
             warnings: Vec::new(),
+            diagnostic_counts: Default::default(),
         },
     )
     .expect_err("timeline failure must roll back the replacement");
@@ -860,6 +861,7 @@ fn output_replacement_rolls_back_when_artifact_source_attribution_conflicts() {
                 crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION,
             )],
             warnings: Vec::new(),
+            diagnostic_counts: Default::default(),
         },
     )
     .expect_err("source attribution conflict must roll back the replacement");
@@ -908,6 +910,7 @@ fn complete_checkpoint_is_ignored_after_persisted_output_tampering() {
                 crate::analysis_service::ANALYSIS_EXTRACTOR_VERSION,
             )],
             warnings: Vec::new(),
+            diagnostic_counts: Default::default(),
         },
     )
     .expect("persist analysis outputs");
@@ -948,6 +951,7 @@ fn complete_checkpoint_is_ignored_when_stale_producer_output_remains() {
             )],
             warnings: Vec::new(),
             timeline_events: Vec::new(),
+            diagnostic_counts: Default::default(),
         },
     )
     .expect("persist current output");
@@ -1272,6 +1276,45 @@ fn seekable_evtx_insert_failure_rolls_back_output_replacement() {
 
     assert!(native_artifact_exists(&connection, "old-evtx-artifact"));
     assert!(native_event_exists(&connection, "old-evtx-event"));
+}
+
+#[test]
+fn corrupt_evtx_is_classified_and_replayed_without_retryable_read_failure() {
+    let connection = source_connection();
+    let bytes = vec![0u8; 4096];
+    insert_event_log_candidate(&connection, bytes.len() as u64);
+    let cancel = AtomicBool::new(false);
+    let mut progress = |_| {};
+    let first = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["EventLogs"],
+        &cancel,
+        &mut progress,
+        |_, _| {
+            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+                std::io::Cursor::new(bytes.clone()),
+            )))
+        },
+    )
+    .unwrap();
+    assert_eq!(first.retryable_failure_count, 0);
+    assert_eq!(first.dto.diagnostic_counts.corrupt_inputs, 1);
+    let second = run_analysis_extraction_with_source(
+        &connection,
+        "case-1",
+        DataSourcePlatform::Windows,
+        &["EventLogs"],
+        &cancel,
+        &mut progress,
+        |_, _| -> Result<CandidateSource, String> {
+            panic!("validated diagnostic checkpoint should be reused")
+        },
+    )
+    .unwrap();
+    assert_eq!(second.dto.diagnostic_counts, first.dto.diagnostic_counts);
+    assert_eq!(second.dto.checkpoint_hit_count, 1);
 }
 
 #[test]
@@ -1624,6 +1667,7 @@ fn plugin_reextraction_replaces_outputs_by_exact_extractor_id() {
                 "0.2.0",
             )],
             warnings: Vec::new(),
+            diagnostic_counts: Default::default(),
         },
         &["meow.fixture.good".to_string()],
     )
@@ -1813,7 +1857,10 @@ fn image_metadata_extraction_emits_one_artifact_without_timeline_events() {
         artifact.extractor_id.as_deref(),
         Some("image.metadata.container")
     );
-    assert_eq!(artifact.extractor_version.as_deref(), Some("1.0.0"));
+    assert_eq!(
+        artifact.extractor_version.as_deref(),
+        Some(crate::analysis_service::capability::IMAGE_METADATA_EXTRACTOR_VERSION)
+    );
     assert_eq!(artifact.attrs["format"], serde_json::json!("tiff"));
     assert_eq!(artifact.attrs["orientation"], serde_json::json!(6));
     assert!(!artifact.attrs["exifBlocks"]
@@ -2038,10 +2085,11 @@ fn oversized_streamed_image_is_deferred_without_failing_the_run() {
     )
     .expect("defer an oversized streamed image");
 
-    assert_eq!(execution.retryable_failure_count, 1);
+    assert_eq!(execution.retryable_failure_count, 0);
+    assert_eq!(execution.dto.diagnostic_counts.capability_limits, 1);
     assert_eq!(
         execution.dto.status,
-        transport::dto::AnalysisParseStatusDto::Failed
+        transport::dto::AnalysisParseStatusDto::Partial
     );
     assert!(execution
         .dto

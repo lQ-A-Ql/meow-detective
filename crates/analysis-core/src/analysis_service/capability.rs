@@ -8,14 +8,14 @@ pub(crate) const PLUGIN_CAPABILITY_KEY: &str = "PluginArtifacts";
 const ANDROID_DEVICE_KEY: &str = "AndroidDevice";
 const ANDROID_PACKAGES_KEY: &str = "AndroidPackages";
 const RETIRED_MACOS_KEY: &str = "MacArtifacts";
-pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "1.3.6";
-pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "1.3.10";
-pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "1.3.11";
-pub(crate) const LINUX_LOGIN_EXTRACTOR_VERSION: &str = "1.3.4";
-pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "1.3.8";
-pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "1.3.10";
-pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "1.4.1";
-pub(crate) const IMAGE_METADATA_EXTRACTOR_VERSION: &str = "1.0.0";
+pub(crate) const REGISTRY_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const CONTAINERD_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const LINUX_SYSTEM_CONFIG_VERSION: &str = "2.0.0";
+pub(crate) const LINUX_LOGIN_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const EMAIL_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const BROWSER_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const WINDOWS_NATIVE_EXTRACTOR_VERSION: &str = "2.0.0";
+pub(crate) const IMAGE_METADATA_EXTRACTOR_VERSION: &str = "2.0.0";
 
 pub(crate) fn producer_version(producer: &str) -> &'static str {
     if producer.starts_with("windows.native.") {
@@ -42,16 +42,7 @@ pub(crate) fn producer_version(producer: &str) -> &'static str {
     }
 }
 
-pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[
-    super::ANALYSIS_EXTRACTOR_VERSION,
-    REGISTRY_EXTRACTOR_VERSION,
-    LINUX_SYSTEM_CONFIG_VERSION,
-    LINUX_LOGIN_EXTRACTOR_VERSION,
-    EMAIL_EXTRACTOR_VERSION,
-    BROWSER_EXTRACTOR_VERSION,
-    WINDOWS_NATIVE_EXTRACTOR_VERSION,
-    IMAGE_METADATA_EXTRACTOR_VERSION,
-];
+pub(crate) const CHECKPOINT_VERSIONS: &[&str] = &[super::ANALYSIS_EXTRACTOR_VERSION];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CandidateReadPolicy {

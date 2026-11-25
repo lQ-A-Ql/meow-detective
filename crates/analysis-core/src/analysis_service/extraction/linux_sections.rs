@@ -3,10 +3,10 @@ use super::linux::{
     is_cron_path, is_dpkg_log_path, is_faillog_path, is_fish_history_path, is_init_script_path,
     is_journal_path, is_lastlog_path, is_mysql_config_path, is_mysql_log_path,
     is_nginx_config_path, is_plain_shell_history_path, is_profile_script_path, is_pve_config_path,
-    is_pve_log_path, is_rpm_package_log_path, is_ssh_candidate_path, is_ssh_text_path,
-    is_sudoers_path, is_system_config_path, is_systemd_unit_path, is_text_log_path,
-    is_web_access_log_path, is_web_error_log_path, is_web_root_script_path, is_wtmp_path,
-    is_zsh_history_path,
+    is_pve_log_path, is_rpm_package_log_path, is_ssh_candidate_path, is_ssh_key_path,
+    is_ssh_text_path, is_sudoers_path, is_system_config_path, is_systemd_unit_path,
+    is_text_log_path, is_web_access_log_path, is_web_error_log_path, is_web_root_script_path,
+    is_wtmp_path, is_zsh_history_path,
 };
 use crate::analysis_service::MAX_ANALYSIS_SOURCE_BYTES;
 
@@ -97,6 +97,7 @@ pub(super) enum LinuxArtifactRouteKind {
     PveConfig,
     Sudoers,
     SshConfig,
+    SshKey,
     SystemdUnit,
     InitScript,
     ProfileScript,
@@ -175,6 +176,8 @@ fn route_kind(path: &str) -> LinuxArtifactRouteKind {
         LinuxArtifactRouteKind::PveConfig
     } else if is_sudoers_path(path) {
         LinuxArtifactRouteKind::Sudoers
+    } else if is_ssh_key_path(path) {
+        LinuxArtifactRouteKind::SshKey
     } else if is_ssh_text_path(path) {
         LinuxArtifactRouteKind::SshConfig
     } else if is_systemd_unit_path(path) {
@@ -232,6 +235,7 @@ fn route_section(kind: LinuxArtifactRouteKind, path: &str) -> LinuxArtifactSecti
         | LinuxArtifactRouteKind::PveConfig
         | LinuxArtifactRouteKind::Sudoers
         | LinuxArtifactRouteKind::SshConfig
+        | LinuxArtifactRouteKind::SshKey
         | LinuxArtifactRouteKind::SystemdUnit
         | LinuxArtifactRouteKind::InitScript
         | LinuxArtifactRouteKind::ProfileScript

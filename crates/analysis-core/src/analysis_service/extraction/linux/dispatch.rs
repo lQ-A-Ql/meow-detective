@@ -62,8 +62,13 @@ pub(super) fn dispatch_candidate(
             extract_text_config(candidate, bytes, "linux.sudoers", "sudoers", outcome)
         }
         LinuxArtifactRouteKind::SshConfig => {
-            extract_text_config(candidate, bytes, "linux.ssh_config", "sshConfig", outcome)
+            if path.contains("/authorized_keys") || path.contains("/known_hosts") {
+                super::ssh::extract(candidate, bytes, outcome);
+            } else {
+                extract_text_config(candidate, bytes, "linux.ssh_config", "sshConfig", outcome);
+            }
         }
+        LinuxArtifactRouteKind::SshKey => super::ssh::extract(candidate, bytes, outcome),
         LinuxArtifactRouteKind::SystemdUnit => {
             super::system_config::extract_systemd_unit_config(candidate, bytes, outcome)
         }
@@ -135,6 +140,7 @@ pub(super) fn warn_unsupported_candidate(
     candidate: &EvidenceCandidate,
     outcome: &mut ExtractionOutcome,
 ) {
+    outcome.diagnostic_counts.capability_limits += 1;
     let source_path = if candidate.path.is_empty() {
         "<unknown>"
     } else {

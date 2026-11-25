@@ -51,4 +51,5 @@ pub use web::{
     parse_web_access_log, parse_web_access_log_with_stats, parse_web_error_log,
     parse_web_error_log_with_stats, WebAccessLogEntry, WebErrorLogEntry, WebFinding, WebSite,
 };
-pub use wtmp::{parse_wtmp, LoginRecord};
+pub use wtmp::{parse_wtmp, recover_wtmp_suffix, LoginRecord};
+pub mod ssh;

@@ -49,7 +49,17 @@ pub(super) fn extract(
     outcome: &mut ExtractionOutcome,
 ) {
     let is_btmp = is_btmp_path(&normalize_evidence_path(&candidate.path));
-    match artifacts_linux::parse_wtmp(bytes) {
+    let mut recovered_offset = None;
+    let parsed = artifacts_linux::parse_wtmp(bytes).or_else(|error| {
+        if !is_btmp {
+            return Err(error);
+        }
+        artifacts_linux::recover_wtmp_suffix(bytes).map(|(offset, records)| {
+            recovered_offset = Some(offset);
+            records
+        })
+    });
+    match parsed {
         Ok(records) => {
             let failure_totals = if is_btmp {
                 failure_totals_by_user(&records)
@@ -66,6 +76,40 @@ pub(super) fn extract(
             for record in &records {
                 let user_failure_total = failure_totals.get(record.user.as_str()).copied();
                 push_record_outputs(candidate, record, is_btmp, user_failure_total, outcome);
+            }
+            if let Some(offset) = recovered_offset {
+                use sha2::{Digest, Sha256};
+                let digest = hex::encode(Sha256::digest(bytes));
+                let scope = if candidate.path.to_ascii_lowercase().ends_with(".gz") {
+                    "gzipDecodedContent"
+                } else {
+                    "sourceFileContent"
+                };
+                for artifact in &mut outcome.artifacts {
+                    artifact
+                        .attrs
+                        .insert("recoveredOffset".into(), offset.into());
+                    artifact
+                        .attrs
+                        .insert("recoveryInputSha256".into(), digest.clone().into());
+                    artifact
+                        .attrs
+                        .insert("recoveryInputScope".into(), scope.into());
+                }
+                for event in &mut outcome.timeline_events {
+                    event.attrs.insert("recoveredOffset".into(), offset.into());
+                    event
+                        .attrs
+                        .insert("recoveryInputSha256".into(), digest.clone().into());
+                    event
+                        .attrs
+                        .insert("recoveryInputScope".into(), scope.into());
+                }
+                outcome.diagnostic_counts.recovered_inputs = 1;
+                outcome.warnings.push(format!(
+                    "{} recovered validated records from byte {offset}",
+                    candidate.path
+                ));
             }
         }
         Err(error) => outcome

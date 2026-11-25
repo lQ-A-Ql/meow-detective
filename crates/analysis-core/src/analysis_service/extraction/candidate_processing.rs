@@ -42,6 +42,7 @@ mod browser_preparation;
 mod checkpoint;
 mod completion;
 mod image_metadata;
+mod linux_text_log;
 mod output;
 mod panic_diagnostics;
 mod registry_input;
@@ -63,7 +64,6 @@ pub(super) struct ExistingCheckpoints<'a> {
     pub(super) clean: &'a CleanScanKeys,
     pub(super) diagnostic: &'a DiagnosticScanKeys,
     pub(super) complete: &'a HashMap<AnalysisCheckpointKey, CompleteAnalysisCandidateScan>,
-    pub(super) storage_available: bool,
 }
 
 impl ExistingCheckpoints<'_> {
@@ -439,6 +439,16 @@ where
                 ..CandidateProgressResult::default()
             }
         }
+        CandidateCompletionKind::InputDiagnostic {
+            warning,
+            diagnostic_counts,
+        } => output::record_input_diagnostic(
+            coordinator,
+            &candidate,
+            capability,
+            warning,
+            diagnostic_counts,
+        )?,
         CandidateCompletionKind::Warning(warning) => {
             output::preserve_failed_candidate(coordinator.context, &candidate, capability)?;
             coordinator.state.record_warning(capability, warning);
@@ -453,7 +463,7 @@ where
         CandidateCompletionKind::ReplayDiagnostic(warnings) => {
             coordinator.state.replay_diagnostic(capability, &warnings);
             CandidateProgressResult {
-                warning: !warnings.is_empty(),
+                warning: !warnings.warnings.is_empty(),
                 checkpoint_hit: true,
                 ..CandidateProgressResult::default()
             }
@@ -474,7 +484,6 @@ where
                 checkpoint_hit: true,
             }
         }
-        CandidateCompletionKind::ExistingV1 => CandidateProgressResult::default(),
         CandidateCompletionKind::Failed(error) => return Err(error),
         CandidateCompletionKind::Cancelled => return Err(AnalysisServiceError::Cancelled),
     };

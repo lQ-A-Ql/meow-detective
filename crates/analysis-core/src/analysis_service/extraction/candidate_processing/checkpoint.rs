@@ -2,7 +2,6 @@ use super::{CandidateCompletionKind, CandidateProcessingContext};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::capability::AnalysisCapability;
 use crate::analysis_service::error::AnalysisServiceError;
-use crate::analysis_service::extraction::artifact_query::already_has_v1_artifacts;
 
 pub(super) fn checkpoint_key(
     candidate: &EvidenceCandidate,
@@ -32,10 +31,6 @@ pub(super) fn completion(
     }
     if let Some(scan) = context.checkpoints.complete.get(&key) {
         return Ok(Some(CandidateCompletionKind::ReplayComplete(scan.clone())));
-    }
-    if !context.checkpoints.storage_available && already_has_v1_artifacts(context.conn, candidate)?
-    {
-        return Ok(Some(CandidateCompletionKind::ExistingV1));
     }
     Ok(None)
 }

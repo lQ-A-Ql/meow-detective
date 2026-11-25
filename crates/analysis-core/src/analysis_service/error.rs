@@ -12,6 +12,8 @@ pub enum AnalysisServiceError {
     Read(String),
     #[error("artifact extraction error: {0}")]
     Extraction(String),
+    #[error("corrupt evidence input: {0}")]
+    CorruptInput(String),
     #[error("{0} not found: {1}")]
     NotFound(&'static str, String),
     #[error("invalid input: {0}")]
@@ -80,7 +82,7 @@ impl transport::ServiceErrorCategory for AnalysisServiceError {
         match self {
             Self::Bolt(error) => error.category(),
             Self::Db(_) | Self::Io(_) | Self::Read(_) => transport::ErrorCategory::Io,
-            Self::Extraction(_) => transport::ErrorCategory::Parser,
+            Self::Extraction(_) | Self::CorruptInput(_) => transport::ErrorCategory::Parser,
             Self::NotFound(_, _) | Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Cancelled => transport::ErrorCategory::Cancelled,

@@ -25,7 +25,6 @@ use crate::analysis_service::platforms::analyzer_for;
 use analysis_plugins::plugin_loader::{PluginExtractor, PluginLoadReport, PluginRejection};
 use artifacts_core::ArtifactExtractor;
 use domain::{DataSourcePlatform, FileEntryId};
-use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
 use rusqlite::Connection;
 use std::io::Read;
 use std::sync::atomic::AtomicBool;
@@ -292,7 +291,6 @@ fn extract_discovered_candidates(
         &mut guarded_file_reader,
     )?;
     let preloads = prepare_run_preloads(
-        conn,
         platform,
         &candidates,
         selected,
@@ -373,7 +371,6 @@ impl RunPreloads {
 /// Build registry/browser preloads and resolve Linux log timezone.
 #[allow(clippy::too_many_arguments)]
 fn prepare_run_preloads(
-    conn: &Connection,
     platform: DataSourcePlatform,
     candidates: &[EvidenceCandidate],
     selected: &[AnalysisCapability],
@@ -385,14 +382,8 @@ fn prepare_run_preloads(
     file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
 ) -> Result<RunPreloads, AnalysisServiceError> {
     let started = Instant::now();
-    let registry = prepare_registry_preload(
-        conn,
-        candidates,
-        selected,
-        checkpoints,
-        cancel_token,
-        file_reader,
-    )?;
+    let registry =
+        prepare_registry_preload(candidates, selected, checkpoints, cancel_token, file_reader)?;
     progress.report_work(
         AnalysisWorkStageDto::RegistryPreload,
         started,
