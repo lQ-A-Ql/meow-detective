@@ -38,7 +38,7 @@ describe.runIf(Boolean(reportPath))('fresh Windows source pages', () => {
   it('renders the imported partition tree and its orphan group', () => {
     const data = report();
     expect(data.children.totalCount).toBeLessThan(500);
-    expect(data.children.children.some((node) => node.name === '$DeletedOrphans')).toBe(true);
+    expect(data.children.children.find((node) => node.name === '$DeletedOrphans')?.hasChildren).toBe(true);
     const nodes = [...data.roots, ...data.children.children];
     render(<VirtualFileTree nodes={nodes} onNodeClick={ignoreAction} overscan={nodes.length} />);
     expect(screen.getAllByText('$DeletedOrphans').length).toBeGreaterThan(0);
