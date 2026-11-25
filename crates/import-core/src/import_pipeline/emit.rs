@@ -109,22 +109,6 @@ pub(crate) fn emit_partition_progress(
     }
 }
 
-pub(crate) fn emit_timeline_updated(sink: Option<&dyn ImportEventSink>, event_count: u64) {
-    if let Some(sink) = sink {
-        sink.timeline_updated(event_count);
-    }
-}
-
-pub(crate) fn emit_search_index_progress(
-    sink: Option<&dyn ImportEventSink>,
-    progress: u32,
-    detail: &str,
-) {
-    if let Some(sink) = sink {
-        sink.search_index_progress(progress, detail);
-    }
-}
-
 pub(crate) fn emit_data_source_imported(
     sink: Option<&dyn ImportEventSink>,
     case_id: &str,

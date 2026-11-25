@@ -13,9 +13,8 @@ $e01PipelineTestPath = Join-Path $repoRoot "crates/app-services/tests/unit/impor
 # engineering refactor (commit c24a989 + 1b1a7e3), then to
 # persistence-source/src/repositories/staging_repo.rs in S4b.
 $stagingPath = Join-Path $repoRoot "crates/persistence-source/src/repositories/staging_repo.rs"
-$enumMergePath = Join-Path $repoRoot "crates/persistence-source/src/repositories/staging_enum_merge.sql"
-$numericMergeOwnerPath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging_merge.rs"
-$numericMergePath = Join-Path $repoRoot "crates/persistence-sqlite/src/repositories/ntfs_staging/merge.sql"
+$catalogMergePath = Join-Path $repoRoot "crates/persistence-source/src/staging/catalog.rs"
+$catalogSqlPath = Join-Path $repoRoot "crates/persistence-source/src/staging/catalog_staging.sql"
 # Import finalization owns the bounded file-activity Timeline projection.
 $pipelineFinalizePath = Join-Path $repoRoot "crates/import-core/src/import_pipeline/phases/finalize.rs"
 $timelineProjectionPath = Join-Path $repoRoot "crates/import-core/src/timeline_projection/fjall.rs"
@@ -35,9 +34,8 @@ $performanceGatePath = Join-Path $repoRoot "scripts/check-e01-import-performance
 foreach ($path in @(
     $e01PipelineTestPath,
     $stagingPath,
-    $enumMergePath,
-    $numericMergeOwnerPath,
-    $numericMergePath,
+    $catalogMergePath,
+    $catalogSqlPath,
     $pipelineFinalizePath,
     $timelineProjectionPath,
     $timelineBatchPath,
@@ -55,9 +53,8 @@ foreach ($path in @(
 
 $e01PipelineTest = Get-Content -LiteralPath $e01PipelineTestPath -Raw -Encoding UTF8
 $staging = Get-Content -LiteralPath $stagingPath -Raw -Encoding UTF8
-$enumMerge = Get-Content -LiteralPath $enumMergePath -Raw -Encoding UTF8
-$numericMergeOwner = Get-Content -LiteralPath $numericMergeOwnerPath -Raw -Encoding UTF8
-$numericMerge = Get-Content -LiteralPath $numericMergePath -Raw -Encoding UTF8
+$catalogMerge = Get-Content -LiteralPath $catalogMergePath -Raw -Encoding UTF8
+$catalogSql = Get-Content -LiteralPath $catalogSqlPath -Raw -Encoding UTF8
 $pipelineFinalize = Get-Content -LiteralPath $pipelineFinalizePath -Raw -Encoding UTF8
 $timelineProjection = Get-Content -LiteralPath $timelineProjectionPath -Raw -Encoding UTF8
 $timelineBatch = Get-Content -LiteralPath $timelineBatchPath -Raw -Encoding UTF8
@@ -80,8 +77,9 @@ if ($e01PipelineTest -notmatch 'Timeline events after import') {
   throw "real E01 import profile must verify the import-finalized Timeline projection"
 }
 if ($pipelineFinalize -notmatch 'ImportContentKind::Filesystem' -or
-    $pipelineFinalize -notmatch 'timeline_projection::materialize_file_activity_with_policy\(') {
-  throw "Filesystem imports must finalize the narrowed file-activity Timeline projection before becoming ready"
+    $pipelineFinalize -notmatch 'timeline_projection_mark_deferred' -or
+    $pipelineFinalize -notmatch 'queue_timeline\(') {
+  throw "Filesystem imports must queue timeline work after catalog publication"
 }
 foreach ($pattern in @(
     'catalog\.list_all\(',
@@ -114,14 +112,13 @@ foreach ($pattern in @(
     throw "staging DB aggressive temp pragma is missing or weakened: $pattern"
   }
 }
-if ($staging -notmatch 'include_str!\("staging_enum_merge\.sql"\)' -or
-    $enumMerge -notmatch 'SELECT[\s\S]*?LOWER\(entry_type\)[\s\S]*?FROM\s+staging\.file_entries') {
-  throw "enum staging merge must normalize entry_type to lowercase before writing app.db"
+if ($staging -notmatch 'crate::staging::merge_staging_catalog\(' -or
+    $catalogMerge -notmatch 'repository\.upsert_parallel\(' -or
+    $catalogSql -notmatch 'FROM\s+file_entries') {
+  throw "enumeration staging must publish records through the native Catalog repository"
 }
-if ($staging -notmatch 'ntfs_staging_merge::merge_completed_numeric\(' -or
-    $numericMergeOwner -notmatch 'include_str!\("ntfs_staging/merge\.sql"\)' -or
-    $numericMerge -notmatch "CASE\s+f\.entry_type\s+WHEN\s+1\s+THEN\s+'directory'\s+ELSE\s+'file'\s+END") {
-  throw "numeric staging merge must project lowercase entry_type through its referenced SQL"
+if ($staging -match 'ATTACH DATABASE|INSERT INTO main\.file_entries|staging_enum_merge|merge_completed_numeric|ALTER TABLE') {
+  throw "enumeration staging contains a retired SQLite detail merge or schema upgrade"
 }
 
 foreach ($mainDbSource in @($appState, $caseDatabase, $persistenceConnection)) {

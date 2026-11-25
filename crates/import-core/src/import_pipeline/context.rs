@@ -3,7 +3,7 @@ use std::time::{Duration, Instant};
 
 use persistence_sqlite::repositories::job_repo::JobRepo;
 
-use crate::import_pipeline::options::{JobOutcomeCounts, PostImportMode};
+use crate::import_pipeline::options::JobOutcomeCounts;
 use crate::import_pipeline::{emit, ImportJobOptions};
 use crate::import_precheck;
 
@@ -22,9 +22,6 @@ pub(crate) struct ImportJobContext<'a> {
     pub content_kind: ImportContentKind,
     pub profiler: Option<super::ImportProfiler>,
     pub runtime: Option<std::sync::Arc<evidence_access::source_runtime::SourceRuntime>>,
-    /// Whether timeline/artifacts stay inline or are detached after catalog
-    /// publication. Defaults to `Inline` for every existing entry point.
-    pub post_import_mode: PostImportMode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

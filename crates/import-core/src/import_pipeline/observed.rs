@@ -1,13 +1,12 @@
 use super::{
     context::ImportJobContext, execute::execute_observed_import_job, profile, ImportJobOptions,
-    JobOutcomeCounts, PostImportMode,
+    JobOutcomeCounts,
 };
 use crate::import_precheck;
 use std::time::Instant;
 use transport::dto::import_benchmark::ImportBenchmarkPhaseDto as Phase;
 use transport::{dto::TaskProgressStateDto as State, CommandError};
 
-#[allow(clippy::too_many_arguments)]
 pub(super) fn execute_import_job_internal(
     conn: &rusqlite::Connection,
     case_id: &domain::CaseId,
@@ -15,7 +14,6 @@ pub(super) fn execute_import_job_internal(
     import_config: import_precheck::ImportSourceConfig,
     job_id: &domain::JobId,
     options: ImportJobOptions<'_>,
-    post_import_mode: PostImportMode,
     profiler: Option<super::ImportProfiler>,
 ) -> Result<(String, JobOutcomeCounts), CommandError> {
     let observer = super::progress::ObservedImportSink::new(
@@ -45,12 +43,11 @@ pub(super) fn execute_import_job_internal(
                 event_sink: Some(&observer),
                 ..options
             },
-            post_import_mode,
             profiler,
         );
         drop(stop);
         worker.join().expect("import heartbeat worker");
-        if result.is_ok() && post_import_mode == PostImportMode::Detached {
+        if result.is_ok() {
             observer.catalog_only();
         }
         let state = match &result {

@@ -18,14 +18,6 @@ pub(crate) fn run_background_import_job(
     let connection = app_services::connection::open_existing_case_db(&job.db_path)
         .map_err(app_services::connection::command_error_from_db)?;
     let event_sink = app.map(TauriImportEventSink::new);
-    // L5 rollback switch: `capabilityLifecycle.enabled = false` selects Inline
-    // (timeline/artifacts run inside the job) and suppresses shell enqueue.
-    // Read once at job start; a change never flips a running import mid-way.
-    let mode = app_services::import_job_coordinator::SingleImportMode::from_enabled(
-        crate::commands::settings_commands::read_capability_lifecycle_enabled(
-            &job.app_state.app_settings_path,
-        ),
-    );
     let request = app_services::import_job_coordinator::SingleImportRequest {
         connection: &connection,
         case_id: &job.case_id,
@@ -40,23 +32,16 @@ pub(crate) fn run_background_import_job(
             .as_ref()
             .map(|sink| sink as &dyn app_services::import_pipeline::ImportEventSink),
     };
-    match app_services::import_job_coordinator::run_single_import_with_mode(request, mode) {
+    match app_services::import_job_coordinator::run_single_import(request) {
         Ok(app_services::import_job_coordinator::SingleImportOutcome::Completed(message)) => {
             if let Some(app) = app {
                 event_bridge::emit_job_completed(app, &job.job_id.0, &message);
-                // Inline rollback already ran timeline/artifacts inside the job;
-                // only Detached admits them to the post-import scheduler.
-                if matches!(
-                    mode,
-                    app_services::import_job_coordinator::SingleImportMode::Detached
-                ) {
-                    crate::post_import_scheduler::enqueue_case_pending(
-                        &job.app_state,
-                        Some(app),
-                        &job.case_id.0,
-                        &job.case_root,
-                    )?;
-                }
+                crate::post_import_scheduler::enqueue_case_pending(
+                    &job.app_state,
+                    Some(app),
+                    &job.case_id.0,
+                    &job.case_root,
+                )?;
                 crate::case_projection_jobs::schedule(
                     &task_manager,
                     app,

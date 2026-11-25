@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::import_job_coordinator::{
-    run_single_import_with_mode, SingleImportMode, SingleImportOutcome, SingleImportRequest,
+    run_single_import, SingleImportOutcome, SingleImportRequest,
 };
 use app_services::post_import_service::{self, PostImportRuntime};
 use app_services::task_runtime::TaskManager;
@@ -63,21 +63,18 @@ fn detached_import_lifecycle_capability_matrix() {
             let job_id =
                 JobRepo::new(case_conn).create(&active.meta.id.0, "e2e detached import")?;
             let cancel = Arc::new(AtomicBool::new(false));
-            let outcome = run_single_import_with_mode(
-                SingleImportRequest {
-                    connection: case_conn,
-                    case_id: &active.meta.id,
-                    case_root: &active.case_root,
-                    job_id: &job_id,
-                    import_config: config,
-                    max_import_workers: Some(1),
-                    max_analysis_workers: Some(1),
-                    analysis_mode: ImportAnalysisMode::MetadataOnly,
-                    cancel_token: &cancel,
-                    event_sink: None,
-                },
-                SingleImportMode::Detached,
-            )
+            let outcome = run_single_import(SingleImportRequest {
+                connection: case_conn,
+                case_id: &active.meta.id,
+                case_root: &active.case_root,
+                job_id: &job_id,
+                import_config: config,
+                max_import_workers: Some(1),
+                max_analysis_workers: Some(1),
+                analysis_mode: ImportAnalysisMode::MetadataOnly,
+                cancel_token: &cancel,
+                event_sink: None,
+            })
             .map_err(|error| DbError::System(error.to_string()))?;
 
             let source_id: String = case_conn

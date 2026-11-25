@@ -4,9 +4,7 @@ use std::time::Duration;
 
 use crate::import_analysis::ImportAnalysisMode;
 pub use crate::import_group_gate::{ImportGroupGateError, ImportGroupLease};
-use crate::import_pipeline::{
-    execute_import_job, execute_import_job_until_catalog, ImportEventSink, ImportJobOptions,
-};
+use crate::import_pipeline::{execute_import_job, ImportEventSink, ImportJobOptions};
 use crate::import_precheck::ImportSourceConfig;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use source_kernel::connection::command_error_from_db;
@@ -31,30 +29,6 @@ pub enum SingleImportOutcome {
 }
 
 pub type MemberImportOutcome = SingleImportOutcome;
-
-/// Post-import lifecycle chosen for a single-source import by the
-/// `capabilityLifecycle.enabled` app-settings switch.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SingleImportMode {
-    /// Legacy inline rollback: timeline materialization and artifact extraction
-    /// run inside the import job; the shell scheduler never enqueues them.
-    Inline,
-    /// Default detached path: the job ends after catalog publication and the
-    /// desktop post-import scheduler runs timeline/artifacts.
-    Detached,
-}
-
-impl SingleImportMode {
-    /// Map the persisted switch: enabled (default) → Detached; disabled →
-    /// Inline rollback.
-    pub fn from_enabled(enabled: bool) -> Self {
-        if enabled {
-            Self::Detached
-        } else {
-            Self::Inline
-        }
-    }
-}
 
 pub struct MemberImportRequest<'a> {
     pub connection: &'a rusqlite::Connection,
@@ -157,17 +131,6 @@ pub struct SingleImportRequest<'a> {
 pub fn run_single_import(
     request: SingleImportRequest<'_>,
 ) -> Result<SingleImportOutcome, CommandError> {
-    run_single_import_with_mode(request, SingleImportMode::Detached)
-}
-
-/// Mode-aware variant of [`run_single_import`]. `Detached` preserves the
-/// catalog-only production path; `Inline` rolls back to running
-/// timeline/artifacts inside the job. The shell selects the mode from
-/// `capabilityLifecycle.enabled`; the legacy entry keeps its signature.
-pub fn run_single_import_with_mode(
-    request: SingleImportRequest<'_>,
-    mode: SingleImportMode,
-) -> Result<SingleImportOutcome, CommandError> {
     let SingleImportRequest {
         connection,
         case_id,
@@ -226,29 +189,14 @@ pub fn run_single_import_with_mode(
         analysis_mode,
         defer_linux_artifacts: false,
     };
-    // Detached: catalog-only production path, job ends after catalog
-    // publication and timeline/artifacts are queued for the desktop
-    // post-import scheduler. Inline: legacy rollback, timeline/artifacts run
-    // inside the job.
-    let result = match mode {
-        SingleImportMode::Detached => execute_import_job_until_catalog(
-            connection,
-            case_id,
-            case_root,
-            import_config,
-            job_id,
-            options,
-        )
-        .map(|(message, _counts)| message),
-        SingleImportMode::Inline => execute_import_job(
-            connection,
-            case_id,
-            case_root,
-            import_config,
-            job_id,
-            options,
-        ),
-    };
+    let result = execute_import_job(
+        connection,
+        case_id,
+        case_root,
+        import_config,
+        job_id,
+        options,
+    );
     finalize_single_import(&repo, job_id, cancel_token, result)
 }
 
@@ -281,7 +229,3 @@ fn finalize_single_import(
         }
     }
 }
-
-#[cfg(test)]
-#[path = "../tests/unit/import_job_coordinator.rs"]
-mod tests;

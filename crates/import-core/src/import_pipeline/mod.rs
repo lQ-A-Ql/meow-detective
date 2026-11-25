@@ -39,10 +39,10 @@ mod setup;
 
 pub use emit::{ImportEventSink, NoopImportEventSink};
 pub use execute::{
-    execute_import_job, execute_import_job_profiled, execute_import_job_until_catalog,
-    execute_import_job_with_counts, job_cancellation_dto,
+    execute_import_job, execute_import_job_profiled, execute_import_job_with_counts,
+    job_cancellation_dto,
 };
-pub use options::{ImportJobOptions, JobOutcomeCounts, PostImportMode};
+pub use options::{ImportJobOptions, JobOutcomeCounts};
 pub use partition::{
     build_partition_work, enumerate_image_data_source, enumerate_partition_with_fs,
     format_partition_progress_detail, format_partition_record_root_name,

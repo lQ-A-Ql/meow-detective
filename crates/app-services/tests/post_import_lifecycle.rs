@@ -1,7 +1,5 @@
 use app_services::import_analysis::ImportAnalysisMode;
-use app_services::import_job_coordinator::{
-    run_single_import_with_mode, SingleImportMode, SingleImportRequest,
-};
+use app_services::import_job_coordinator::{run_single_import, SingleImportRequest};
 use app_services::timeline_service::{
     get_timeline_projection_status, rebuild_timeline_projection, TimelineProjectionPolicy,
 };
@@ -65,21 +63,18 @@ fn import_directory_with_entries(
             )
             .unwrap();
             let job = JobRepo::new(conn).create(&case.meta.id.0, "directory import")?;
-            run_single_import_with_mode(
-                SingleImportRequest {
-                    connection: conn,
-                    case_id: &case.meta.id,
-                    case_root: &case.case_root,
-                    job_id: &job,
-                    import_config: config,
-                    max_import_workers: Some(1),
-                    max_analysis_workers: Some(1),
-                    analysis_mode: ImportAnalysisMode::MetadataOnly,
-                    cancel_token: &Arc::new(AtomicBool::new(false)),
-                    event_sink: None,
-                },
-                SingleImportMode::Detached,
-            )
+            run_single_import(SingleImportRequest {
+                connection: conn,
+                case_id: &case.meta.id,
+                case_root: &case.case_root,
+                job_id: &job,
+                import_config: config,
+                max_import_workers: Some(1),
+                max_analysis_workers: Some(1),
+                analysis_mode: ImportAnalysisMode::MetadataOnly,
+                cancel_token: &Arc::new(AtomicBool::new(false)),
+                event_sink: None,
+            })
             .unwrap();
             Ok(DataSourceRepo::new(conn)
                 .find_by_case(&case.meta.id)?
@@ -224,8 +219,8 @@ fn scoped_executor_completes_both_capabilities_after_real_directory_import() {
     ] {
         let completed = progress
             .iter()
-            .filter(|event| event.kind == kind)
-            .last()
+            .rev()
+            .find(|event| event.kind == kind)
             .unwrap();
         assert_eq!(
             completed.state,

@@ -48,28 +48,6 @@ pub(crate) fn load_app_settings(path: &PathBuf) -> Result<AppSettingsDto, Comman
     Ok(settings)
 }
 
-/// Read-only probe for the optional `capabilityLifecycle.enabled` switch on the
-/// shared `app-settings.json`. Absent file, missing key, non-boolean value, or
-/// parse failure all degrade to `true` (detached post-import lifecycle stays
-/// on). This never writes the file and never fails the import path; the switch
-/// is read once per import job, so a change only affects the next import.
-pub(crate) fn read_capability_lifecycle_enabled(path: &PathBuf) -> bool {
-    let Ok(content) = std::fs::read_to_string(path) else {
-        return true;
-    };
-    let Ok(value) = serde_json::from_str::<serde_json::Value>(&content) else {
-        tracing::warn!(
-            "app-settings.json is not valid JSON; capability lifecycle defaults to enabled"
-        );
-        return true;
-    };
-    value
-        .get("capabilityLifecycle")
-        .and_then(|object| object.get("enabled"))
-        .and_then(serde_json::Value::as_bool)
-        .unwrap_or(true)
-}
-
 #[cfg(test)]
 #[path = "../../tests/unit/commands/settings_commands.rs"]
 mod tests;

@@ -12,22 +12,6 @@ pub struct JobOutcomeCounts {
     pub failed_count: u32,
 }
 
-/// Where post-import capability work runs after catalog publication.
-///
-/// `Inline` keeps the legacy behavior: timeline materialization and artifact
-/// extraction run inside the import job. `Detached` ends the job after catalog
-/// publication and queues timeline/artifacts for the desktop post-import
-/// scheduler. The mode rides on `ImportJobContext`; `ImportJobOptions` stays a
-/// stable struct literal consumed by 20+ tests.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum PostImportMode {
-    /// Timeline materialization and artifact extraction run inside the job.
-    #[default]
-    Inline,
-    /// The job ends after catalog publication; post-import work is queued.
-    Detached,
-}
-
 /// Options controlling import job execution.
 #[derive(Clone, Copy)]
 pub struct ImportJobOptions<'a> {

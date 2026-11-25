@@ -226,20 +226,18 @@ foreach ($pattern in @(
     -Message "Staging merge-to-main must not silently suppress conflicts with: $pattern"
 }
 
-# Enumeration merge has two explicit persistence paths: the Fjall catalog
-# merge and the SQLite fallback. Analysis artifacts and timeline rows are owned
-# by the source Fjall store after the source-storage cutover.
+# Source detail merges use the Fjall Catalog and Analysis repositories.
 Assert-Matches `
   -Content $stagingRepo `
   -Pattern 'crate::staging::merge_staging_catalog' `
   -Message 'Staging enum merge is missing the explicit Fjall catalog path'
-Assert-Matches `
+Assert-NotMatches `
   -Content $stagingRepo `
   -Pattern 'INSERT\s+INTO\s+main\.file_entries' `
-  -Message 'Staging enum merge is missing the explicit SQLite fallback path'
+  -Message 'Staging enum merge must not write SQLite file details'
 Assert-Matches `
   -Content $stagingRepo `
-  -Pattern 'crate::staging::analysis(_staging)?::merge' `
+  -Pattern 'crate::staging::analysis::merge' `
   -Message 'Staging analysis merge is missing the explicit Fjall analysis path'
 Assert-Matches `
   -Content $stagingRepo `
