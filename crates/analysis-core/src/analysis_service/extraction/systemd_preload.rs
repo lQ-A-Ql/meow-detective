@@ -77,7 +77,11 @@ impl SystemdPreload {
         conn: &rusqlite::Connection,
     ) -> Result<(), AnalysisServiceError> {
         persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(conn)
-            .read("data_source_id")?;
+            .read("data_source_id")?
+            .filter(|identity| !identity.is_empty())
+            .ok_or_else(|| {
+                AnalysisServiceError::InvalidInput("source identity is missing".into())
+            })?;
         let tx = conn.unchecked_transaction()?;
         for (source, (count, complete)) in &self.markers {
             persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&tx).write(&format!("systemd.inventory:{source}"),&serde_json::json!({"schemaVersion":2,"unitCount":count,"complete":complete,"generatedAt":chrono::Utc::now().to_rfc3339()}).to_string())?;

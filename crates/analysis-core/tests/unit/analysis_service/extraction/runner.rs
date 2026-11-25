@@ -101,6 +101,22 @@ fn systemd_preparation_collects_dracut_symlink_targets_outside_systemd_directori
 }
 
 #[test]
+fn systemd_markers_require_current_source_identity() {
+    let preload = crate::analysis_service::extraction::systemd_preload::SystemdPreload::default();
+    let missing_table = Connection::open_in_memory().unwrap();
+    assert!(preload.persist_markers(&missing_table).is_err());
+    let source = source_connection();
+    preload.persist_markers(&source).unwrap();
+    source
+        .execute("DELETE FROM source_meta WHERE key='data_source_id'", [])
+        .unwrap();
+    assert!(matches!(
+        preload.persist_markers(&source),
+        Err(AnalysisServiceError::InvalidInput(_))
+    ));
+}
+
+#[test]
 fn candidate_reader_reports_monotonic_byte_progress() {
     let candidate = EvidenceCandidate {
         file_id: FileEntryId("streamed-bytes".to_string()),
