@@ -53,7 +53,7 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | 事实 | 当前值 |
 |---|---:|
 | Rust workspace crate | 53 |
-| Tauri commands | 175 |
+| Tauri commands | 174 |
 | app-services source modules | 57 |
 | SQLite repositories | 68 logical repositories |
 | SQLite migration scripts | 79 |
@@ -63,7 +63,7 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 |---|---:|
 | `frontend/src/app/pages/*.tsx` | 12 |
 | `frontend/tests/**/*.{test,spec}.{ts,tsx}` | 172 |
-| `apps/desktop/src-tauri/src/commands/**/*.rs` | 175 |
+| `apps/desktop/src-tauri/src/commands/**/*.rs` | 174 |
 
 治理事实源：
 
