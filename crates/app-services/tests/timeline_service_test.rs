@@ -3,6 +3,8 @@
 use app_services::{case_service, file_service, timeline_service};
 use evidence_core::LogicalFsReader;
 use tempfile::TempDir;
+#[path = "support/source_generation.rs"]
+mod source_generation;
 
 fn open_source_connection(
     active: &app_services::active_case::ActiveCase,
@@ -26,6 +28,15 @@ fn create_test_files(dir: &std::path::Path) {
     std::fs::write(dir.join("file1.txt"), b"content1").unwrap();
     std::fs::write(dir.join("file2.txt"), b"content2").unwrap();
     std::fs::write(dir.join("file3.log"), b"log content").unwrap();
+}
+
+fn project_catalog(
+    connection: &rusqlite::Connection,
+    source: &domain::DataSourceId,
+) -> Result<u64, timeline_service::TimelineProjectionError> {
+    source_generation::seal(connection, source);
+    timeline_service::materialize_file_activity_unknown(connection)
+        .map(|projection| projection.inserted_count)
 }
 
 #[test]
@@ -54,26 +65,12 @@ fn project_and_query_timeline() {
             // Enumerate files
             let fs = LogicalFsReader::open(&evidence_dir, "test-evidence")
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
-
-            // Get all files
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
-            let roots = repo.find_roots(&ds_id)?;
-            let mut all_files = Vec::new();
-            let mut queue = roots;
-            while let Some(f) = queue.pop() {
-                if f.entry_type != domain::EntryType::Directory {
-                    all_files.push(f);
-                } else {
-                    queue.extend(repo.find_children(&f.id)?);
-                }
-            }
-            assert!(!all_files.is_empty(), "Expected files");
+            let stats = file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
+            assert!(stats.file_count > 0, "Expected files");
 
             // Project timeline
-            let tl_count =
-                timeline_service::project_and_store_file_activity(&source_conn, &all_files)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let tl_count = project_catalog(&source_conn, &ds_id)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(tl_count > 0, "Expected timeline events");
 
             // Query timeline
@@ -122,21 +119,8 @@ fn timeline_pagination() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
-            let roots = repo.find_roots(&ds_id)?;
-            let mut all_files = Vec::new();
-            let mut queue = roots;
-            while let Some(f) = queue.pop() {
-                if f.entry_type != domain::EntryType::Directory {
-                    all_files.push(f);
-                } else {
-                    queue.extend(repo.find_children(&f.id)?);
-                }
-            }
-
-            let tl_count =
-                timeline_service::project_and_store_file_activity(&source_conn, &all_files)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            let tl_count = project_catalog(&source_conn, &ds_id)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query with limit
             let result1 = timeline_service::query_timeline(&source_conn, 0, 2)
@@ -181,19 +165,7 @@ fn timeline_filtered_by_event_type() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             file_service::enumerate_filesystem(&source_conn, &ds_id, &fs)?;
 
-            let repo = persistence_source::repositories::file_repo::FileRepo::new(&source_conn);
-            let roots = repo.find_roots(&ds_id)?;
-            let mut all_files = Vec::new();
-            let mut queue = roots;
-            while let Some(f) = queue.pop() {
-                if f.entry_type != domain::EntryType::Directory {
-                    all_files.push(f);
-                } else {
-                    queue.extend(repo.find_children(&f.id)?);
-                }
-            }
-
-            timeline_service::project_and_store_file_activity(&source_conn, &all_files)
+            project_catalog(&source_conn, &ds_id)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query all events

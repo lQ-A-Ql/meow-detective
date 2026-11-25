@@ -34,27 +34,16 @@ impl<'a> TimelineProjectionRepo<'a> {
                 status TEXT NOT NULL,
                 inserted_count INTEGER NOT NULL DEFAULT 0,
                 input_identity TEXT NOT NULL,
+                deferred_reason TEXT,
+                required_bytes INTEGER NOT NULL DEFAULT 0,
+                available_bytes INTEGER NOT NULL DEFAULT 0,
                 updated_at TEXT NOT NULL DEFAULT (datetime('now'))
             );",
         )?;
-        self.ensure_column("deferred_reason", "TEXT")?;
-        self.ensure_column("required_bytes", "INTEGER NOT NULL DEFAULT 0")?;
-        self.ensure_column("available_bytes", "INTEGER NOT NULL DEFAULT 0")?;
-        Ok(())
-    }
-
-    fn ensure_column(&self, name: &str, definition: &str) -> DbResult<()> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT name FROM pragma_table_info('timeline_projection_meta')")?;
-        let existing = stmt.query_map([], |row| row.get::<_, String>(0))?;
-        for column in existing {
-            if column? == name {
-                return Ok(());
-            }
-        }
-        let sql = format!("ALTER TABLE timeline_projection_meta ADD COLUMN {name} {definition}");
-        self.conn.execute(&sql, [])?;
+        self.conn.prepare(
+            "SELECT projection_key,status,inserted_count,input_identity,deferred_reason,
+             required_bytes,available_bytes,updated_at FROM timeline_projection_meta LIMIT 0",
+        )?;
         Ok(())
     }
 

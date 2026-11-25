@@ -1,6 +1,4 @@
-use domain::{DataSourcePlatform, FileEntry};
-use persistence_source::repositories::timeline_repo::TimelineRepo;
-use rayon::prelude::*;
+use domain::DataSourcePlatform;
 use rusqlite::Connection;
 use std::sync::atomic::AtomicBool;
 
@@ -41,12 +39,6 @@ pub struct TimelineProjectionStats {
     pub workspace_required_bytes: u64,
     /// Policy reservation bytes the plan was checked against.
     pub workspace_available_bytes: u64,
-    /// Legacy plan artifact field; constant plan leaves it at zero.
-    pub workspace_mutation_bytes: u64,
-    /// Legacy plan artifact field; constant plan leaves it at zero.
-    pub workspace_projected_events: u64,
-    /// Legacy plan artifact field; constant plan leaves it at zero.
-    pub workspace_graph_events: u64,
     /// Native ingestion batches completed during delete and insert work.
     pub workspace_segments: u64,
     /// Largest committed segment payload in bytes.
@@ -56,21 +48,6 @@ pub struct TimelineProjectionStats {
     /// Number of completed native write batches.
     pub commit_count: u64,
     pub native_writes: persistence_source::fjall::NativeWriteReport,
-}
-
-pub fn project_and_store_file_activity(
-    conn: &Connection,
-    files: &[FileEntry],
-) -> Result<u64, TimelineProjectionError> {
-    let events = files
-        .par_iter()
-        .flat_map_iter(timeline::project_file_activity)
-        .collect::<Vec<_>>();
-    let count = events.len() as u64;
-    if !events.is_empty() {
-        TimelineRepo::new(conn).insert_batch(&events)?;
-    }
-    Ok(count)
 }
 
 pub fn materialize_file_activity(

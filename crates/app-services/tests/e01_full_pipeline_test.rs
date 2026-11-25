@@ -6,6 +6,11 @@ use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo
 use std::io::{Read, Seek, SeekFrom};
 use tempfile::TempDir;
 
+#[path = "support/source_connection.rs"]
+mod source_connection;
+#[path = "support/source_generation.rs"]
+mod source_generation;
+
 fn sample_path() -> std::path::PathBuf {
     testing::fixtures::local_e01_fixture().unwrap_or_else(|| {
         panic!("set FORENSICS_E01_FIXTURE to run ignored real E01 pipeline tests")
@@ -506,6 +511,8 @@ fn e01_timeline_projection() {
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
+            let source = source_connection::open(conn, &active, &ds_id);
+            let conn = &source;
 
             // Use FAT for faster enumeration
             let boxed: Box<dyn EvidenceReader> = Box::new(
@@ -516,21 +523,10 @@ fn e01_timeline_projection() {
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             let _stats = file_service::enumerate_filesystem(conn, &ds_id, &fs)?;
 
-            // Collect files for timeline
-            let file_repo = FileRepo::new(conn);
-            let roots = file_repo.find_roots(&ds_id)?;
-            let mut all_files = Vec::new();
-            let mut queue = roots;
-            while let Some(f) = queue.pop() {
-                if f.entry_type != domain::EntryType::Directory {
-                    all_files.push(f);
-                } else {
-                    queue.extend(file_repo.find_children(&f.id)?);
-                }
-            }
-
             // Project timeline
-            let tl_count = timeline_service::project_and_store_file_activity(conn, &all_files)
+            source_generation::seal(conn, &ds_id);
+            let tl_count = timeline_service::materialize_file_activity_unknown(conn)
+                .map(|projection| projection.inserted_count)
                 .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
 
             // Query and verify pagination

@@ -14,6 +14,11 @@ use std::time::Instant;
 use tempfile::TempDir;
 use transport::commands::GetFileRowsRequest;
 
+#[path = "support/source_connection.rs"]
+mod source_connection;
+#[path = "support/source_generation.rs"]
+mod source_generation;
+
 fn sample_path() -> std::path::PathBuf {
     testing::fixtures::local_liuyang_e01_fixture().unwrap_or_else(|| {
         panic!("set FORENSICS_LIUYANG_E01_FIXTURE to run ignored Liu Yang E01 tests")
@@ -1136,6 +1141,8 @@ fn liuyang_e01_correlation_snapshot_and_governance() {
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
+            let source = source_connection::open(conn, &active, &data_source_id);
+            let conn = &source;
 
             // Import MFT
             let stats = file_service::enumerate_filesystem_mft(
@@ -1169,24 +1176,11 @@ fn liuyang_e01_correlation_snapshot_and_governance() {
             });
             assert!(matching.is_some(), "Expected path/name containing '{expected_fragment}'");
 
-            // Correlation consumes artifacts and timeline rows, not the file catalog
-            // directly. A bounded real-file projection supplies that explicit input
-            // without turning this snapshot test into a second full Timeline test.
             let tl_start = Instant::now();
-            let timeline_files = entries
-                .iter()
-                .filter(|entry| entry.entry_type == domain::EntryType::File)
-                .filter(|entry| {
-                    entry.created_at.is_some()
-                        || entry.modified_at.is_some()
-                        || entry.accessed_at.is_some()
-                        || entry.changed_at.is_some()
-                })
-                .take(256)
-                .cloned()
-                .collect::<Vec<_>>();
+            source_generation::seal(conn, &data_source_id);
             let projected =
-                timeline_service::project_and_store_file_activity(conn, &timeline_files)
+                timeline_service::materialize_file_activity_unknown(conn)
+                    .map(|projection| projection.inserted_count)
                     .map_err(|error| {
                         persistence_sqlite::DbError::System(error.to_string())
                     })?;
@@ -1313,6 +1307,8 @@ fn liuyang_e01_artifact_extraction_and_correlation_rules() {
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
+            let source = source_connection::open(conn, &active, &data_source_id);
+            let conn = &source;
 
             // Step 1: Import MFT
             let stats = file_service::enumerate_filesystem_mft(
@@ -1374,7 +1370,8 @@ fn liuyang_e01_artifact_extraction_and_correlation_rules() {
             }
 
             // Step 4: Build timeline from MACB
-            timeline_service::materialize_file_activity_unknown(conn).ok();
+            source_generation::seal(conn, &data_source_id);
+            timeline_service::materialize_file_activity_unknown(conn).unwrap();
             let tl_items = timeline_service::query_timeline(conn, 0, 100)
                 .map(|r| r.items.len())
                 .unwrap_or(0);
@@ -1484,6 +1481,8 @@ fn liuyang_e01_lnk_extraction_and_correlation() {
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
+            let source = source_connection::open(conn, &active, &data_source_id);
+            let conn = &source;
 
             // Step 1: Import MFT
             let stats = file_service::enumerate_filesystem_mft(
@@ -1558,7 +1557,8 @@ fn liuyang_e01_lnk_extraction_and_correlation() {
             eprintln!("Stored {} LNK artifacts", sink.artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::materialize_file_activity_unknown(conn).ok();
+            source_generation::seal(conn, &data_source_id);
+            timeline_service::materialize_file_activity_unknown(conn).unwrap();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();
@@ -1654,6 +1654,8 @@ fn liuyang_e01_browser_history_extraction() {
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
+            let source = source_connection::open(conn, &active, &data_source_id);
+            let conn = &source;
 
             // Step 1: Import MFT
             let stats = file_service::enumerate_filesystem_mft(
@@ -1868,7 +1870,8 @@ fn liuyang_e01_browser_history_extraction() {
             eprintln!("Stored {} BrowserHistory artifacts", all_artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::materialize_file_activity_unknown(conn).ok();
+            source_generation::seal(conn, &data_source_id);
+            timeline_service::materialize_file_activity_unknown(conn).unwrap();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();
@@ -1964,6 +1967,8 @@ fn liuyang_e01_prefetch_extraction() {
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
+            let source = source_connection::open(conn, &active, &data_source_id);
+            let conn = &source;
 
             // Step 1: Import MFT
             let stats = file_service::enumerate_filesystem_mft(
@@ -2070,7 +2075,8 @@ fn liuyang_e01_prefetch_extraction() {
             eprintln!("Stored {} Prefetch artifacts", sink.artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::materialize_file_activity_unknown(conn).ok();
+            source_generation::seal(conn, &data_source_id);
+            timeline_service::materialize_file_activity_unknown(conn).unwrap();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();
@@ -2166,6 +2172,8 @@ fn liuyang_e01_recycle_bin_extraction() {
                     provenance: domain::DataSourceProvenance::unknown(),
                 },
             )?;
+            let source = source_connection::open(conn, &active, &data_source_id);
+            let conn = &source;
 
             // Step 1: Import MFT
             let stats = file_service::enumerate_filesystem_mft(
@@ -2290,7 +2298,8 @@ fn liuyang_e01_recycle_bin_extraction() {
             eprintln!("Stored {} RecycleBin artifacts", sink.artifacts.len());
 
             // Step 5: Build timeline
-            timeline_service::materialize_file_activity_unknown(conn).ok();
+            source_generation::seal(conn, &data_source_id);
+            timeline_service::materialize_file_activity_unknown(conn).unwrap();
 
             // Step 6: Run correlation
             let corr_start = Instant::now();

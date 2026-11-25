@@ -26,11 +26,6 @@ const GRAPH_ALLOWANCE_BYTES: u64 = 32 * MIB;
 /// Bounded parallel-write workspace independent of catalog cardinality.
 #[derive(Debug, Clone, Default)]
 pub(crate) struct WorkspaceEstimate {
-    pub projected_events: u64,
-    pub removed_events: u64,
-    pub graph_events: u64,
-    pub mutation_bytes: u64,
-    pub mutation_entries: u64,
     pub required_bytes: u64,
     pub engine_retained_bytes: u64,
 }
@@ -49,7 +44,6 @@ pub(crate) fn estimate(cancel: &AtomicBool) -> Result<WorkspaceEstimate, Timelin
     Ok(WorkspaceEstimate {
         required_bytes: plan_required_bytes(),
         engine_retained_bytes: ENGINE_RETAINED_BYTES,
-        ..Default::default()
     })
 }
 
@@ -60,11 +54,6 @@ impl WorkspaceEstimate {
             return Err(TimelineProjectionError::WorkspaceLimit {
                 required_bytes: self.required_bytes,
                 available_bytes,
-                projected_events: self.projected_events,
-                removed_events: self.removed_events,
-                graph_events: self.graph_events,
-                mutation_bytes: self.mutation_bytes,
-                mutation_entries: self.mutation_entries,
                 identity: String::new(),
             });
         }

@@ -5,7 +5,7 @@ use persistence_sqlite::{
 };
 
 #[test]
-fn meta_table_upgrades_idempotently_and_deferred_is_not_done() {
+fn current_meta_table_is_idempotent_and_deferred_is_not_done() {
     let conn = open_in_memory().expect("open case database");
     runner::run_all(&conn).expect("run migrations");
     let repo = TimelineProjectionRepo::new(&conn);
@@ -67,4 +67,31 @@ fn meta_table_upgrades_idempotently_and_deferred_is_not_done() {
         .status("missing-key")
         .expect("status missing")
         .is_none());
+}
+
+#[test]
+fn meta_table_rejects_incomplete_layout_without_adding_columns() {
+    let connection = open_in_memory().unwrap();
+    connection
+        .execute_batch(
+            "CREATE TABLE timeline_projection_meta (
+                projection_key TEXT PRIMARY KEY NOT NULL,
+                status TEXT NOT NULL,
+                inserted_count INTEGER NOT NULL DEFAULT 0,
+                input_identity TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );",
+        )
+        .unwrap();
+    assert!(TimelineProjectionRepo::new(&connection)
+        .ensure_meta_table()
+        .is_err());
+    let count: u64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM pragma_table_info('timeline_projection_meta')",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap();
+    assert_eq!(count, 5);
 }

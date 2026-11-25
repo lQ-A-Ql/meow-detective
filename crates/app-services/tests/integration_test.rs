@@ -4,6 +4,8 @@ use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use tempfile::TempDir;
 use transport::commands::ExportScopeDto;
+#[path = "support/source_generation.rs"]
+mod source_generation;
 
 fn open_source_connection(
     active: &app_services::active_case::ActiveCase,
@@ -75,9 +77,10 @@ fn full_case_lifecycle() {
             assert!(!all_files.is_empty());
 
             // Timeline
-            let tl_count =
-                timeline_service::project_and_store_file_activity(&source_conn, &all_files)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
+            source_generation::seal(&source_conn, &ds_id);
+            let tl_count = timeline_service::materialize_file_activity_unknown(&source_conn)
+                .map(|projection| projection.inserted_count)
+                .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
             assert!(tl_count > 0, "Expected timeline events");
 
             // Search indexing: build a map of entry paths, then provide readers

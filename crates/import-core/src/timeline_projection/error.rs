@@ -12,11 +12,6 @@ pub enum TimelineProjectionError {
     WorkspaceLimit {
         required_bytes: u64,
         available_bytes: u64,
-        projected_events: u64,
-        removed_events: u64,
-        graph_events: u64,
-        mutation_bytes: u64,
-        mutation_entries: u64,
         identity: String,
     },
     #[error("{0}")]
@@ -60,18 +55,11 @@ impl transport::ServiceErrorCategory for TimelineProjectionError {
             Self::WorkspaceLimit {
                 required_bytes,
                 available_bytes,
-                projected_events,
-                removed_events,
-                graph_events,
-                mutation_bytes,
-                mutation_entries,
                 identity,
             } => {
                 let mut details = serde_json::json!({
                     "requiredBytes": required_bytes, "availableBytes": available_bytes,
-                    "projectedEvents": projected_events, "removedEvents": removed_events,
-                    "graphEvents": graph_events, "estimateKind": "projectionWorkspace",
-                    "mutationBytes": mutation_bytes, "mutationEntries": mutation_entries
+                    "estimateKind": "projectionWorkspace"
                 });
                 if !identity.is_empty() {
                     details["identity"] = serde_json::Value::String(identity.clone());

@@ -1,9 +1,8 @@
 use app_services::timeline_service::{
     get_timeline_event_by_id_for_case, get_timeline_facets_for_case,
-    materialize_file_activity_unknown, project_and_store_file_activity, query_timeline,
-    query_timeline_aggregated, query_timeline_filtered_for_case,
-    query_timeline_filtered_instrumented, query_timeline_for_case, query_timeline_instrumented,
-    TimelineQuery, TimelineServiceError,
+    materialize_file_activity_unknown, query_timeline, query_timeline_aggregated,
+    query_timeline_filtered_for_case, query_timeline_filtered_instrumented,
+    query_timeline_for_case, query_timeline_instrumented, TimelineQuery, TimelineServiceError,
 };
 use chrono::{TimeZone, Utc};
 use domain::{
@@ -13,10 +12,13 @@ use domain::{
 use persistence_source::repositories::{file_repo::FileRepo, timeline_repo::TimelineRepo};
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::dto::PerformanceReportDto;
+#[path = "support/source_generation.rs"]
+mod source_generation;
 
 fn in_memory_db_with_timeline() -> rusqlite::Connection {
     let root = tempfile::TempDir::new().unwrap().keep();
-    let db_path = root.join("source.db");
+    let db_path = root.join("sources/ds-1/source.db");
+    std::fs::create_dir_all(db_path.parent().unwrap()).unwrap();
     let conn =
         persistence_source::control::opening::open_source_database(&db_path, "ds-1").unwrap();
     let source = DataSource {
@@ -151,6 +153,27 @@ fn mark_source_projection_complete(
         persistence_source::detail::open_store_for_write(connection)?.ok_or_else(|| {
             persistence_sqlite::DbError::System("source fixture has no builder".into())
         })?;
+    let (timeline_key, timeline_marker) =
+        persistence_source::fjall::timeline_projection_marker_envelope(
+            source_id,
+            &persistence_source::fjall::TimelineProjectionStatePayload::new(
+                persistence_source::fjall::TimelineProjectionState::Complete,
+                "test-timeline",
+                0,
+                0,
+                0,
+                None,
+            ),
+        )
+        .unwrap();
+    source
+        .write_envelope(
+            persistence_source::fjall::KeyspaceName::Meta,
+            timeline_key,
+            &timeline_marker,
+            persistence_source::fjall::PersistMode::SyncAll,
+        )
+        .unwrap();
     let key = persistence_source::fjall::encode_key(
         "projection",
         &[persistence_source::fjall::KeyPart::Text(
@@ -209,7 +232,14 @@ fn timeline_file_activity_projection_inserts_expected_events_and_handles_empty_i
         make_file("a.txt", "/a.txt", true, true),
         make_file("b.txt", "/b.txt", true, false),
     ];
-    assert_eq!(project_and_store_file_activity(&conn, &files).unwrap(), 5);
+    FileRepo::new(&conn).insert_batch(&files).unwrap();
+    source_generation::seal(&conn, &DataSourceId("ds-1".into()));
+    assert_eq!(
+        materialize_file_activity_unknown(&conn)
+            .unwrap()
+            .inserted_count,
+        5
+    );
     assert_eq!(TimelineRepo::new(&conn).count().unwrap(), 5);
     let mut event_types = TimelineRepo::new(&conn)
         .query_filtered(0, 100, None, None, None)
@@ -228,7 +258,22 @@ fn timeline_file_activity_projection_inserts_expected_events_and_handles_empty_i
             "FILE_MODIFIED",
         ]
     );
-    assert_eq!(project_and_store_file_activity(&conn, &[]).unwrap(), 0);
+    assert!(
+        materialize_file_activity_unknown(&conn)
+            .unwrap()
+            .already_projected
+    );
+    let empty = in_memory_db_with_timeline();
+    persistence_source::detail::open_store_for_write(&empty)
+        .unwrap()
+        .unwrap();
+    source_generation::seal(&empty, &DataSourceId("ds-1".into()));
+    assert_eq!(
+        materialize_file_activity_unknown(&empty)
+            .unwrap()
+            .inserted_count,
+        0
+    );
 }
 
 #[test]
@@ -1093,6 +1138,7 @@ fn timeline_file_activity_materialization_is_idempotent() {
             hash_sha256: None,
         }])
         .unwrap();
+    source_generation::seal(&conn, &DataSourceId("ds-1".into()));
     let first = materialize_file_activity_unknown(&conn).unwrap();
     assert_eq!(first.inserted_count, 3);
     assert!(!first.already_projected);

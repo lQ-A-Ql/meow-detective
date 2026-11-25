@@ -19,8 +19,8 @@ pub use import_core::timeline_projection::{
     materialize_file_activity_unknown_with_cancel,
     materialize_file_activity_unknown_with_cancel_and_identity,
     materialize_file_activity_with_identity, materialize_file_activity_with_identity_and_policy,
-    materialize_file_activity_with_policy, project_and_store_file_activity,
-    TimelineProjectionError, TimelineProjectionStats, TimelineWriteTimings,
+    materialize_file_activity_with_policy, TimelineProjectionError, TimelineProjectionStats,
+    TimelineWriteTimings,
 };
 pub use pagination::{
     query_timeline_aggregated, query_timeline_filtered_for_case, query_timeline_for_case,
