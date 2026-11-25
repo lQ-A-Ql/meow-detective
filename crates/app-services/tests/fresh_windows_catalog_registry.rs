@@ -57,7 +57,7 @@ fn fresh_windows_catalog_and_registry_pages() {
     .unwrap();
     let case_root = active.case_root.clone();
     let started = Instant::now();
-    active
+    let source_id = active
         .with_conn(|connection| {
             let job = JobRepo::new(connection).create(&active.meta.id.0, "Fresh Windows import")?;
             let config = import_precheck::prepare_import_source_config_from_path(
@@ -107,9 +107,35 @@ fn fresh_windows_catalog_and_registry_pages() {
                 }))
                 .unwrap(),
             )?;
-            Ok(())
+            Ok(source_id)
         })
         .unwrap();
+    eprintln!("FRESH_WINDOWS_STAGE managed-timeline");
+    let runtime = app_services::post_import_service::PostImportRuntime {
+        tasks: Arc::new(app_services::task_runtime::TaskManager::new()),
+        bitlocker: Arc::new(BitLockerUnlockRegistry::default()),
+        events: None,
+    };
+    let timeline_started = Instant::now();
+    let timeline = app_services::post_import_service::rebuild_timeline(
+        &runtime,
+        &active.meta.id,
+        &active.case_root,
+        Some(&source_id.0),
+    )
+    .unwrap();
+    std::fs::write(
+        output.join("timeline.json"),
+        serde_json::to_vec_pretty(&json!({
+            "elapsedMs": timeline_started.elapsed().as_millis(), "status": timeline,
+        }))
+        .unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        timeline.state,
+        transport::dto::TimelineProjectionStateDto::Complete
+    );
     drop(active);
     let input_after = input_metadata(&image);
     assert_eq!(
@@ -272,6 +298,17 @@ fn verify_pages(case_root: &Path, report_path: &Path) {
         children.total_count < 500,
         "partition root still contains excessive directories"
     );
+    assert_eq!(root.expanded, Some(true));
+    assert!(children
+        .children
+        .iter()
+        .all(|node| node.expanded == Some(false)));
+    let child_ids = children
+        .children
+        .iter()
+        .map(|node| &node.id)
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(child_ids.len(), children.children.len());
     assert!(rows.rows.iter().all(|row| {
         !row.path.starts_with("/$DeletedOrphans/")
             && !row.path.starts_with("/$Unresolved/")
