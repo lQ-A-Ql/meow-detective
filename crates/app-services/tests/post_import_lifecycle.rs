@@ -178,6 +178,26 @@ fn scoped_executor_completes_both_capabilities_after_real_directory_import() {
         CapabilityStateDto::Ready
     );
     let conn = fixture.case.connection().unwrap();
+    let analysis_progress = events
+        .0
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|event| event.topic == transport::events::EventTopic::AnalysisExtractionProgress)
+        .map(|event| {
+            serde_json::from_value::<transport::dto::AnalysisExtractionProgressDto>(
+                event.payload.clone(),
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
+    assert!(!analysis_progress.is_empty());
+    assert!(analysis_progress.iter().all(|event| {
+        event.case_id == fixture.case.meta.id.0 && event.data_source_id == fixture.source.0
+    }));
+    assert!(analysis_progress
+        .iter()
+        .any(|event| event.phase == transport::dto::AnalysisExtractionPhaseDto::Completed));
     assert!(
         app_services::timeline_service::count_timeline_events_for_case(
             &conn,
@@ -235,6 +255,62 @@ fn scoped_executor_completes_both_capabilities_after_real_directory_import() {
             Some(fixture.source.0.as_str())
         );
     }
+}
+
+#[test]
+fn published_artifacts_are_queryable_before_timeline_starts() {
+    let fixture = import_directory_with_entries(
+        DataSourcePlatform::Linux,
+        &[("home/investigator/.bash_history", "pwd\nls -la\n")],
+    );
+    let mut runtime = runtime();
+    let events = Arc::new(ProgressEvents::default());
+    runtime.events = Some(events.clone());
+    assert!(post_import_service::cancel_capability(
+        &runtime,
+        &fixture.case.meta.id,
+        &fixture.case.case_root,
+        &fixture.source.0,
+        post_import_service::ExecutableCapability::Artifacts,
+    )
+    .unwrap());
+    post_import_service::retry_capability(
+        &runtime,
+        &fixture.case.meta.id,
+        &fixture.case.case_root,
+        &fixture.source.0,
+        post_import_service::ExecutableCapability::Artifacts,
+    )
+    .unwrap();
+    for (_, result) in runtime.tasks.wait_all(Duration::from_secs(20)) {
+        result.unwrap();
+    }
+    assert_eq!(
+        state(&fixture, CapabilityKindDto::Timeline),
+        CapabilityStateDto::Queued
+    );
+    assert_eq!(
+        state(&fixture, CapabilityKindDto::Artifacts),
+        CapabilityStateDto::Ready
+    );
+    let conn = fixture.case.connection().unwrap();
+    let summary = app_services::analysis_service::get_source_linux_summary(
+        &conn,
+        &fixture.case.case_root,
+        &fixture.case.meta.id,
+        &fixture.source,
+        0,
+        20,
+    )
+    .unwrap();
+    assert_eq!(summary.bash_command_count, 2);
+    assert_eq!(summary.bash_commands.len(), 2);
+    assert!(events.0.lock().unwrap().iter().any(|event| {
+        event.topic == transport::events::EventTopic::AnalysisExtractionProgress
+            && event.payload["category"] == "LinuxCommands"
+            && event.payload["phase"] == "completed"
+            && event.payload["artifactCount"] == 2
+    }));
 }
 
 #[test]

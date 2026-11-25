@@ -48,6 +48,17 @@ pub(super) fn progress(
     )
 }
 
+pub(super) fn analysis_progress(
+    work: &CapabilityWork,
+    progress: &transport::dto::AnalysisExtractionProgressDto,
+) -> std::io::Result<()> {
+    emit(
+        work.events.as_deref(),
+        EventTopic::AnalysisExtractionProgress,
+        serde_json::to_value(progress).map_err(std::io::Error::other)?,
+    )
+}
+
 pub(super) fn timeline_updated(work: &CapabilityWork, count: u64) -> std::io::Result<()> {
     emit(
         work.events.as_deref(),
