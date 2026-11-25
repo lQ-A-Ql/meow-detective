@@ -1,6 +1,7 @@
 //! File browsing, metadata routing, preview, and extraction services.
 
 mod browse;
+mod catalog_browse;
 mod cephfs_adapter;
 mod checkpointed_enumeration;
 mod data_sources;
@@ -8,12 +9,12 @@ mod derived_filesystem;
 mod enumeration;
 mod error;
 mod extraction;
+mod file_graph;
 pub mod filesystem_locators;
 mod fjall_read;
 pub use fjall_read::record_to_domain;
 mod linux_root_mounts;
 mod metadata;
-mod mft;
 mod parallel_enumeration;
 mod partition_identity;
 mod partition_roots;
@@ -44,6 +45,7 @@ pub use extraction::{
     CaseFileExtractionRequest, FileExtractionProgressCallback, FileExtractionProgressPhase,
     FileExtractionProgressUpdate,
 };
+pub use file_graph::populate_file_graph_for_data_source;
 pub use metadata::preview_sessions::{
     close_preview_session_for_case, invalidate_preview_source, open_preview_session_for_case,
     open_preview_session_for_case_with_bitlocker, preview_session_file_id,
@@ -68,11 +70,6 @@ pub use metadata::source_routing::{
     media_preview_plan_for_source_case, media_range_for_source_case, open_file_handle_for_case,
     read_file_range_for_source_case, read_preview_bytes_for_source_case,
     text_preview_for_source_case,
-};
-pub use mft::{
-    add_entry_to_path_map, enumerate_filesystem_mft, enumerate_filesystem_mft_with_partition,
-    mft_parent_entry_id, parse_ntfs_data_runs, populate_file_graph_for_data_source,
-    read_ntfs_mft_stream, records_to_file_entries, update_entry_parent_ids, update_entry_paths,
 };
 pub use parallel_enumeration::enumerate_filesystem_parallel_with_factory;
 pub use partition_roots::partition_placeholder_status;

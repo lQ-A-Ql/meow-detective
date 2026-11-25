@@ -205,7 +205,6 @@ $moduleManifest = @(
   @('crates/import-core/src/import_pipeline/partition/mod.rs', 'candidates', 'crates/import-core/src/import_pipeline/partition/candidates.rs'),
   @('crates/evidence-access/src/file_service/metadata/mod.rs', 'source_routing', 'crates/evidence-access/src/file_service/metadata/source_routing/mod.rs'),
   @('crates/evidence-access/src/file_service/viewer/range/mod.rs', 'api', 'crates/evidence-access/src/file_service/viewer/range/api.rs'),
-  @('crates/evidence-access/src/file_service/mft/mod.rs', 'enumeration', 'crates/evidence-access/src/file_service/mft/enumeration.rs'),
   @('crates/app-services/src/artifact_service.rs', 'persistence', 'crates/app-services/src/artifact_service/persistence.rs'),
   @('crates/app-services/src/graph_service.rs', 'source_aggregation', 'crates/app-services/src/graph_service/source_aggregation.rs'),
   @('crates/app-services/src/correlation/graph.rs', 'snapshot', 'crates/app-services/src/correlation/graph/snapshot.rs'),

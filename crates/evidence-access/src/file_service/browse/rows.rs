@@ -1,7 +1,4 @@
-use crate::file_service::{
-    metadata::{lookup::file_entry_to_dto, sorting::sort_entries},
-    FileServiceError,
-};
+use crate::file_service::{metadata::lookup::file_entry_to_dto, FileServiceError};
 use domain::FileEntryId;
 use persistence_source::repositories::file_repo::{FileRepo, FileSortDirection, FileSortKey};
 use rusqlite::Connection;
@@ -51,27 +48,14 @@ pub fn get_file_rows_for_request(
         transport::commands::FileSortDirectionDto::Asc => FileSortDirection::Asc,
         transport::commands::FileSortDirectionDto::Desc => FileSortDirection::Desc,
     };
-    let page = if repo.entries_need_natural_sort(parent_id, request.show_hidden, sort_key)? {
-        let mut entries = match parent_id {
-            Some(parent_id) => repo.find_children_visible(parent_id, request.show_hidden)?,
-            None => repo.find_root_entries_visible(request.show_hidden)?,
-        };
-        sort_entries(&mut entries, request.sort_key, request.sort_direction);
-        let start = (request.offset as usize).min(entries.len());
-        let end = start
-            .saturating_add(request.limit as usize)
-            .min(entries.len());
-        entries[start..end].to_vec()
-    } else {
-        repo.find_entries_page_visible_ordered(
-            parent_id,
-            request.offset,
-            request.limit,
-            request.show_hidden,
-            sort_key,
-            sort_direction,
-        )?
-    };
+    let page = repo.find_entries_page_visible_ordered(
+        parent_id,
+        request.offset,
+        request.limit,
+        request.show_hidden,
+        sort_key,
+        sort_direction,
+    )?;
 
     Ok(FileRowsPageDto {
         rows: page.iter().map(file_entry_to_dto).collect(),

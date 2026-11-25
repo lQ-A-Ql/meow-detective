@@ -13,6 +13,8 @@ use persistence_source::repositories::file_repo::FileRepo;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::PathBuf;
 use tempfile::TempDir;
+#[path = "support/ntfs_catalog.rs"]
+mod ntfs_catalog;
 
 fn jc2_path() -> PathBuf {
     std::env::var_os("FORENSICS_JC2_E01_FIXTURE")
@@ -93,32 +95,6 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 partition_index, actual_ntfs_idx, ntfs.offset
             );
 
-            // MFT enumerate
-            let mut reader = E01Reader::open(e01_path)
-                .map_err(|e| persistence_sqlite::DbError::System(format!("E01: {e}")))?;
-            reader
-                .seek(SeekFrom::Start(ntfs.offset))
-                .map_err(|e| persistence_sqlite::DbError::System(format!("seek: {e}")))?;
-            let mut boot = [0u8; 512];
-            reader
-                .read_exact(&mut boot)
-                .map_err(|e| persistence_sqlite::DbError::System(format!("boot: {e}")))?;
-
-            let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
-            let sectors_per_cluster = boot[13];
-            let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
-            let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap_or([0; 8]));
-            let mft_abs_offset = ntfs.offset + mft_cluster * cluster_size;
-            reader
-                .seek(SeekFrom::Start(mft_abs_offset))
-                .map_err(|e| persistence_sqlite::DbError::System(format!("seek MFT: {e}")))?;
-            let mut mft_rec = vec![0u8; 1024];
-            reader
-                .read_exact(&mut mft_rec)
-                .map_err(|e| persistence_sqlite::DbError::System(format!("read MFT: {e}")))?;
-            let mft_data_size =
-                fs_ntfs::parse_mft_data_real_size(&mft_rec).unwrap_or(1024 * 1024 * 100);
-
             // Fetch UUID-based data source ID
             let ds_repo =
                 persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn);
@@ -129,18 +105,11 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                 .find(|d| d.name == "test-e01")
                 .ok_or_else(|| persistence_sqlite::DbError::System("ds not found".to_string()))?;
 
-            let stats = file_service::enumerate_filesystem_mft_with_partition(
+            let stats = ntfs_catalog::enumerate(
                 &source_conn,
                 &stored_ds.id,
                 e01_path,
                 ntfs.offset,
-                mft_cluster,
-                cluster_size,
-                1024,
-                bytes_per_sector,
-                mft_data_size,
-                Some(&|pct, msg| eprintln!("[{pct}%] {msg}")),
-                None,
                 partition_index,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("MFT: {e}")))?;

@@ -2,16 +2,13 @@ use super::*;
 crate::native_source_test_support!();
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use evidence_core::{
-    filesystem::root_node, EvidenceReader, FileSystemDiagnostic, FileSystemDiagnosticKind, FsNode,
+    filesystem::root_node, FileSystemDiagnostic, FileSystemDiagnosticKind, FsNode,
 };
-use fs_ntfs::mft_scanner::MftRecord;
 use persistence_source::repositories::file_repo::FileRepo;
 use rusqlite::{params, Connection};
 use std::{
     cmp::Ordering as CmpOrdering,
-    collections::{HashMap, HashSet},
-    io::{self, Cursor, Read, Seek, SeekFrom},
-    path::PathBuf,
+    io::{self, Cursor, Read},
     sync::atomic::{AtomicBool, Ordering},
 };
 use test_support::NativeSourceFixture;
@@ -311,268 +308,6 @@ fn safe_path_rejects_windows_reserved_names() {
 }
 
 #[test]
-fn mft_root_record_becomes_tree_root() {
-    let records = vec![
-        MftRecord {
-            record_number: 5,
-            sequence_number: 0,
-            name: ".".to_string(),
-            parent_ref: 5,
-            parent_sequence_number: 0,
-            is_dir: true,
-            size: 0,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-            changed_at: None,
-            hidden: false,
-            system: false,
-            read_only: false,
-            encrypted: false,
-            archive: false,
-            has_attribute_list: false,
-            deleted: false,
-            is_valid: true,
-        },
-        MftRecord {
-            record_number: 42,
-            sequence_number: 0,
-            name: "Windows".to_string(),
-            parent_ref: 5,
-            parent_sequence_number: 0,
-            is_dir: true,
-            size: 0,
-            created_at: None,
-            modified_at: None,
-            accessed_at: None,
-            changed_at: None,
-            hidden: false,
-            system: false,
-            read_only: false,
-            encrypted: true,
-            archive: false,
-            has_attribute_list: false,
-            deleted: false,
-            is_valid: true,
-        },
-    ];
-
-    let entries = records_to_file_entries(&records, &DataSourceId("ds".to_string()));
-
-    let root = entries
-        .iter()
-        .find(|entry| entry.id.0 == "mft:5")
-        .expect("root MFT record should be retained");
-    assert_eq!(root.name, "/");
-    assert!(root.parent_id.is_none());
-
-    let child = entries
-        .iter()
-        .find(|entry| entry.id.0 == "mft:42")
-        .expect("child MFT record should be retained");
-    assert_eq!(
-        child.parent_id.as_ref().map(|id| id.0.as_str()),
-        Some("mft:5")
-    );
-    assert!(child.encrypted);
-}
-
-#[test]
-fn mft_orphan_records_are_anchored_to_root() {
-    let mut path_map = HashMap::new();
-    path_map.insert("5".to_string(), (None, "\\".to_string(), true));
-    path_map.insert(
-        "42".to_string(),
-        (Some("999".to_string()), "Orphan".to_string(), true),
-    );
-
-    assert_eq!(
-        mft_parent_entry_id("42", Some("999"), &path_map),
-        Some("mft:5".to_string())
-    );
-    assert_eq!(mft_parent_entry_id("5", None, &path_map), None);
-}
-
-#[test]
-fn mft_deleted_orphan_path_uses_deleted_orphans_prefix() {
-    let ds_id = DataSourceId("ds-deleted-orphan".to_string());
-    let (_root, conn) = standalone_file_entries_connection(&ds_id.0);
-    let mut entries = records_to_file_entries(
-        &[
-            MftRecord {
-                record_number: 5,
-                sequence_number: 0,
-                name: ".".to_string(),
-                parent_ref: 5,
-                parent_sequence_number: 0,
-                is_dir: true,
-                size: 0,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hidden: false,
-                system: false,
-                read_only: false,
-                encrypted: false,
-                archive: false,
-                has_attribute_list: false,
-                deleted: false,
-                is_valid: true,
-            },
-            MftRecord {
-                record_number: 77,
-                sequence_number: 0,
-                name: "old.txt".to_string(),
-                parent_ref: 999,
-                parent_sequence_number: 0,
-                is_dir: false,
-                size: 12,
-                created_at: None,
-                modified_at: None,
-                accessed_at: None,
-                changed_at: None,
-                hidden: false,
-                system: false,
-                read_only: false,
-                encrypted: false,
-                archive: false,
-                has_attribute_list: false,
-                deleted: true,
-                is_valid: true,
-            },
-        ],
-        &ds_id,
-    );
-    for entry in &mut entries {
-        entry.parent_id = None;
-    }
-    FileRepo::new(&conn).insert_batch(&entries).unwrap();
-    let mut path_map = HashMap::new();
-    let mut deleted_records = HashSet::new();
-    for entry in &entries {
-        add_entry_to_path_map(&mut path_map, &mut deleted_records, entry);
-    }
-
-    update_entry_paths(&conn, &ds_id, &path_map, &deleted_records, 0).unwrap();
-    update_entry_parent_ids(&conn, &ds_id, &path_map).unwrap();
-
-    let deleted_entry = FileRepo::new(&conn)
-        .find_by_id(&FileEntryId("mft:77".into()))
-        .unwrap()
-        .unwrap();
-    let path = deleted_entry.path;
-    let parent_id = deleted_entry.parent_id.map(|id| id.0);
-    let deleted = i32::from(deleted_entry.deleted);
-    assert_eq!(path, "[P0]/$DeletedOrphans/77-old.txt");
-    assert_eq!(parent_id.as_deref(), Some("mft:5"));
-    assert_eq!(deleted, 1);
-}
-
-struct SliceEvidenceReader {
-    data: Vec<u8>,
-    pos: u64,
-    info: evidence_core::ReaderInfo,
-}
-
-impl SliceEvidenceReader {
-    fn new(data: Vec<u8>) -> Self {
-        Self {
-            data,
-            pos: 0,
-            info: evidence_core::ReaderInfo {
-                path: PathBuf::from("slice"),
-                size: 0,
-                kind: "test".to_string(),
-            },
-        }
-    }
-}
-
-impl Read for SliceEvidenceReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let start = self.pos as usize;
-        if start >= self.data.len() {
-            return Ok(0);
-        }
-        let count = buf.len().min(self.data.len() - start);
-        buf[..count].copy_from_slice(&self.data[start..start + count]);
-        self.pos += count as u64;
-        Ok(count)
-    }
-}
-
-impl Seek for SliceEvidenceReader {
-    fn seek(&mut self, pos: SeekFrom) -> std::io::Result<u64> {
-        let next = match pos {
-            SeekFrom::Start(value) => value as i128,
-            SeekFrom::End(value) => self.data.len() as i128 + value as i128,
-            SeekFrom::Current(value) => self.pos as i128 + value as i128,
-        };
-        if next < 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                "negative seek",
-            ));
-        }
-        self.pos = next as u64;
-        Ok(self.pos)
-    }
-}
-
-impl EvidenceReader for SliceEvidenceReader {
-    fn info(&self) -> &evidence_core::ReaderInfo {
-        &self.info
-    }
-}
-
-#[test]
-fn read_ntfs_mft_stream_stitches_fragmented_runs() {
-    let mut disk = vec![0u8; 4096];
-    disk[1024..1536].fill(b'A');
-    disk[3072..3584].fill(b'B');
-    let mut reader = SliceEvidenceReader::new(disk);
-    let mut out = vec![0u8; 1024];
-
-    read_ntfs_mft_stream(&mut reader, 0, 512, &[(2, 1), (6, 1)], 0, &mut out).unwrap();
-
-    assert!(out[..512].iter().all(|byte| *byte == b'A'));
-    assert!(out[512..].iter().all(|byte| *byte == b'B'));
-}
-
-#[test]
-fn read_ntfs_mft_stream_stitches_read_crossing_run_boundary() {
-    let mut disk = vec![0u8; 4096];
-    disk[1024..1536].fill(b'A');
-    disk[3072..3584].fill(b'B');
-    let mut reader = SliceEvidenceReader::new(disk);
-    let mut out = vec![0u8; 512];
-
-    read_ntfs_mft_stream(&mut reader, 0, 512, &[(2, 1), (6, 1)], 256, &mut out).unwrap();
-
-    assert!(out[..256].iter().all(|byte| *byte == b'A'));
-    assert!(out[256..].iter().all(|byte| *byte == b'B'));
-}
-
-#[test]
-fn read_ntfs_mft_stream_rejects_negative_lcn() {
-    let mut reader = SliceEvidenceReader::new(vec![0u8; 1024]);
-    let mut out = vec![0u8; 512];
-
-    let err = read_ntfs_mft_stream(&mut reader, 0, 512, &[(-1, 1)], 0, &mut out)
-        .expect_err("negative LCN must fail closed");
-
-    assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
-}
-
-#[test]
-fn parse_ntfs_data_runs_decodes_fragmented_runs() {
-    let runs = parse_ntfs_data_runs(&[0x11, 0x02, 0x05, 0x11, 0x03, 0x07, 0x00]).unwrap();
-
-    assert_eq!(runs, vec![(5, 2), (12, 3)]);
-}
-
-#[test]
 fn safe_path_allows_normal_names() {
     assert!(safe_relative_path("config.txt").is_ok());
     assert!(safe_relative_path("data.json").is_ok());
@@ -634,6 +369,84 @@ fn natural_sort_orders_numeric_suffixes_like_explorer() {
     assert_eq!(natural_cmp("file10", "file2"), CmpOrdering::Greater);
     assert_eq!(natural_cmp("img9", "img09"), CmpOrdering::Less); // equal magnitude, shorter raw run first
     assert_eq!(natural_cmp("Alpha", "alpha"), CmpOrdering::Less); // case-insensitive then raw
+}
+
+#[test]
+fn indexed_pages_match_service_sorting_for_all_keys_and_visibility_modes() {
+    let (_root, connection) = standalone_file_entries_connection("ds");
+    let names = [
+        "file2.x1",
+        "file02.x01",
+        "file10.x10",
+        "A1",
+        "a0",
+        "a00",
+        "中2",
+        "中10",
+        "É1",
+        "é0",
+        "file1.x2",
+        "plain",
+    ];
+    let entries = (0..8)
+        .flat_map(|bucket| {
+            names.iter().enumerate().map(move |(index, name)| {
+                let mut entry = sort_entry(
+                    &format!("{name}-{bucket}"),
+                    if bucket < 4 {
+                        EntryType::Directory
+                    } else {
+                        EntryType::File
+                    },
+                    bucket % 2 != 0,
+                    false,
+                    bucket % 4 >= 2,
+                    Some((index % 3) as u64),
+                );
+                entry.modified_at = chrono::DateTime::from_timestamp(index as i64 % 3 - 2, 123);
+                entry
+            })
+        })
+        .collect::<Vec<_>>();
+    FileRepo::new(&connection).insert_batch(&entries).unwrap();
+    for key in [
+        FileSortKeyDto::Name,
+        FileSortKeyDto::Size,
+        FileSortKeyDto::ModifiedAt,
+        FileSortKeyDto::Ext,
+    ] {
+        for direction in [FileSortDirectionDto::Asc, FileSortDirectionDto::Desc] {
+            for show_hidden in [false, true] {
+                let mut expected = entries
+                    .iter()
+                    .filter(|entry| show_hidden || (!entry.hidden && !entry.system))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                sort_entries(&mut expected, key, direction);
+                let request = transport::commands::GetFileRowsRequest {
+                    offset: 3,
+                    limit: 7,
+                    show_hidden,
+                    sort_key: key,
+                    sort_direction: direction,
+                    ..Default::default()
+                };
+                let page = get_file_rows_for_request(&connection, &request).unwrap();
+                assert_eq!(page.total_count, expected.len() as u64);
+                assert_eq!(
+                    page.rows
+                        .iter()
+                        .map(|row| row.id.as_str())
+                        .collect::<Vec<_>>(),
+                    expected[3..10]
+                        .iter()
+                        .map(|entry| entry.id.0.as_str())
+                        .collect::<Vec<_>>(),
+                    "{key:?} {direction:?} {show_hidden}"
+                );
+            }
+        }
+    }
 }
 
 #[test]

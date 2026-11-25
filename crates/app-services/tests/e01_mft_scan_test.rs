@@ -1,7 +1,11 @@
-use app_services::{case_service, datasource_service, file_service};
+use app_services::{case_service, datasource_service};
 use image_e01::E01Reader;
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use tempfile::TempDir;
+#[path = "support/ntfs_catalog.rs"]
+mod ntfs_catalog;
+#[path = "support/source_connection.rs"]
+mod source_connection;
 
 fn sample_path() -> std::path::PathBuf {
     testing::fixtures::local_e01_fixture().unwrap_or_else(|| {
@@ -142,21 +146,9 @@ fn mft_full_enumeration_via_multithread() {
             )?;
 
             let start = std::time::Instant::now();
-            let stats = file_service::enumerate_filesystem_mft(
-                conn,
-                &ds_id,
-                &sample_path(),
-                ntfs.offset,
-                mft_cluster,
-                cluster_size,
-                1024,
-                bytes_per_sector,
-                mft_data_size,
-                Some(&|pct, msg| {
-                    eprintln!("[{}%] {}", pct, msg);
-                }),
-                None,
-            )?;
+            let source = source_connection::open(conn, &active, &ds_id);
+            let conn = &source;
+            let stats = ntfs_catalog::enumerate(conn, &ds_id, &sample_path(), ntfs.offset, 0)?;
             let elapsed = start.elapsed();
 
             eprintln!("\n=== MFT Enumeration Results ===");

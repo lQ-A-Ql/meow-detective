@@ -1,13 +1,17 @@
 use app_services::{
-    artifact_service, case_service, correlation, datasource_service, file_service, timeline_service,
+    artifact_service, case_service, correlation, datasource_service, timeline_service,
 };
 use evidence_core::FileSystemReader;
 use image_e01::E01Reader;
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use std::time::Instant;
 use tempfile::TempDir;
+#[path = "support/ntfs_catalog.rs"]
+mod ntfs_catalog;
+#[path = "support/source_connection.rs"]
+mod source_connection;
 
 fn sample_path() -> std::path::PathBuf {
     std::env::var_os("FORENSICS_REAL_ARTIFACT_E01")
@@ -45,9 +49,6 @@ fn real_e01_lnk_browser_prefetch_artifact_extraction() {
         ntfs.offset, ntfs.partition_index, ntfs.partition_name
     );
 
-    let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
-        read_mft_parameters(&fixture_path, ntfs.offset).unwrap();
-
     // ── Create case, register data source, import MFT ────────────────────
     let tmp = TempDir::new().unwrap();
     let active = case_service::create_case(
@@ -73,18 +74,14 @@ fn real_e01_lnk_browser_prefetch_artifact_extraction() {
                 },
             )?;
 
-            let stats = file_service::enumerate_filesystem_mft(
+            let source = source_connection::open(conn, &active, &data_source_id);
+            let conn = &source;
+            let stats = ntfs_catalog::enumerate(
                 conn,
                 &data_source_id,
                 &fixture_path,
                 ntfs.offset,
-                mft_cluster,
-                cluster_size,
-                record_size,
-                bytes_per_sector,
-                mft_data_size,
-                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
-                None,
+                0,
             )?;
             eprintln!(
                 "MFT import: files={} dirs={} in {:?}",
@@ -293,75 +290,3 @@ fn real_e01_lnk_browser_prefetch_artifact_extraction() {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-
-fn read_mft_parameters(
-    path: &std::path::Path,
-    volume_offset: u64,
-) -> std::io::Result<(u64, u64, u32, u16, u64)> {
-    let mut reader = E01Reader::open(path)?;
-    reader.seek(SeekFrom::Start(volume_offset))?;
-
-    let mut boot = [0u8; 512];
-    reader.read_exact(&mut boot)?;
-
-    let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
-    let sectors_per_cluster = boot[13];
-    let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
-    let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap());
-    let record_size = mft_record_size_from_boot(&boot);
-
-    let mft_abs_offset = volume_offset + mft_cluster * cluster_size;
-    reader.seek(SeekFrom::Start(mft_abs_offset))?;
-    let mut mft_record = vec![0u8; record_size as usize];
-    reader.read_exact(&mut mft_record)?;
-    let mft_data_size = parse_mft_data_size(&mft_record).unwrap_or(100 * 1024 * 1024);
-
-    Ok((
-        mft_cluster,
-        cluster_size,
-        record_size,
-        bytes_per_sector,
-        mft_data_size,
-    ))
-}
-
-fn mft_record_size_from_boot(boot: &[u8]) -> u32 {
-    let raw = boot[0x40] as i8;
-    if raw > 0 {
-        1024
-    } else if raw < 0 {
-        let shift = (raw as i16).unsigned_abs();
-        if shift < 32 {
-            (1u32 << shift).max(512)
-        } else {
-            1024
-        }
-    } else {
-        1024
-    }
-}
-
-fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
-    if record.len() < 4 || &record[0..4] != b"FILE" {
-        return None;
-    }
-    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
-    let mut pos = attr_off;
-    while pos + 8 < record.len() {
-        let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().ok()?);
-        if typ == 0xFFFF_FFFF {
-            break;
-        }
-        let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().ok()?) as usize;
-        if len < 4 || pos + len > record.len() {
-            break;
-        }
-        if typ == 0x80 && pos + 0x38 <= record.len() && (record[pos + 8] & 1) != 0 {
-            return Some(u64::from_le_bytes(
-                record[pos + 0x30..pos + 0x38].try_into().ok()?,
-            ));
-        }
-        pos += len;
-    }
-    None
-}

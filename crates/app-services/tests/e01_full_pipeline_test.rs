@@ -3,9 +3,11 @@ use evidence_core::{EvidenceReader, FileSystemReader};
 use image_e01::E01Reader;
 use persistence_source::repositories::timeline_repo::TimelineRepo;
 use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo::JobRepo};
-use std::io::{Read, Seek, SeekFrom};
+use std::io::Read;
 use tempfile::TempDir;
 
+#[path = "support/ntfs_catalog.rs"]
+mod ntfs_catalog;
 #[path = "support/source_connection.rs"]
 mod source_connection;
 #[path = "support/source_generation.rs"]
@@ -323,10 +325,6 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                 },
             )?;
 
-            let (mft_cluster, cluster_size, record_size, bytes_per_sector, mft_data_size) =
-                read_mft_parameters(&sample_path(), ntfs.offset)
-                    .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-
             let source_conn = app_services::source_db::open_source_db(&active.case_root, &ds_id)?;
             let source = DataSourceRepo::new(conn)
                 .find_by_case(&case_id)?
@@ -335,20 +333,11 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
                 .expect("inserted source should exist");
             DataSourceRepo::new(&source_conn).upsert_source_local_metadata(&case_id, &source)?;
 
-            let stats = file_service::enumerate_filesystem_mft_with_partition(
+            let stats = ntfs_catalog::enumerate(
                 &source_conn,
                 &ds_id,
                 &sample_path(),
                 ntfs.offset,
-                mft_cluster,
-                cluster_size,
-                record_size,
-                bytes_per_sector,
-                mft_data_size,
-                Some(&|pct, msg| {
-                    eprintln!("[{}%] {}", pct, msg);
-                }),
-                None,
                 partition_index,
             )?;
             assert!(stats.file_count > 1000, "Should enumerate many files");
@@ -405,78 +394,6 @@ fn e01_ntfs_mft_enumeration_builds_navigable_tree() {
             Ok(())
         })
         .unwrap();
-}
-
-fn read_mft_parameters(
-    path: &std::path::Path,
-    volume_offset: u64,
-) -> std::io::Result<(u64, u64, u32, u16, u64)> {
-    let mut reader = E01Reader::open(path)?;
-    reader.seek(SeekFrom::Start(volume_offset))?;
-
-    let mut boot = [0u8; 512];
-    reader.read_exact(&mut boot)?;
-
-    let bytes_per_sector = u16::from_le_bytes([boot[11], boot[12]]);
-    let sectors_per_cluster = boot[13];
-    let cluster_size = bytes_per_sector as u64 * sectors_per_cluster as u64;
-    let mft_cluster = u64::from_le_bytes(boot[0x30..0x38].try_into().unwrap());
-    let record_size = mft_record_size_from_boot(&boot);
-
-    let mft_abs_offset = volume_offset + mft_cluster * cluster_size;
-    reader.seek(SeekFrom::Start(mft_abs_offset))?;
-    let mut mft_record = vec![0u8; record_size as usize];
-    reader.read_exact(&mut mft_record)?;
-    let mft_data_size = parse_mft_data_size(&mft_record).unwrap_or(100 * 1024 * 1024);
-
-    Ok((
-        mft_cluster,
-        cluster_size,
-        record_size,
-        bytes_per_sector,
-        mft_data_size,
-    ))
-}
-
-fn mft_record_size_from_boot(boot: &[u8]) -> u32 {
-    let raw = boot[0x40] as i8;
-    if raw > 0 {
-        1024
-    } else if raw < 0 {
-        let shift = (raw as i16).unsigned_abs();
-        if shift < 32 {
-            (1u32 << shift).max(512)
-        } else {
-            1024
-        }
-    } else {
-        1024
-    }
-}
-
-fn parse_mft_data_size(record: &[u8]) -> Option<u64> {
-    if record.len() < 4 || &record[0..4] != b"FILE" {
-        return None;
-    }
-    let attr_off = u16::from_le_bytes([record[0x14], record[0x15]]) as usize;
-    let mut pos = attr_off;
-    while pos + 8 < record.len() {
-        let typ = u32::from_le_bytes(record[pos..pos + 4].try_into().ok()?);
-        if typ == 0xFFFFFFFF {
-            break;
-        }
-        let len = u32::from_le_bytes(record[pos + 4..pos + 8].try_into().ok()?) as usize;
-        if len < 4 || pos + len > record.len() {
-            break;
-        }
-        if typ == 0x80 && pos + 0x38 <= record.len() && (record[pos + 8] & 1) != 0 {
-            return Some(u64::from_le_bytes(
-                record[pos + 0x30..pos + 0x38].try_into().ok()?,
-            ));
-        }
-        pos += len;
-    }
-    None
 }
 
 #[test]

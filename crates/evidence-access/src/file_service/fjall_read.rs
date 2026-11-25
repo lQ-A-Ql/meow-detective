@@ -6,7 +6,7 @@ use persistence_source::fjall::{CatalogEntryType, FileEntryRecord, ScanDirection
 use std::collections::BTreeMap;
 use std::path::Path;
 use transport::{
-    commands::{FileSortDirectionDto, FileSortKeyDto, GetFileRowsRequest},
+    commands::GetFileRowsRequest,
     dto::{FileChildrenDto, FileEntryRowDto, FileRowsPageDto, FileTreeNodeDto},
 };
 
@@ -115,18 +115,6 @@ fn checked_page_window(offset: u64, limit: u32) -> Result<usize, FileServiceErro
     Ok(window)
 }
 
-fn retain_sorted_page(
-    entries: &mut Vec<FileEntry>,
-    mut incoming: impl Iterator<Item = FileEntry>,
-    window: usize,
-    sort_key: FileSortKeyDto,
-    sort_direction: FileSortDirectionDto,
-) {
-    entries.extend(incoming.by_ref());
-    super::metadata::sorting::sort_entries(entries, sort_key, sort_direction);
-    entries.truncate(window);
-}
-
 pub(super) fn all(
     source: &ReadOnlySourceStorageHandle,
     source_id: &str,
@@ -157,97 +145,6 @@ pub(super) fn all(
             return Ok(entries);
         }
     }
-}
-
-fn scan_rows(
-    source: &ReadOnlySourceStorageHandle,
-    source_id: &str,
-    parent: Option<&str>,
-    show_hidden: bool,
-    request: &GetFileRowsRequest,
-) -> Result<(Vec<FileEntry>, u64), FileServiceError> {
-    let window = checked_page_window(request.offset, request.limit)?;
-    let snapshot = source.snapshot();
-    let mut cursor = None;
-    let mut total = 0u64;
-    let mut entries = Vec::with_capacity(window.min(PAGE_SIZE));
-    loop {
-        let page = source
-            .catalog_list_by_parent(
-                &snapshot,
-                source_id,
-                parent,
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                PAGE_SIZE,
-            )
-            .map_err(|error| FileServiceError::other(error.to_string()))?;
-        let filtered = page.records.into_iter().filter_map(|record| {
-            let entry = record_to_domain(record);
-            if show_hidden || (!entry.hidden && !entry.system) {
-                total = total.saturating_add(1);
-                Some(entry)
-            } else {
-                None
-            }
-        });
-        retain_sorted_page(
-            &mut entries,
-            filtered,
-            window,
-            request.sort_key,
-            request.sort_direction,
-        );
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            break;
-        }
-    }
-    Ok((entries, total))
-}
-
-fn scan_directory_page(
-    source: &ReadOnlySourceStorageHandle,
-    source_id: &str,
-    parent: &str,
-    offset: u64,
-    limit: u32,
-    show_hidden: bool,
-) -> Result<(Vec<FileEntry>, u64), FileServiceError> {
-    let window = checked_page_window(offset, limit)?;
-    let snapshot = source.snapshot();
-    let mut cursor = None;
-    let mut total = 0u64;
-    let mut entries = Vec::with_capacity(window.min(PAGE_SIZE));
-    loop {
-        let page = source
-            .catalog_list_directories_by_parent(
-                &snapshot,
-                source_id,
-                Some(parent),
-                cursor.as_deref(),
-                ScanDirection::Forward,
-                PAGE_SIZE,
-            )
-            .map_err(|error| FileServiceError::other(error.to_string()))?;
-        let filtered = page.records.into_iter().filter_map(|record| {
-            let entry = record_to_domain(record);
-            if show_hidden || (!entry.hidden && !entry.system) {
-                total = total.saturating_add(1);
-                Some(entry)
-            } else {
-                None
-            }
-        });
-        entries.extend(filtered);
-        super::metadata::sorting::sort_directories_for_tree(&mut entries);
-        entries.truncate(window);
-        cursor = page.next_cursor;
-        if cursor.is_none() {
-            break;
-        }
-    }
-    Ok((entries, total))
 }
 
 fn root_catalog(
@@ -390,11 +287,16 @@ pub(super) fn children(
     let Some(source) = open(case_root, source_id)? else {
         return Ok(None);
     };
-    let (entries, total) =
-        scan_directory_page(&source, &source_id.0, parent_id, offset, limit, show_hidden)?;
-    let start = (offset as usize).min(entries.len());
-    let end = start.saturating_add(limit as usize).min(entries.len());
-    let visible = &entries[start..end];
+    checked_page_window(offset, limit)?;
+    let request = GetFileRowsRequest {
+        parent_id: Some(parent_id.into()),
+        offset,
+        limit,
+        show_hidden,
+        ..Default::default()
+    };
+    let (entries, total) = super::catalog_browse::page(&source, &source_id.0, &request, true)?;
+    let visible = entries.as_slice();
     let repository = persistence_source::repositories::file_repo::FileRepo::new(conn);
     let child_counts = repository
         .has_child_directories_batch_visible(
@@ -430,19 +332,10 @@ pub(super) fn rows(
     };
     let mut request = request.clone();
     request.validate().map_err(FileServiceError::InvalidInput)?;
-    let (entries, total) = scan_rows(
-        &source,
-        &source_id.0,
-        request.parent_id.as_deref(),
-        request.show_hidden,
-        &request,
-    )?;
-    let start = (request.offset as usize).min(entries.len());
-    let end = start
-        .saturating_add(request.limit as usize)
-        .min(entries.len());
+    checked_page_window(request.offset, request.limit)?;
+    let (entries, total) = super::catalog_browse::page(&source, &source_id.0, &request, false)?;
     Ok(Some(FileRowsPageDto {
-        rows: entries[start..end]
+        rows: entries
             .iter()
             .map(super::metadata::lookup::file_entry_to_dto)
             .collect::<Vec<FileEntryRowDto>>(),

@@ -16,6 +16,10 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tempfile::TempDir;
 use transport::commands::ExportScopeDto;
+#[path = "support/ntfs_catalog.rs"]
+mod ntfs_catalog;
+#[path = "support/source_connection.rs"]
+mod source_connection;
 
 const SAMPLE_ENV: &str = "FORENSICS_JC2_E01_FIXTURE";
 
@@ -135,18 +139,14 @@ fn jc2_full_pipeline() {
 
             // Phase 1: Import MFT
             let t0 = Instant::now();
-            let stats = file_service::enumerate_filesystem_mft(
+            let source = source_connection::open(conn, &active, &ds_id);
+            let conn = &source;
+            let stats = ntfs_catalog::enumerate(
                 conn,
                 &ds_id,
                 path,
                 MAIN_NTFS_OFFSET,
-                mc,
-                cs,
-                rs,
-                bps,
-                mft_size,
-                Some(&|pct, msg| eprintln!("[MFT {pct}%] {msg}")),
-                None,
+                0,
             )?;
             let import_ms = t0.elapsed().as_millis();
             println!(
@@ -527,23 +527,9 @@ fn jc2_visibility_and_partitions() {
                     },
                 )?;
 
-                let (mc, cs, rs, bps, mft_size) =
-                    read_mft_params_for_partition(path, candidate.offset);
-
                 let t0 = Instant::now();
-                let stats = file_service::enumerate_filesystem_mft(
-                    conn,
-                    &ds_id,
-                    path,
-                    candidate.offset,
-                    mc,
-                    cs,
-                    rs,
-                    bps,
-                    mft_size,
-                    Some(&|pct, msg| eprintln!("  [part{} MFT {pct}%] {msg}", i)),
-                    None,
-                )?;
+                let source = source_connection::open(conn, &active, &ds_id);
+                let stats = ntfs_catalog::enumerate(&source, &ds_id, path, candidate.offset, i)?;
                 let ms = t0.elapsed().as_millis();
                 println!(
                     "  partition {} (offset={}): files={} dirs={} in {ms}ms",
@@ -689,18 +675,13 @@ fn jc2_artifact_extraction() {
                     println!("MFT params: cluster={mc} cs={cs} rs={rs} bps={bps} mft_size={mft_size}");
                 }
                 let t0 = Instant::now();
-                let stats = file_service::enumerate_filesystem_mft(
-                    conn,
+                let source = source_connection::open(conn, &active, &ds_id);
+                let stats = ntfs_catalog::enumerate(
+                    &source,
                     &ds_id,
                     path,
                     candidate.offset,
-                    mc,
-                    cs,
-                    rs,
-                    bps,
-                    mft_size,
-                    Some(&|pct, msg| eprintln!("[part{i} MFT {pct}%] {msg}")),
-                    None,
+                    i,
                 )?;
                 println!(
                     "MFT import part{i}: files={} dirs={} in {}ms (offset={})",

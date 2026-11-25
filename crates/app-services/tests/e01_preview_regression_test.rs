@@ -17,6 +17,8 @@ use std::path::PathBuf;
 use std::time::Instant;
 use tempfile::TempDir;
 use transport::dto::ViewerRangeRequestDto;
+#[path = "support/ntfs_catalog.rs"]
+mod ntfs_catalog;
 
 fn jc2_path() -> PathBuf {
     std::env::var_os("FORENSICS_JC2_E01_FIXTURE")
@@ -148,20 +150,11 @@ fn setup(e01_path: &std::path::Path) -> (TempDir, app_services::active_case::Act
                     persistence_sqlite::DbError::System("data source not found".to_string())
                 })?;
 
-            let stats = file_service::enumerate_filesystem_mft_with_partition(
+            let stats = ntfs_catalog::enumerate(
                 &source_conn,
                 &stored_ds.id,
                 e01_path,
                 ntfs.offset,
-                mft_cluster,
-                cluster_size,
-                1024,
-                bytes_per_sector,
-                mft_data_size,
-                Some(&|pct, msg| {
-                    eprintln!("[{pct}%] {msg}");
-                }),
-                None,
                 ntfs_partition_index,
             )
             .map_err(|e| persistence_sqlite::DbError::System(format!("MFT enum: {e}")))?;
@@ -354,11 +347,7 @@ fn preview_large_7z_head_range(
 }
 
 fn is_liuyang_attribute_list_7z_target(file: &domain::FileEntry) -> bool {
-    file.id.0 == "mft:128026"
-        || file.id.0.ends_with(":128026")
-        || (file.entry_type == domain::EntryType::File
-            && file.path.contains("[P0]/Unresolved/Downloads")
-            && file.name.contains("7.36.0.3-Modified.7z"))
+    file.id.0 == "mft:128026" || file.id.0.ends_with(":128026")
 }
 
 fn preview_liuyang_attribute_list_7z(active: &app_services::active_case::ActiveCase, ds_id: &str) {
@@ -616,8 +605,7 @@ fn liuyang_seeded_app_services_inode_128026_reads_open_and_ranges() {
                     id: file_id.clone(),
                     parent_id: None,
                     data_source_id: data_source_id.clone(),
-                    path: "[P0]/Unresolved/Downloads/百度网盘客户端-7.36.0.3-Modified.7z"
-                        .to_string(),
+                    path: "[P0]/$Unresolved/128026-百度网盘客户端-7.36.0.3-Modified.7z".to_string(),
                     name: "百度网盘客户端-7.36.0.3-Modified.7z".to_string(),
                     entry_type: domain::EntryType::File,
                     size: Some(158_093_957),

@@ -1,3 +1,4 @@
+//! Build source graph records from the file catalog.
 use chrono::Utc;
 use domain::DataSourceId;
 use persistence_source::fjall::{CatalogRecordStore, ScanDirection};
