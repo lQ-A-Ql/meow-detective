@@ -108,8 +108,8 @@ fn extract_automatic(
         metadata.push(serde_json::json!({
             "entry": entry_name,
             "path": destination.path,
-            "lastUsedFiletime": destination.last_used,
-            "accessCount": destination.access_count,
+            "lastModifiedFiletime": destination.last_used,
+            "interactionCount": destination.access_count,
             "pin": destination.pin,
             "hostname": destination.hostname,
         }));

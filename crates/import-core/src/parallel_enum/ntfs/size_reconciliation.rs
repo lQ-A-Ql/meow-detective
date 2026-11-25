@@ -34,10 +34,15 @@ impl ExternalFileSizes {
                 Ok(Some(size)) => size,
                 Ok(None) => continue,
                 Err(error) => {
+                    conn.execute(
+                        "UPDATE ntfs_entries SET size = NULL WHERE record_num = ?1",
+                        [inode],
+                    )?;
+                    stats.total_size = stats.total_size.saturating_sub(catalog_size);
                     tracing::warn!(
                         inode,
                         %error,
-                        "Failed to resolve NTFS external $DATA size; retaining catalog size"
+                        "NTFS external $DATA identity failed validation; stream size is unknown"
                     );
                     continue;
                 }

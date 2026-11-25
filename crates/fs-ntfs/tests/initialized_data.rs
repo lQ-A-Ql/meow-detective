@@ -266,6 +266,24 @@ fn compressed_file_zeros_tail_after_decompression() {
     assert_eq!(header, [0x03, 0xb0]);
 }
 
+#[test]
+fn allocated_partial_final_compression_unit_uses_its_declared_mapping() {
+    let mut fixture = image(900, 600, false);
+    fixture[ATTRIBUTE_OFFSET + 12..ATTRIBUTE_OFFSET + 14].copy_from_slice(&1u16.to_le_bytes());
+    fixture[ATTRIBUTE_OFFSET + 34..ATTRIBUTE_OFFSET + 36].copy_from_slice(&4u16.to_le_bytes());
+    let (reader, _directory) = filesystem(&fixture);
+    let oracle = expected(900, 600);
+    assert_eq!(reader.read_file_range_by_inode(6, 0, 2000).unwrap(), oracle);
+    assert_eq!(
+        reader.read_file_range_by_inode(6, 590, 40).unwrap(),
+        oracle[590..630]
+    );
+    assert_eq!(
+        reader.read_file_range_by_inode(6, 880, 100).unwrap(),
+        vec![0; 20]
+    );
+}
+
 #[cfg(windows)]
 #[test]
 fn corrupt_compressed_unit_fails_without_returning_encoded_bytes() {

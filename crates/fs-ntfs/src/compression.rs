@@ -36,9 +36,25 @@ pub(crate) fn decode_lznt1(input: &[u8], capacity: usize) -> io::Result<Vec<u8>>
 }
 
 #[cfg(not(windows))]
-pub(crate) fn decode_lznt1(_input: &[u8], _capacity: usize) -> io::Result<Vec<u8>> {
-    Err(io::Error::new(
-        io::ErrorKind::Unsupported,
-        "LZNT1 requires the Windows compression provider",
-    ))
+pub(crate) use decode_lznt1_portable as decode_lznt1;
+
+#[cfg(any(not(windows), test))]
+pub(crate) fn decode_lznt1_portable(input: &[u8], capacity: usize) -> io::Result<Vec<u8>> {
+    use compcol::{io::DecoderReader, lznt1::Lznt1, Algorithm};
+    use std::io::Read;
+
+    let mut decoder = DecoderReader::new(input, Lznt1::decoder());
+    let mut output = Vec::with_capacity(capacity);
+    decoder
+        .by_ref()
+        .take(capacity as u64 + 1)
+        .read_to_end(&mut output)?;
+    if output.len() > capacity {
+        return Err(crate::invalid_fs_data("LZNT1 output exceeds unit capacity"));
+    }
+    Ok(output)
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/compression.rs"]
+mod tests;

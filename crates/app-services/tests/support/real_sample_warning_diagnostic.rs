@@ -223,11 +223,13 @@ fn input_report(
     let result = reader.read_file_header_by_id(&domain::FileEntryId(entry.id.clone()), limit);
     let content = match result {
         Ok(bytes) => {
-            let saved_input = if entry.name.to_ascii_lowercase().ends_with(".pf")
+            let name = entry.name.to_ascii_lowercase();
+            let saved_input = if (name.ends_with(".pf")
+                || name.ends_with(".automaticdestinations-ms"))
                 && Some(bytes.len() as u64) == entry.size
             {
                 use std::io::Write;
-                let path = output.join(format!("{}.prefetch.bin", uuid::Uuid::new_v4()));
+                let path = output.join(format!("{}.input.bin", uuid::Uuid::new_v4()));
                 std::fs::OpenOptions::new()
                     .create_new(true)
                     .write(true)

@@ -9,6 +9,7 @@ struct CompressionRuns<'a> {
     runs: Vec<(u64, &'a DataRun)>,
     unit_clusters: u64,
     unit_bytes: u64,
+    mapped_clusters: u64,
 }
 
 impl crate::NtfsReader {
@@ -20,6 +21,15 @@ impl crate::NtfsReader {
     ) -> io::Result<()> {
         let layout = compression_runs(extents, self.cluster_size)?;
         let initialized = data_extents_initialized_size(extents, self.cluster_size)?;
+        let mapped_bytes = layout
+            .mapped_clusters
+            .checked_mul(self.cluster_size)
+            .ok_or_else(|| invalid_fs_data("compressed mapped size overflow"))?;
+        if initialized > mapped_bytes {
+            return Err(invalid_fs_data(
+                "compressed initialized data exceeds its mapping",
+            ));
+        }
         let end = offset
             .checked_add(output.len() as u64)
             .ok_or_else(|| invalid_fs_data("compressed range overflow"))?
@@ -50,7 +60,8 @@ impl crate::NtfsReader {
     ) -> io::Result<Vec<u8>> {
         let last_vcn = first_vcn
             .checked_add(layout.unit_clusters)
-            .ok_or_else(|| invalid_fs_data("compression unit VCN overflow"))?;
+            .ok_or_else(|| invalid_fs_data("compression unit VCN overflow"))?
+            .min(layout.mapped_clusters);
         let mut physical = Vec::new();
         let mut covered = first_vcn;
         let mut sparse = false;
@@ -110,6 +121,7 @@ fn compression_runs(
 ) -> io::Result<CompressionRuns<'_>> {
     let mut exponent = None;
     let mut runs = Vec::new();
+    let mut mapped_clusters = 0;
     for extent in extents {
         let DataAttributeExtent::NonResident {
             lowest_vcn,
@@ -134,6 +146,7 @@ fn compression_runs(
                 .checked_add(run.cluster_count)
                 .ok_or_else(|| invalid_fs_data("compressed extent VCN overflow"))?;
         }
+        mapped_clusters = vcn;
     }
     let unit_clusters = 1u64
         .checked_shl(u32::from(exponent.unwrap_or(0)))
@@ -147,5 +160,6 @@ fn compression_runs(
         runs,
         unit_clusters,
         unit_bytes,
+        mapped_clusters,
     })
 }

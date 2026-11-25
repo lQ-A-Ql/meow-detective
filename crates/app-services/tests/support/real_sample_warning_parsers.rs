@@ -9,7 +9,7 @@ pub(super) fn observe(entry: &FileEntryRecord, bytes: &[u8]) -> Value {
     }
     let path = entry.path.to_ascii_lowercase();
     if path.ends_with(".automaticdestinations-ms") {
-        return automatic_destinations(bytes);
+        return automatic_destinations(entry, bytes);
     }
     let extractor: Box<dyn ArtifactExtractor> = if path.ends_with(".pf") {
         Box::new(artifacts_windows::PrefetchExtractor)
@@ -40,7 +40,7 @@ pub(super) fn observe(entry: &FileEntryRecord, bytes: &[u8]) -> Value {
     }
 }
 
-fn automatic_destinations(bytes: &[u8]) -> Value {
+fn automatic_destinations(entry: &FileEntryRecord, bytes: &[u8]) -> Value {
     let file = match shell::compound::CompoundFile::parse(bytes) {
         Ok(file) => file,
         Err(error) => return json!({"compoundError": error.to_string()}),
@@ -55,12 +55,38 @@ fn automatic_destinations(bytes: &[u8]) -> Value {
         Err(error) => json!({"state": "error", "reason": error.to_string()}),
     };
     let parsed = shell::jumplist::automatic(bytes).unwrap();
+    let mut sink = VecSink::new();
+    let production = artifacts_windows::JumpListExtractor.run(
+        ArtifactContext {
+            file_id: domain::FileEntryId(entry.id.clone()),
+            file_path: entry.path.clone(),
+            reader: Box::new(Cursor::new(bytes.to_vec())),
+        },
+        &mut sink,
+    );
+    let production = match production {
+        Ok(report) => json!({
+            "artifacts": report.artifacts_found,
+            "timelineEvents": report.timeline_events,
+            "warnings": report.errors,
+        }),
+        Err(error) => json!({"error": error}),
+    };
     json!({
         "compoundProblems": file.problems,
         "streamNames": file.entries.iter().map(|entry| &entry.name).collect::<Vec<_>>(),
         "destList": stream,
         "version": parsed.version,
         "destinations": parsed.destinations.len(),
+        "entries": parsed.destinations.iter().map(|entry| json!({
+            "entry": entry.entry,
+            "path": entry.path,
+            "lastModifiedFiletime": entry.last_used,
+            "interactionCount": entry.access_count,
+            "hostname": entry.hostname,
+            "hasLink": entry.link.is_some(),
+        })).collect::<Vec<_>>(),
         "problems": parsed.problems,
+        "production": production,
     })
 }

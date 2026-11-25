@@ -14,7 +14,9 @@ use app_services::timeline_service::{
 use app_services::{search_service, source_db};
 use chrono::{TimeZone, Utc};
 use domain::{CaseId, DataSourceId, FileEntryId};
-use persistence_source::fjall::instrumentation::ProcessMeasurement;
+use persistence_source::fjall::{
+    instrumentation::ProcessMeasurement, CatalogEntryType, ScanDirection,
+};
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use rusqlite::Connection;
 use serde_json::{json, Value};
@@ -391,23 +393,24 @@ fn header(
     if handle.catalog_file_count(&snapshot, &source.0).unwrap() == 0 {
         return json!({"status": "empty", "reason": "source has no ordinary files"});
     }
-    let mut after = None;
+    let mut cursor = None;
     let mut tried = 0;
+    let mut scanned = 0u64;
     let mut failures = Vec::new();
-    for _ in 0..32 {
+    loop {
         let page = handle
-            .catalog_files_by_path(
+            .catalog_list_all(
                 &snapshot,
                 &source.0,
-                after
-                    .as_ref()
-                    .map(|(path, id): &(String, String)| (path.as_str(), id.as_str())),
-                128,
+                cursor.as_deref(),
+                ScanDirection::Forward,
+                512,
             )
             .unwrap();
         for record in page.records {
-            after = Some((record.path.clone(), record.id.clone()));
-            if record.deleted
+            scanned += 1;
+            if record.entry_type != CatalogEntryType::File
+                || record.deleted
                 || record.encrypted == Some(true)
                 || record.size.unwrap_or(0) == 0
                 || record.name.starts_with('$')
@@ -431,6 +434,7 @@ fn header(
                     assert_eq!(repeated.raw_bytes.as_ref(), Some(&bytes));
                     return json!({"status": "verified", "fileId": global, "bytes": bytes.len(),
                         "sha256": hex::encode(Sha256::digest(&bytes)), "candidatesTried": tried,
+                        "catalogRecordsScanned": scanned,
                         "unreadableCandidates": failures});
                 }
                 Err(error) => failures.push(json!({"fileId": global,
@@ -443,7 +447,9 @@ fn header(
         if page.next_cursor.is_none() {
             break;
         }
+        cursor = page.next_cursor;
     }
     json!({"status": "notVerified", "candidatesTried": tried, "failures": failures,
-        "reason": "no readable nonempty ordinary file among bounded candidates"})
+        "catalogRecordsScanned": scanned,
+        "reason": "source has no eligible readable ordinary file"})
 }
