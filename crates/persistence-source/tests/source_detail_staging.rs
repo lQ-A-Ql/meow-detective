@@ -42,6 +42,27 @@ fn stage_catalog(root: &std::path::Path, partition: usize) -> rusqlite::Connecti
     stage
 }
 
+fn stage_catalog_with_orphan(root: &std::path::Path, partition: usize) -> rusqlite::Connection {
+    let stage =
+        persistence_sqlite::connection::open_staging(&root.join(format!("stage-{partition}.db")))
+            .unwrap();
+    stage
+        .execute(
+            "INSERT INTO file_entries(id,parent_id,data_source_id,path,name,entry_type,partition_index,encrypted)
+             VALUES ('raw-orphan',NULL, 'source-1', '[P1]', '/', 'directory', 1, NULL)",
+            [],
+        )
+        .unwrap();
+    stage
+        .execute(
+            "INSERT INTO file_entries(id,parent_id,data_source_id,path,name,entry_type,partition_index,encrypted,deleted)
+             VALUES ('deleted-orphan','raw-orphan','source-1','/$DeletedOrphans/deleted-orphan','$dpx$.tmp','directory',1,NULL,1)",
+            [],
+        )
+        .unwrap();
+    stage
+}
+
 #[test]
 fn catalog_staging_merge_folds_roots_and_replays_without_duplicates() {
     let root = tempfile::tempdir().unwrap();
@@ -111,6 +132,73 @@ fn catalog_staging_merge_folds_roots_and_replays_without_duplicates() {
     assert!(error
         .to_string()
         .contains("catalog staging source identity mismatch"));
+}
+
+#[test]
+fn catalog_staging_groups_top_level_orphans_under_a_bounded_root_node() {
+    let root = tempfile::tempdir().unwrap();
+    let main = source_connection(root.path());
+    let stage = stage_catalog_with_orphan(root.path(), 1);
+    assert_eq!(
+        persistence_source::staging::merge_staging_catalog(
+            &main,
+            &stage,
+            "source-1",
+            1,
+            "Partition 1"
+        )
+        .unwrap(),
+        Some(1)
+    );
+    let store = persistence_source::detail::open_store(&main)
+        .unwrap()
+        .unwrap();
+    let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
+    let snapshot = catalog.read_snapshot();
+    let root_record = catalog
+        .list_by_parent(
+            &snapshot,
+            "source-1",
+            None,
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            10,
+        )
+        .unwrap()
+        .records
+        .into_iter()
+        .find(|record| record.partition_index == Some(1))
+        .unwrap();
+    let groups = catalog
+        .list_directories_by_parent(
+            &snapshot,
+            "source-1",
+            Some(&root_record.id),
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            10,
+        )
+        .unwrap()
+        .records;
+    assert_eq!(groups.len(), 1);
+    assert_eq!(groups[0].name, "$DeletedOrphans");
+    assert_eq!(groups[0].path, "/$DeletedOrphans");
+    assert!(groups[0].hidden);
+    assert!(groups[0].system);
+    let orphan = catalog
+        .list_directories_by_parent(
+            &snapshot,
+            "source-1",
+            Some(&groups[0].id),
+            None,
+            persistence_fjall::ScanDirection::Forward,
+            10,
+        )
+        .unwrap()
+        .records;
+    assert_eq!(orphan.len(), 1);
+    assert_eq!(orphan[0].id, "deleted-orphan");
+    assert_eq!(orphan[0].parent_id.as_deref(), Some(groups[0].id.as_str()));
 }
 
 #[test]

@@ -30,6 +30,7 @@ pub fn merge_staging_catalog(
     let mut statement = transaction.prepare(include_str!("catalog_staging.sql"))?;
     let mut rows = statement.query([&root.id])?;
     let mut root_record = Some(root.clone());
+    let mut emitted_groups = std::collections::HashSet::new();
     let mut merged = 0;
     let mut producer_error = None;
     let outcome = repository.upsert_parallel(
@@ -46,7 +47,14 @@ pub fn merge_staging_catalog(
                         break;
                     };
                     persistence_sqlite::read_operation::ensure_active()?;
-                    batch.push(record(row, source_id, partition)?);
+                    let mut record = record(row, source_id, partition)?;
+                    if let Some(group) = orphan_group(&record, &root.id) {
+                        if emitted_groups.insert(group.key) {
+                            batch.push(group_record(source_id, partition, &root.id, group));
+                        }
+                        record.parent_id = Some(group_id(source_id, partition, group.key));
+                    }
+                    batch.push(record);
                     merged += 1;
                 }
                 Ok((!batch.is_empty()).then_some(batch))
@@ -65,6 +73,74 @@ pub fn merge_staging_catalog(
     }
     outcome.map_err(storage_error)?;
     Ok(Some(merged))
+}
+
+#[derive(Clone, Copy)]
+struct OrphanGroup {
+    key: &'static str,
+    name: &'static str,
+    path: &'static str,
+}
+
+const DELETED_ORPHANS: OrphanGroup = OrphanGroup {
+    key: "deleted",
+    name: "$DeletedOrphans",
+    path: "/$DeletedOrphans",
+};
+const UNRESOLVED: OrphanGroup = OrphanGroup {
+    key: "unresolved",
+    name: "$Unresolved",
+    path: "/$Unresolved",
+};
+
+fn orphan_group(record: &FileEntryRecord, root_id: &str) -> Option<OrphanGroup> {
+    if record.parent_id.as_deref() != Some(root_id) {
+        return None;
+    }
+    let path = record.path.replace('\\', "/");
+    for group in [DELETED_ORPHANS, UNRESOLVED] {
+        if let Some(remainder) = path.strip_prefix(&format!("{}/", group.path)) {
+            if !remainder.is_empty() && !remainder.contains('/') {
+                return Some(group);
+            }
+        }
+    }
+    None
+}
+
+fn group_id(source: &str, partition: u32, kind: &str) -> String {
+    format!("orphan-group:{source}:{partition}:{kind}")
+}
+
+fn group_record(
+    source: &str,
+    partition: u32,
+    root_id: &str,
+    group: OrphanGroup,
+) -> FileEntryRecord {
+    FileEntryRecord {
+        id: group_id(source, partition, group.key),
+        parent_id: Some(root_id.to_owned()),
+        data_source_id: source.to_owned(),
+        path: group.path.to_owned(),
+        name: group.name.to_owned(),
+        entry_type: CatalogEntryType::Directory,
+        size: None,
+        ext: None,
+        deleted: false,
+        hidden: true,
+        system: true,
+        read_only: false,
+        archive: false,
+        encrypted: Some(false),
+        created: None,
+        modified: None,
+        accessed: None,
+        changed: None,
+        hash_sha256: None,
+        partition_index: Some(partition),
+        unix_mode: None,
+    }
 }
 
 fn validate_staging(staging: &Connection, source: &str, partition: u32) -> DbResult<()> {

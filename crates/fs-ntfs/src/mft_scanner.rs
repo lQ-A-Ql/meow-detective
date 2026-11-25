@@ -3,6 +3,8 @@ use crate::ValidatedRecord;
 use chrono::{DateTime, TimeZone, Utc};
 
 const FILE_ATTRIBUTE_ENCRYPTED: u32 = 0x0000_4000;
+const FILE_ATTRIBUTE_HIDDEN: u32 = 0x0000_0002;
+const FILE_ATTRIBUTE_SYSTEM: u32 = 0x0000_0004;
 const FILE_ATTRIBUTE_READ_ONLY: u32 = 0x0000_0001;
 const FILE_ATTRIBUTE_ARCHIVE: u32 = 0x0000_0020;
 const ATTRIBUTE_FLAG_ENCRYPTED: u16 = 0x4000;
@@ -218,8 +220,8 @@ fn parse_mft_record(rec: &[u8], record_number: u64) -> Option<MftRecord> {
         modified_at: modified_at.or(fn_modified),
         accessed_at: accessed_at.or(fn_accessed),
         changed_at: changed_at.or(fn_changed),
-        hidden: fn_flags.is_some_and(|flags| flags & 0x02 != 0),
-        system: fn_flags.is_some_and(|flags| flags & 0x04 != 0),
+        hidden: file_has_attribute(si_flags, fn_flags, FILE_ATTRIBUTE_HIDDEN),
+        system: file_has_attribute(si_flags, fn_flags, FILE_ATTRIBUTE_SYSTEM),
         read_only: file_is_read_only(si_flags, fn_flags),
         encrypted: si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
             || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_ENCRYPTED != 0)
@@ -248,6 +250,11 @@ fn record_name_is_valid(deleted: bool, name: &str, record_number: u64) -> bool {
 fn file_is_read_only(si_flags: Option<u32>, fn_flags: Option<u32>) -> bool {
     si_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_READ_ONLY != 0)
         || fn_flags.is_some_and(|flags| flags & FILE_ATTRIBUTE_READ_ONLY != 0)
+}
+
+fn file_has_attribute(si_flags: Option<u32>, fn_flags: Option<u32>, mask: u32) -> bool {
+    si_flags.is_some_and(|flags| flags & mask != 0)
+        || fn_flags.is_some_and(|flags| flags & mask != 0)
 }
 
 fn file_has_archive(si_flags: Option<u32>, fn_flags: Option<u32>) -> bool {

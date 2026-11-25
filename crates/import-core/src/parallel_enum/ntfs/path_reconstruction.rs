@@ -69,7 +69,14 @@ impl MftCatalog {
                 let parent = (*parent)?;
                 let directory = self.path_map.get(&parent).is_some_and(|(_, _, dir)| *dir);
                 let matches = self.index_representatives.contains_key(id)
-                    || self.parent_sequences.get(id) == self.record_sequences.get(&parent);
+                    || self.parent_sequences.get(id).is_some_and(|reference| {
+                        directory_reference_sequence_matches(
+                            &self.record_sequences,
+                            &self.deleted_records,
+                            parent,
+                            *reference,
+                        )
+                    });
                 (!directory || !matches).then_some(*id)
             })
             .collect::<Vec<_>>();
@@ -177,12 +184,18 @@ pub(in crate::parallel_enum) fn mft_directory_index_backfill_actions_with_repres
 
 pub(in crate::parallel_enum) fn directory_reference_sequence_matches(
     record_sequences: &HashMap<u64, u16>,
+    deleted_records: &HashSet<u64>,
     record_number: u64,
     reference_sequence: u16,
 ) -> bool {
-    record_sequences
-        .get(&record_number)
-        .is_none_or(|expected| *expected == reference_sequence)
+    record_sequences.get(&record_number).is_none_or(|current| {
+        let expected = if deleted_records.contains(&record_number) && *current > 0 {
+            current - 1
+        } else {
+            *current
+        };
+        expected == reference_sequence
+    })
 }
 
 fn select_index_representative(

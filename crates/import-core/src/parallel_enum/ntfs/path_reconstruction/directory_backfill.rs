@@ -83,6 +83,7 @@ impl MftCatalog {
                 .filter_map(|(entry, sequence)| {
                     directory_reference_sequence_matches(
                         &self.record_sequences,
+                        &self.deleted_records,
                         entry.mft_ref,
                         sequence,
                     )

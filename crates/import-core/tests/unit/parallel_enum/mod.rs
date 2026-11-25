@@ -646,10 +646,24 @@ fn ntfs_hardlink_representative_is_deterministic_across_parent_order() {
 #[test]
 fn ntfs_directory_reference_sequence_rejects_reused_record() {
     let sequences = HashMap::from([(42, 7)]);
+    let live = HashSet::new();
 
-    assert!(directory_reference_sequence_matches(&sequences, 42, 7));
-    assert!(!directory_reference_sequence_matches(&sequences, 42, 8));
-    assert!(directory_reference_sequence_matches(&sequences, 99, 1));
+    assert!(directory_reference_sequence_matches(
+        &sequences, &live, 42, 7
+    ));
+    assert!(!directory_reference_sequence_matches(
+        &sequences, &live, 42, 8
+    ));
+    assert!(directory_reference_sequence_matches(
+        &sequences, &live, 99, 1
+    ));
+    let deleted = HashSet::from([42]);
+    assert!(directory_reference_sequence_matches(
+        &sequences, &deleted, 42, 6
+    ));
+    assert!(!directory_reference_sequence_matches(
+        &sequences, &deleted, 42, 5
+    ));
 }
 
 #[test]

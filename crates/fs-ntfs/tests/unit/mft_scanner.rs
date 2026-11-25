@@ -459,6 +459,22 @@ fn read_only_attribute_is_merged_from_standard_information_and_file_name() {
 }
 
 #[test]
+fn hidden_and_system_attributes_are_merged_from_standard_information() {
+    let mut parser = MftRecordParser::new(1024, 512);
+    let mut rec = make_test_record(506, "hidden-cache", 5, true);
+    set_resident_attribute_u32(
+        &mut rec,
+        0x10,
+        STANDARD_INFORMATION_FILE_ATTRIBUTES_OFFSET,
+        FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM,
+    );
+
+    let result = parser.parse(&rec, 506).unwrap();
+    assert!(result.hidden);
+    assert!(result.system);
+}
+
+#[test]
 fn active_and_inactive_records_keep_the_same_mft_sequence_identity() {
     let mut parser = MftRecordParser::new(1024, 512);
     let active = parser

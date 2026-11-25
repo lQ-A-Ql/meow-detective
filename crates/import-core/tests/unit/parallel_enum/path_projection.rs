@@ -32,7 +32,7 @@ fn parent_identity_rejects_reused_files_and_directory_sequences() {
     records[1].sequence_number = 3;
     records[2].parent_sequence_number = 1;
     records[2].sequence_number = 2;
-    records[3].parent_sequence_number = 2;
+    records[3].parent_sequence_number = 1;
     records[4].sequence_number = 7;
     records[5].parent_sequence_number = 6;
     let mut catalog = stage_mft_records_for_test(&c, &records, "source", 4);
