@@ -200,33 +200,14 @@ fn source_ids(conn: &Connection, case_id: &CaseId, import_set_id: &str) -> Resul
     if owner.as_deref() != Some(case_id.0.as_str()) {
         return Err(ClusterServiceError::InvalidClusterId);
     }
-    let mut statement = conn.prepare(
-        "SELECT member.data_source_id, member.import_state, source.case_id
-         FROM linux_import_set_members AS member
-         LEFT JOIN data_sources AS source ON source.id = member.data_source_id
-         WHERE member.import_set_id = ?1 ORDER BY member.member_index",
-    )?;
-    let mut ids = std::collections::BTreeSet::new();
-    let rows = statement.query_map([import_set_id], |row| {
-        Ok((
-            row.get::<_, Option<String>>(0)?,
-            row.get::<_, String>(1)?,
-            row.get::<_, Option<String>>(2)?,
-        ))
-    })?;
-    for row in rows {
-        let (id, state, owner) = row?;
-        if !matches!(state.as_str(), "ready" | "ready_metadata")
-            || owner.as_deref() != Some(case_id.0.as_str())
-        {
-            return Err(ClusterServiceError::IncompleteImportSet);
-        }
-        ids.insert(id.ok_or(ClusterServiceError::IncompleteImportSet)?);
-    }
-    if ids.is_empty() {
-        return Err(ClusterServiceError::IncompleteImportSet);
-    }
-    Ok(ids.into_iter().collect())
+    Ok(
+        super::member_binding::ready_import_members(conn, case_id, import_set_id)?
+            .into_iter()
+            .map(|(_, source)| source)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect(),
+    )
 }
 
 fn string_attr(attrs: &serde_json::Map<String, serde_json::Value>, key: &str) -> Option<String> {

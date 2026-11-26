@@ -1,10 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::path::Path;
 
 use domain::{CaseId, DataSourceKind};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Deserialize;
 use transport::dto::{
     LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
     LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto,
@@ -38,14 +36,6 @@ struct ScopeRow {
     diagnostics: Vec<String>,
 }
 
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct ManifestProvenance {
-    schema_version: u32,
-    collected_at: String,
-    manifest_digest: String,
-}
-
 pub fn get_linux_evidence_set_summary(
     conn: &Connection,
     case_root: &std::path::Path,
@@ -53,7 +43,7 @@ pub fn get_linux_evidence_set_summary(
     import_set_id: &str,
 ) -> Result<LinuxEvidenceSetSummaryDto> {
     let import_set = load_import_set(conn, case_id, import_set_id)?;
-    let manifest = load_manifest_provenance(case_root, import_set_id);
+    let manifest = super::linux_import::read_validated_manifest(case_root, import_set_id).ok();
     let sources = DataSourceRepo::new(conn)
         .find_by_case(case_id)?
         .into_iter()
@@ -80,6 +70,9 @@ pub fn get_linux_evidence_set_summary(
     }
     if manifest.is_none() {
         diagnostics.push("linuxEvidenceSet manifest is missing or invalid".to_string());
+    }
+    if let Some(manifest) = &manifest {
+        diagnostics.extend(manifest.collection_diagnostics());
     }
     if members.iter().any(|member| member.hash_status != "hashed") {
         diagnostics.push("one or more members lack completed source hash verification".to_string());
@@ -131,16 +124,6 @@ pub fn get_linux_evidence_set_summary(
         mdraid_arrays,
         diagnostics,
     })
-}
-
-fn load_manifest_provenance(case_root: &Path, import_set_id: &str) -> Option<ManifestProvenance> {
-    super::validate_linux_evidence_set_manifest(case_root, import_set_id).ok()?;
-    let path = case_root.join(format!(
-        "import-sets/{import_set_id}/import-set-manifest.json"
-    ));
-    let payload = std::fs::read(path).ok()?;
-    let manifest = serde_json::from_slice::<ManifestProvenance>(&payload).ok()?;
-    (manifest.schema_version >= 2 && !manifest.manifest_digest.is_empty()).then_some(manifest)
 }
 
 pub fn list_linux_evidence_sets(

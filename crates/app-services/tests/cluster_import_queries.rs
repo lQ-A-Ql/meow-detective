@@ -403,7 +403,12 @@ fn summary_rejects_manifest_contents_with_an_unchanged_digest() {
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("member-a.raw"), [0; 512]).unwrap();
     std::fs::write(root.join("member-b.raw"), [0; 512]).unwrap();
-    let plan = cluster_service::plan_linux_evidence_set_import(&root, None).unwrap();
+    let mut plan = cluster_service::plan_linux_evidence_set_import(&root, None).unwrap();
+    plan.skipped_entries
+        .push(cluster_service::LinuxEvidenceSetSkippedEntry {
+            relative_path: "unreadable-node".into(),
+            reason: "read_dir:permission denied".into(),
+        });
     let conn = case.connection().unwrap();
     cluster_service::register_linux_evidence_set_import(&conn, &case.meta.id, &plan).unwrap();
     let manifest =
@@ -412,6 +417,10 @@ fn summary_rejects_manifest_contents_with_an_unchanged_digest() {
         get_linux_evidence_set_summary(&conn, &case.case_root, &case.meta.id, &plan.import_set_id)
             .unwrap();
     assert!(summary.manifest_digest.is_some());
+    assert!(summary
+        .diagnostics
+        .iter()
+        .any(|value| { value.contains("unreadable-node") && value.contains("permission denied") }));
     let mut document: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
     document["members"][0]["sourceSizeBytes"] = 7.into();
     std::fs::write(&manifest, serde_json::to_vec(&document).unwrap()).unwrap();

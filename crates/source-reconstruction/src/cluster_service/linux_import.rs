@@ -45,17 +45,32 @@ pub struct LinuxEvidenceSetSkippedEntry {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct LinuxEvidenceSetManifest {
-    schema_version: u32,
+pub(super) struct LinuxEvidenceSetManifest {
+    pub(super) schema_version: u32,
     import_set_id: String,
     import_set_name: String,
     root_path: PathBuf,
     member_count: u32,
-    collected_at: String,
+    pub(super) collected_at: String,
     scan_policy: String,
     members: Vec<LinuxEvidenceSetManifestMember>,
     skipped_entries: Vec<LinuxEvidenceSetSkippedEntry>,
-    manifest_digest: String,
+    pub(super) manifest_digest: String,
+}
+
+impl LinuxEvidenceSetManifest {
+    pub(super) fn collection_diagnostics(&self) -> impl Iterator<Item = String> + '_ {
+        self.skipped_entries
+            .iter()
+            .filter(|entry| entry.reason != "secondary_e01_segment")
+            .map(|entry| {
+                format!(
+                    "source discovery skipped {}: {}",
+                    entry.relative_path.display(),
+                    entry.reason,
+                )
+            })
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -356,6 +371,13 @@ pub fn update_linux_evidence_set_manifest_hash(
 }
 
 pub fn validate_linux_evidence_set_manifest(case_root: &Path, import_set_id: &str) -> Result<()> {
+    read_validated_manifest(case_root, import_set_id).map(|_| ())
+}
+
+pub(super) fn read_validated_manifest(
+    case_root: &Path,
+    import_set_id: &str,
+) -> Result<LinuxEvidenceSetManifest> {
     let manifest_path = case_root.join(format!(
         "import-sets/{import_set_id}/import-set-manifest.json"
     ));
@@ -369,7 +391,7 @@ pub fn validate_linux_evidence_set_manifest(case_root: &Path, import_set_id: &st
     {
         return Err(ClusterServiceError::InvalidClusterId);
     }
-    Ok(())
+    Ok(manifest)
 }
 
 fn manifest_digest(manifest: &LinuxEvidenceSetManifest) -> Result<String> {

@@ -158,6 +158,25 @@ fn event_merge_reaches_beyond_two_thousand_records_and_keeps_set_and_case_owners
         10,
     )
     .is_err());
+    DataSourceRepo::new(&conn)
+        .update_import_state(
+            &DataSourceId("set-a-0".into()),
+            "failed",
+            Some("injected source failure"),
+        )
+        .unwrap();
+    assert!(cluster_service::get_linux_evidence_events(
+        &conn,
+        &case.case_root,
+        &case.meta.id,
+        "set-a",
+        0,
+        10,
+    )
+    .is_err());
+    DataSourceRepo::new(&conn)
+        .update_import_state(&DataSourceId("set-a-0".into()), "ready", None)
+        .unwrap();
     conn.execute(
         "UPDATE linux_import_set_members SET import_state='failed'
         WHERE import_set_id='set-a' AND member_index=1",
