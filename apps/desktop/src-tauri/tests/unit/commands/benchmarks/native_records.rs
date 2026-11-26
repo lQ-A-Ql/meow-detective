@@ -1,7 +1,10 @@
 use chrono::{TimeZone, Utc};
 use domain::{Artifact, ArtifactId, FileEntry};
 use persistence_source::{
-    fjall::{PersistMode, TimelineRecord, TimelineRecordStore},
+    fjall::{
+        timeline_projection_marker_envelope, KeyspaceName, PersistMode, TimelineProjectionState,
+        TimelineProjectionStatePayload, TimelineRecord, TimelineRecordStore,
+    },
     repositories::artifact_repo::ArtifactRepo,
 };
 
@@ -37,7 +40,19 @@ pub(super) fn seed_timeline(fixture: &NativeFixture, count: usize) {
             .collect::<Vec<_>>();
         store.upsert_batch(&records, PersistMode::Buffer).unwrap();
     }
-    handle.persist(PersistMode::SyncAll).unwrap();
+    let completed = TimelineProjectionStatePayload::new(
+        TimelineProjectionState::Complete,
+        "benchmark.fixture",
+        count as u64,
+        0,
+        0,
+        None,
+    );
+    let (key, marker) =
+        timeline_projection_marker_envelope(&fixture.sources[0].0, &completed).unwrap();
+    handle
+        .write_envelope(KeyspaceName::Meta, key, &marker, PersistMode::SyncAll)
+        .unwrap();
 }
 
 pub(super) fn seed_artifacts(fixture: &NativeFixture, count: usize, paths: Option<&[FileEntry]>) {
