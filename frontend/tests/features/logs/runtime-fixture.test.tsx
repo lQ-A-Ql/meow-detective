@@ -31,6 +31,8 @@ suite('actual Rust application log response', () => {
     expect(Object.values(buffer.rows).flat()).toHaveLength(0);
     expect(buffer.forward).toEqual(input.pages.map((page) => page.forwardCursor));
     expect(buffer.backward).toEqual(input.pages.map((page) => page.backwardCursor));
+    const populated = mergeLogSnapshot(emptyLogBuffer(), snapshot());
+    expect(mergeLogSnapshot(populated, input).rows).toBe(populated.rows);
   });
 
   it('renders INFO, WARNING and ERROR in their own panels and routes selection', () => {

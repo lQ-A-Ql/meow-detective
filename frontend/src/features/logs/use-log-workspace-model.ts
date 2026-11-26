@@ -42,6 +42,17 @@ export function useLogWorkspaceModel() {
   }, []);
 
   useEffect(() => {
+    const caseId = params.get('caseId') ?? '';
+    const dataSourceId = params.get('dataSourceId') ?? '';
+    const jobId = params.get('jobId') ?? '';
+    setFilter((current) =>
+      current.caseId === caseId && current.dataSourceId === dataSourceId && current.jobId === jobId
+        ? current
+        : { ...current, caseId, dataSourceId, jobId },
+    );
+  }, [params]);
+
+  useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
