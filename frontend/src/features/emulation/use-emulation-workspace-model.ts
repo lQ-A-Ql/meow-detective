@@ -198,6 +198,9 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     queryKey: ['emulation', 'preflight', currentCase.data?.id ?? null, selectedSourceId],
     queryFn: () => getEmulationPreflight(selectedSourceId),
     enabled: Boolean(selectedSourceId),
+    staleTime: Infinity,
+    gcTime: Infinity,
+    refetchOnReconnect: false,
     retry: false,
   });
   const bypassIsLinux =
@@ -265,10 +268,7 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
   const isLinuxSource = selectedSource?.platform === 'LINUX';
   const selectedRecoveryIsoPath = isLinuxSource ? '' : recoveryIsoPath;
   const preflightReady =
-    Boolean(selectedSourceId) &&
-    preflightQuery.isSuccess &&
-    !preflightQuery.isFetching &&
-    preflightQuery.data?.dataSourceId === selectedSourceId;
+    Boolean(selectedSourceId) && preflightQuery.isSuccess && preflightQuery.data?.dataSourceId === selectedSourceId;
   const linuxBypassReady =
     bypassPartition === undefined ||
     !bypassIsLinux ||
@@ -460,8 +460,8 @@ export function useEmulationWorkspaceModel(): EmulationWorkspaceModel {
     [releaseMutation],
   );
   const refresh = useCallback(async () => {
-    await Promise.all([dataSourcesQuery.refetch(), sessionsQuery.refetch()]);
-  }, [dataSourcesQuery, sessionsQuery]);
+    await Promise.all([dataSourcesQuery.refetch(), sessionsQuery.refetch(), preflightQuery.refetch()]);
+  }, [dataSourcesQuery, sessionsQuery, preflightQuery]);
   const launchWithoutBypass = useCallback(async () => {
     await launchPreparedMutation.mutateAsync();
   }, [launchPreparedMutation]);

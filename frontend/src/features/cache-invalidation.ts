@@ -67,6 +67,7 @@ export const projectionQueryKeys = {
   linuxEvidenceSets: ['linux-evidence-sets'] as const,
   linuxEvidenceSetSummary: ['linux-evidence-set-summary'] as const,
   linuxEvidenceSetEvents: ['linux-evidence-set-events'] as const,
+  emulationPreflight: ['emulation', 'preflight'] as const,
 } as const;
 
 type ProjectionKey = keyof typeof projectionQueryKeys;
@@ -176,7 +177,7 @@ export function invalidateCacheStatusQueries(
 }
 
 const capabilityProjectionKeys: Record<CapabilityKind, ProjectionKey[]> = {
-  catalog: ['files', 'caseDataSources', 'caseMetrics'],
+  catalog: ['files', 'caseDataSources', 'caseMetrics', 'emulationPreflight'],
   search: ['search'],
   timeline: ['timeline', 'graph', 'analysis', 'caseMetrics', 'caseRecentObjects'],
   graph: ['graph'],
@@ -211,6 +212,7 @@ export function invalidateEventProjectionQueries(
   switch (topic) {
     case 'data-source-imported':
       invalidateImportProjectionQueries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: projectionQueryKeys.emulationPreflight });
       return;
     case 'timeline-updated':
       if (payload.caseId) {
