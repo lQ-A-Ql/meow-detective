@@ -5,8 +5,7 @@ mod segments;
 mod text;
 mod types;
 
-pub use region::parse_metadata;
-pub(crate) use region::parse_metadata_from_regions;
+pub use region::{parse_metadata, parse_metadata_from_regions};
 pub use types::{
     LvMeta, LvRole, PvMeta, RaidComponent, RaidComponentSource, SegmentArea, SegmentDependencies,
     SegmentMeta, SegmentType, VolumeGroup,

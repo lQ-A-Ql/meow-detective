@@ -61,7 +61,7 @@ pub fn enumerate_filesystem_parallel_with_factory(
             data_source_id,
             worker_count,
             reader_factory,
-            root_entry,
+            (root_entry, 0),
             progress_fn,
             cancel_token,
         );
@@ -106,10 +106,11 @@ fn enumerate_native_parallel(
     data_source_id: &DataSourceId,
     worker_count: usize,
     reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
-    root_entry: FileEntry,
+    target: (FileEntry, u32),
     progress_fn: Option<&dyn Fn(u32)>,
     cancel_token: Option<&AtomicBool>,
 ) -> DbResult<crate::file_service::EnumerationStats> {
+    let (root_entry, partition_index) = target;
     let source_id = persistence_source::detail::source_id(conn)?
         .ok_or_else(|| DbError::System("source identity is missing".into()))?;
     if source_id != data_source_id.0 {
@@ -154,7 +155,7 @@ fn enumerate_native_parallel(
         let result = repository.replace_subtree_streamed(
             &source_id,
             &root_record,
-            0,
+            partition_index,
             persistence_source::fjall::PersistMode::SyncAll,
             || {
                 producer.next_batch(data_source_id).map(|batch| {
@@ -178,4 +179,38 @@ fn enumerate_native_parallel(
             Err(persistence_source::fjall::CatalogStreamError::Producer(error)) => Err(error),
         }
     })
+}
+
+pub fn enumerate_partition_parallel_with_factory(
+    conn: &Connection,
+    placeholder_id: &FileEntryId,
+    worker_count: usize,
+    reader_factory: Arc<dyn Fn() -> DbResult<Box<dyn FileSystemReader>> + Send + Sync>,
+    root_name: &str,
+    progress_fn: Option<&dyn Fn(u32)>,
+    cancel_token: Option<&AtomicBool>,
+) -> DbResult<crate::file_service::EnumerationStats> {
+    let repository = FileRepo::new(conn);
+    let mut root = repository
+        .find_by_id(placeholder_id)?
+        .ok_or_else(|| DbError::System("partition root is missing".to_string()))?;
+    let index = repository
+        .find_partition_index_by_id(placeholder_id)?
+        .ok_or_else(|| DbError::System("partition identity is missing".to_string()))?;
+    root.name = root_name.to_string();
+    root.path.clear();
+    let source = root.data_source_id.clone();
+    enumerate_native_parallel(
+        conn,
+        &source,
+        worker_count,
+        reader_factory,
+        (
+            root,
+            u32::try_from(index)
+                .map_err(|_| DbError::System("partition identity exceeds range".to_string()))?,
+        ),
+        progress_fn,
+        cancel_token,
+    )
 }

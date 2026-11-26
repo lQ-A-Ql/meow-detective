@@ -7,12 +7,14 @@ use rusqlite::{params, Connection, OptionalExtension};
 use serde::Deserialize;
 use transport::dto::{
     LinuxDerivedSourceSummaryDto, LinuxEvidenceSetListItemDto, LinuxEvidenceSetMemberSummaryDto,
-    LinuxEvidenceSetSummaryDto, LinuxMdRaidArrayDto, LinuxMdRaidMemberDto,
-    LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto, LinuxTopologyScopeSummaryDto,
+    LinuxEvidenceSetSummaryDto, LinuxTopologyEdgeSummaryDto, LinuxTopologyMemberSummaryDto,
+    LinuxTopologyScopeSummaryDto,
 };
 
 use super::collect_linux_evidence_facts;
 use super::{ClusterServiceError, Result};
+
+mod mdraid;
 
 #[derive(Debug, Clone)]
 struct ImportSetRow {
@@ -71,7 +73,7 @@ pub fn get_linux_evidence_set_summary(
         .map(|scope| scope.id.clone())
         .collect::<BTreeSet<_>>();
     let edges = load_edges(conn, &scope_ids)?;
-    let derived_sources = load_derived_sources(conn, &sources);
+    let derived_sources = load_derived_sources(conn, import_set_id, &sources)?;
     let mut diagnostics = Vec::new();
     if import_set.state != "ready" {
         diagnostics.push(format!("import set state is {}", import_set.state));
@@ -104,7 +106,7 @@ pub fn get_linux_evidence_set_summary(
         }
     }
     let capability_level = capability_level(&import_set, &derived_sources);
-    let mdraid_arrays = match load_persisted_mdraid_arrays(conn, import_set_id, &sources) {
+    let mdraid_arrays = match mdraid::load_persisted_arrays(conn, import_set_id, &sources) {
         Ok(arrays) => arrays,
         Err(error) => {
             diagnostics.push(format!("MD RAID catalog unavailable: {error}"));
@@ -131,65 +133,8 @@ pub fn get_linux_evidence_set_summary(
     })
 }
 
-fn load_persisted_mdraid_arrays(
-    conn: &Connection,
-    import_set_id: &str,
-    sources: &BTreeMap<String, domain::DataSource>,
-) -> Result<Vec<LinuxMdRaidArrayDto>> {
-    let member_paths = conn
-        .prepare(
-            "SELECT source_path FROM linux_import_set_members
-             WHERE import_set_id = ?1",
-        )?
-        .query_map([import_set_id], |row| row.get::<_, String>(0))?
-        .collect::<std::result::Result<BTreeSet<_>, _>>()?;
-    sources
-        .values()
-        .filter(|source| source.kind == DataSourceKind::MdRaid)
-        .map(|source| {
-            let payload = std::fs::read(&source.source_path)?;
-            let plan =
-                serde_json::from_slice::<::evidence_access::mdraid::MdRaidArrayPlan>(&payload)?;
-            if !plan.members.iter().any(|member| match &member.origin {
-                ::evidence_access::mdraid::MdRaidMemberOrigin::Lvm { identity, .. } => identity
-                    .pv_sources
-                    .iter()
-                    .any(|pv| member_paths.contains(&pv.source_path)),
-                ::evidence_access::mdraid::MdRaidMemberOrigin::Direct { source_path, .. } => {
-                    member_paths.contains(source_path)
-                }
-            }) {
-                return Ok(None);
-            }
-            Ok(Some(LinuxMdRaidArrayDto {
-                array_uuid: hex::encode(plan.array_uuid),
-                name: plan.name,
-                level: plan.level,
-                layout: plan.layout,
-                chunk_sectors: plan.chunk_sectors,
-                raid_disks: plan.raid_disks,
-                min_data_size_sectors: plan.min_data_size_sectors,
-                capacity_mismatch: plan.capacity_mismatch,
-                filesystem: "candidate".to_string(),
-                members: plan
-                    .members
-                    .into_iter()
-                    .map(|member| LinuxMdRaidMemberDto {
-                        dev_number: member.superblock.dev_number,
-                        vg_name: member.origin.vg_name(),
-                        lv_name: member.origin.lv_name(),
-                        data_offset_sectors: member.superblock.data_offset_sectors,
-                        data_size_sectors: member.superblock.data_size_sectors,
-                        super_offset_sectors: member.superblock.super_offset_sectors,
-                    })
-                    .collect(),
-            }))
-        })
-        .filter_map(|result| result.transpose())
-        .collect()
-}
-
 fn load_manifest_provenance(case_root: &Path, import_set_id: &str) -> Option<ManifestProvenance> {
+    super::validate_linux_evidence_set_manifest(case_root, import_set_id).ok()?;
     let path = case_root.join(format!(
         "import-sets/{import_set_id}/import-set-manifest.json"
     ));
@@ -352,14 +297,19 @@ fn load_scopes(
     case_id: &CaseId,
     import_set_id: &str,
 ) -> Result<Vec<LinuxTopologyScopeSummaryDto>> {
-    let pattern = format!("scope:%:{import_set_id}%");
     let mut statement = conn.prepare(
         "SELECT id, scope_kind, name, identity_state, status,
                 evidence_completeness, diagnostics_json
          FROM linux_topology_scopes
-         WHERE case_id = ?1 AND id LIKE ?2 ORDER BY id",
+         WHERE case_id = ?1
+           AND substr(id, 1, 6) = 'scope:'
+           AND (
+               substr(id, 7 + instr(substr(id, 7), ':')) = ?2
+               OR substr(id, 7 + instr(substr(id, 7), ':'), length(?2) + 1) = ?2 || ':'
+           )
+         ORDER BY id",
     )?;
-    let rows = statement.query_map(params![case_id.0, pattern], |row| {
+    let rows = statement.query_map(params![case_id.0, import_set_id], |row| {
         Ok(ScopeRow {
             id: row.get(0)?,
             kind: row.get(1)?,
@@ -450,18 +400,41 @@ fn load_edges(
 
 fn load_derived_sources(
     conn: &Connection,
+    import_set_id: &str,
     sources: &BTreeMap<String, domain::DataSource>,
-) -> Vec<LinuxDerivedSourceSummaryDto> {
+) -> Result<Vec<LinuxDerivedSourceSummaryDto>> {
     let repo = DataSourceRepo::new(conn);
-    sources
-        .values()
-        .filter(|source| {
-            matches!(
-                source.kind,
-                DataSourceKind::CephRbd | DataSourceKind::CephFs | DataSourceKind::MdRaid
-            )
-        })
-        .map(|source| LinuxDerivedSourceSummaryDto {
+    let scope_id = format!("scope:ceph:{import_set_id}");
+    let lineage_ids = conn
+        .prepare(
+            "SELECT derived_data_source_id FROM ceph_rbd_derived_lineage
+             WHERE parent_ceph_scope_id = ?1
+             UNION
+             SELECT derived_data_source_id FROM ceph_fs_derived_lineage
+             WHERE parent_ceph_scope_id = ?1",
+        )?
+        .query_map([scope_id], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+    let member_paths = conn
+        .prepare("SELECT source_path FROM linux_import_set_members WHERE import_set_id = ?1")?
+        .query_map([import_set_id], |row| row.get::<_, String>(0))?
+        .collect::<std::result::Result<BTreeSet<_>, _>>()?;
+    let mut derived = Vec::new();
+    for source in sources.values() {
+        let belongs_to_set = match source.kind {
+            DataSourceKind::CephRbd | DataSourceKind::CephFs => lineage_ids.contains(&source.id.0),
+            DataSourceKind::MdRaid => {
+                let payload = std::fs::read(&source.source_path)?;
+                let plan =
+                    serde_json::from_slice::<::evidence_access::mdraid::MdRaidArrayPlan>(&payload)?;
+                mdraid_plan_belongs_to_set(&plan, &member_paths)
+            }
+            _ => false,
+        };
+        if !belongs_to_set {
+            continue;
+        }
+        derived.push(LinuxDerivedSourceSummaryDto {
             data_source_id: source.id.0.clone(),
             kind: source.kind.to_string(),
             import_state: repo
@@ -473,8 +446,28 @@ fn load_derived_sources(
             provenance_status: format!("{:?}", source.provenance.provenance_status)
                 .to_ascii_lowercase(),
             source_path: source.source_path.display().to_string(),
+        });
+    }
+    Ok(derived)
+}
+
+fn mdraid_plan_belongs_to_set(
+    plan: &::evidence_access::mdraid::MdRaidArrayPlan,
+    member_paths: &BTreeSet<String>,
+) -> bool {
+    !plan.members.is_empty()
+        && plan.members.iter().all(|member| match &member.origin {
+            ::evidence_access::mdraid::MdRaidMemberOrigin::Lvm { identity, .. } => {
+                !identity.pv_sources.is_empty()
+                    && identity
+                        .pv_sources
+                        .iter()
+                        .all(|pv| member_paths.contains(&pv.source_path))
+            }
+            ::evidence_access::mdraid::MdRaidMemberOrigin::Direct { source_path, .. } => {
+                member_paths.contains(source_path)
+            }
         })
-        .collect()
 }
 
 fn capability_level(

@@ -22,3 +22,9 @@ events `4`, and component size `8192 KiB` according to `mdadm --examine`.
 Regenerating metadata creates new UUIDs and requires reviewing this oracle.
 
 The fixture bytes and oracle are generated test data, licensed under MIT.
+
+`raid0-ext4` contains an EXT4 filesystem created with `mke2fs -t ext4 -d`
+on the native RAID0 device. `/evidence.bin` contains `oracle.bin`; `debugfs`
+read the file back and `cmp` verified it before the array was stopped.
+Its compressed members expand to 16 MiB each. Application tests decompress
+into a workspace-owned test directory and remove it when the test finishes.

@@ -170,6 +170,22 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 | XFS internal log / deleted recovery | Linux | Experimental | 检材3 opt-in XFS log baseline：3007 records、2872 transactions、1973 deleted candidates、0 issues | `cargo test -p app-services deleted_recovery --lib -- --test-threads=1` + `FORENSICS_LINUX_E01_FIXTURE` | checkpoint/ring-wrap/log provenance、明确 `nlink=0` 删除证据；当前删除候选默认为 metadata-only，不声称未验证文件内容 | **planned** (2026-Q3) — public-small XFS log/inode fixture | 可报告 inode/path/provenance；内容读取与完整导出仅对后端明确验证的候选开放，当前真实 XFS baseline 不提供完整文件内容恢复 |
 | PVE E01 -> LVM direct root LV -> 64-bit EXT4 / BlueStore -> RADOS -> RBD derived VM | Linux/PVE | Beta for private host/RBD baseline / Experimental for public release | `E:\pangushi\服务器` opt-in 私有集群样本 | `FORENSICS_PVE_CLUSTER_ROOT` + `check-pve-cluster-import.ps1`; retained preview uses `FORENSICS_PVE_RBD_PREVIEW_CASE_ROOT` + `check-pve-rbd-preview-performance.ps1` | 成员发现与三个宿主 `pve/root` 可枚举；关键文件可按 `FileEntryId` 预览；三个 BlueStore 成员以 `ready_metadata` 保存 OSD/BlueFS/RocksDB/latest-state、`S/C/O/X` semantic snapshot 与 OMAP。显式加载的三 OSD inventory 在覆盖报告完整且摘要/策略指纹匹配时重建 `vm-100-disk-0`，派生独立 source DB 枚举直接 XFS、`centos/home`、`centos/root` 共 114,260 条文件记录。五个代表文件覆盖 `1,019 B` 至 `614,794,240 B`、连续/随机/文件尾 bounded range；提交 `db49698a` 的三轮 RBD 中位 `4x1 MiB` p95 为 `234.152ms`，大文件随机 64 KiB p95 为 `73.804ms`。检材3原生 XFS 与 PVE 宿主 EXT4 固定 oracle 对照通过；viewer/media 字节一致，source/case invalidation 冷重建与 session 收敛通过 | 只证明该私有样本当前已加载 inventory 的 RBD head、单 PV LVM、XFS VM 文件树和代表文件 range 性能；覆盖报告缺失、不完整、冲突或策略指纹过期，或显式多池证据无法绑定到 RBD 数据池时，仅保留元数据并拒绝物化/复用。首次三 OSD runtime 初始化中位约 `3.186s`，浏览器端 media 时序和容量 LRU eviction 尚未建立私有样本门禁。RBD/native warm 比值以 `1ms` 分母噪声下限门禁，原始亚毫秒比值仅报告。不打开 RocksDB runtime，不持久化 raw SST/WAL key/value、attrs value 或 checksum bytes；不承诺通用 PG/CRUSH/EC、degraded replica、multi-PV/跨 RBD LVM、clone/snapshot/encryption 或 CephFS |
 
+### 4b. Linux MD 多镜像读取
+
+| 能力 | 当前等级 | 公开验证入口 | 范围 |
+|---|---|---|---|
+| MD 元数据与逻辑读取 | Experimental | `fs-lvm --test mdraid_native`；`public-small/mdraid` | mdadm 原生生成的 linear、RAID0/1/5/6/10；0.90、1.0、1.1、1.2 元数据；容量、已知内容、缺失成员和非对齐范围读取。校验成员数量、checksum、events、支持的 feature/layout 与副本一致性 |
+| MD -> EXT4 目录与预览 | Experimental | `evidence-access --test mdraid_access`；`app-services --test mdraid_materialization_native` | 原生 RAID0/EXT4 文件树、分区身份、范围读取、`FileEntryId` 预览、重复导入、来源变化后的独立身份、发布中断恢复与取消准入 |
+| 跨 PV 来源绑定 | Experimental | `evidence-access --lib native_cross_pv_binding`；`public-small/lvm-native` | 使用 MIT 许可的 lamlvm 原生镜像验证相同坐标上的不同 PV UUID 与重复 PV 来源拒绝 |
+| 集合摘要与事件分页 | Experimental | `app-services --test cluster_import_queries --test linux_evidence_events` | 集合归属、完整成员包含关系、清单摘要验证、稳定时间顺序、超过两千条事件的分页、不可读取成员的明确错误 |
+
+MD 目录与预览共用文件系统探测及打开入口。EXT4 已有公开端到端证明；
+分区后的 MD、MD 后 LVM、XFS、Btrfs 组合仍需要各自的原生公开验收。
+来源身份包含全部 RAW backing file/E01 segment 的路径、长度、修改时间、创建时间，
+以及原生 MD 元数据和成员关系；该元数据快照不充当原始证据内容摘要。
+派生源按输入身份保存独立 descriptor，通过处理阶段、generation 和发布凭据验证目录复用。
+旧 descriptor 格式需要重新导入。
+
 ## 5. 容器邮件解析器 (V3 计划)
 
 | 链路 | 平台 | 当前等级 | 已验证样本 | 对齐基准 | 字段承诺 | Medium Fixture | 备注 |

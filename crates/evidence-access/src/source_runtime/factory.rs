@@ -92,16 +92,23 @@ pub fn open_factory_with_cancel(
 
 fn mdraid_factory(path: &Path) -> io::Result<SharedReaderFactory> {
     let path = path.to_path_buf();
-    let template = crate::mdraid::open_persisted_mdraid_reader(&path).map_err(io::Error::other)?;
+    let descriptor_snapshot =
+        super::snapshot::SourceSnapshot::capture(std::slice::from_ref(&path))?;
+    let plan: crate::mdraid::MdRaidArrayPlan =
+        serde_json::from_slice(&std::fs::read(&path)?).map_err(io::Error::other)?;
+    let template = crate::mdraid::open_mdraid_reader(&plan).map_err(io::Error::other)?;
     let size = template.info().size;
-    let metadata_identity = format!("mdraid:{}", path.display());
+    let metadata_identity =
+        crate::mdraid::mdraid_array_fingerprint(&plan).map_err(io::Error::other)?;
     let route = super::resources::ResourceRoute::default();
-    let opener_path = path.clone();
+    let plan = Arc::new(plan);
+    let validation_plan = plan.clone();
     Ok(Arc::new(OpenFactory {
-        opener: move || {
-            crate::mdraid::open_persisted_mdraid_reader(&opener_path).map_err(io::Error::other)
-        },
-        validator: Box::new(move || std::fs::metadata(&path).map(|_| ())),
+        opener: move || crate::mdraid::open_mdraid_reader(&plan).map_err(io::Error::other),
+        validator: Box::new(move || {
+            descriptor_snapshot.validate()?;
+            validation_plan.source_snapshot.validate()
+        }),
         metadata_identity: Some(metadata_identity),
         size,
         granularity: 512,

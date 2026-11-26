@@ -66,3 +66,4 @@ tempfile.workspace = true
 sha2.workspace = true
 testing.workspace = true
 flate2.workspace = true
+ruzstd.workspace = true

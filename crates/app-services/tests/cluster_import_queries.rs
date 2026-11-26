@@ -225,6 +225,7 @@ fn summary_reads_persisted_mdraid_without_materializing_a_source() {
         raid_disks: 1,
         min_data_size_sectors: 16,
         capacity_mismatch: false,
+        source_snapshot: Default::default(),
         members: vec![MdRaidMemberPlan {
             superblock: MdRaidSuperblock {
                 metadata_version: fs_lvm::mdraid::MdRaidMetadataVersion::V1_2,
@@ -272,7 +273,10 @@ fn summary_reads_persisted_mdraid_without_materializing_a_source() {
         }],
     };
     let descriptor = write_mdraid_descriptor(temporary.path(), &plan).unwrap();
-    let source_id = DataSourceId("mdraid-07070707070707070707070707070707".into());
+    let fingerprint = evidence_access::mdraid::mdraid_array_fingerprint(&plan).unwrap();
+    let source_id = DataSourceId(format!(
+        "mdraid-07070707070707070707070707070707-{fingerprint}"
+    ));
     let source = DataSource {
         id: source_id.clone(),
         name: "MD RAID array".into(),
@@ -300,4 +304,122 @@ fn summary_reads_persisted_mdraid_without_materializing_a_source() {
         "07070707070707070707070707070707"
     );
     assert!(!app_services::source_db::source_db_path(temporary.path(), &source_id).exists());
+
+    let sibling = format!("{import_set_id}-other");
+    LinuxImportSetRepo::new(&conn)
+        .insert(&LinuxImportSetRecord {
+            id: sibling.clone(),
+            case_id: case.meta.id.0.clone(),
+            name: sibling.clone(),
+            root_path: "other".into(),
+            import_state: "ready".into(),
+            member_count: 1,
+            ready_count: 1,
+            failed_count: 0,
+            last_error: None,
+        })
+        .unwrap();
+    LinuxImportSetRepo::new(&conn)
+        .insert_member(&LinuxImportSetMemberRecord {
+            import_set_id: sibling.clone(),
+            member_index: 0,
+            source_path: "other.raw".into(),
+            source_kind: "raw".into(),
+            data_source_id: None,
+            import_state: "ready".into(),
+            last_error: None,
+        })
+        .unwrap();
+    use persistence_sqlite::repositories::linux_topology_scope_repo::{
+        LinuxTopologyScopeRecord, LinuxTopologyScopeRepo,
+    };
+    for set in [import_set_id, sibling.as_str()] {
+        for (prefix, kind, suffix) in [("pve", "pve", ""), ("os", "os_instance", ":0")] {
+            LinuxTopologyScopeRepo::new(&conn)
+                .insert(&LinuxTopologyScopeRecord {
+                    id: format!("scope:{prefix}:{set}{suffix}"),
+                    case_id: case.meta.id.0.clone(),
+                    scope_kind: kind.into(),
+                    name: set.into(),
+                    identity_state: "candidate".into(),
+                    identity_fingerprint: None,
+                    status: "partial".into(),
+                    evidence_completeness: "partial".into(),
+                    diagnostics_json: "[]".into(),
+                })
+                .unwrap();
+        }
+    }
+    let summary =
+        get_linux_evidence_set_summary(&conn, &case.case_root, &case.meta.id, import_set_id)
+            .unwrap();
+    assert_eq!(summary.scopes.len(), 2);
+    assert_eq!(summary.derived_sources.len(), 1);
+    let other =
+        get_linux_evidence_set_summary(&conn, &case.case_root, &case.meta.id, &sibling).unwrap();
+    assert_eq!(other.scopes.len(), 2);
+    assert!(other.derived_sources.is_empty());
+    assert!(other.mdraid_arrays.is_empty());
+    assert_eq!(other.capability_level, "metadata_only");
+
+    let mut outside = plan.clone();
+    outside.array_uuid = [9; 16];
+    let cluster_service::MdRaidMemberOrigin::Lvm { identity, .. } = &mut outside.members[0].origin
+    else {
+        panic!("expected logical volume origin")
+    };
+    identity.pv_sources.push(LvmPhysicalVolumeSource {
+        source_path: "other.raw".into(),
+        source_kind: Some(DataSourceKind::Raw),
+        offset: 0,
+        pv_uuid: "pv-other".into(),
+        pv_name: None,
+    });
+    let other_source = DataSource {
+        id: DataSourceId("cross-set-array".into()),
+        source_path: write_mdraid_descriptor(temporary.path(), &outside).unwrap(),
+        ..source.clone()
+    };
+    let mut other_storage =
+        DataSourceStorage::source_db(&other_source.id.0, Some("linux"), Some("mdraid".into()));
+    other_storage.import_state = "ready".into();
+    DataSourceRepo::new(&conn)
+        .insert_with_storage(&case.meta.id, &other_source, &other_storage)
+        .unwrap();
+    let summary =
+        get_linux_evidence_set_summary(&conn, &case.case_root, &case.meta.id, import_set_id)
+            .unwrap();
+    assert_eq!(summary.derived_sources.len(), 1);
+    assert_eq!(summary.mdraid_arrays.len(), 1);
+    assert_eq!(summary.capability_level, "metadata_only");
+}
+
+#[test]
+fn summary_rejects_manifest_contents_with_an_unchanged_digest() {
+    let temporary = tempfile::tempdir().unwrap();
+    let case = case_service::create_case(temporary.path(), "Manifest verification", None).unwrap();
+    let root = temporary.path().join("evidence");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("member-a.raw"), [0; 512]).unwrap();
+    std::fs::write(root.join("member-b.raw"), [0; 512]).unwrap();
+    let plan = cluster_service::plan_linux_evidence_set_import(&root, None).unwrap();
+    let conn = case.connection().unwrap();
+    cluster_service::register_linux_evidence_set_import(&conn, &case.meta.id, &plan).unwrap();
+    let manifest =
+        cluster_service::write_linux_evidence_set_manifest(&case.case_root, &plan).unwrap();
+    let summary =
+        get_linux_evidence_set_summary(&conn, &case.case_root, &case.meta.id, &plan.import_set_id)
+            .unwrap();
+    assert!(summary.manifest_digest.is_some());
+    let mut document: Value = serde_json::from_slice(&std::fs::read(&manifest).unwrap()).unwrap();
+    document["members"][0]["sourceSizeBytes"] = 7.into();
+    std::fs::write(&manifest, serde_json::to_vec(&document).unwrap()).unwrap();
+    let summary =
+        get_linux_evidence_set_summary(&conn, &case.case_root, &case.meta.id, &plan.import_set_id)
+            .unwrap();
+    assert!(summary.manifest_digest.is_none());
+    assert!(summary
+        .diagnostics
+        .iter()
+        .any(|value| value.contains("manifest is missing or invalid")));
 }

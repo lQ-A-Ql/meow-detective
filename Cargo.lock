@@ -2163,6 +2163,7 @@ dependencies = [
  "rayon",
  "riff",
  "rusqlite",
+ "ruzstd",
  "search",
  "serde",
  "serde_json",

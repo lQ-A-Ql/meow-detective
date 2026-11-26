@@ -26,6 +26,7 @@ build() {
     metadata=$3
     count=$4
     layout=$5
+    filesystem=${6:-}
     folder="$root/$name"
     mkdir -p "$folder"
     for ((index=0; index<count; index++)); do
@@ -41,6 +42,9 @@ build() {
     if [[ -n "$layout" ]]; then
         options+=(--layout="$layout")
     fi
+    if [[ "$metadata" == 0.90 ]]; then
+        options+=(--uuid=f87ce10e:9dbe4038:a0fc30d3:7420593a)
+    fi
     mdadm --create "$array" --run --assume-clean --force \
         --homehost=forensic-fixture --name="$name" \
         --metadata="$metadata" --level="$level" --raid-devices="$count" \
@@ -49,6 +53,13 @@ build() {
     dd if="$root/payload.bin" of="$array" bs=64K conv=fsync status=none
     dd if="$array" of="$folder/oracle.bin" bs=64K count=4 status=none
     cmp "$root/payload.bin" "$folder/oracle.bin"
+    if [[ "$filesystem" == ext4 ]]; then
+        mkdir -p "$folder/root"
+        cp "$root/payload.bin" "$folder/root/evidence.bin"
+        mke2fs -q -F -t ext4 -d "$folder/root" "$array"
+        debugfs -R 'cat /evidence.bin' "$array" > "$folder/file-oracle.bin"
+        cmp "$root/payload.bin" "$folder/file-oracle.bin"
+    fi
     mdadm --detail "$array" > "$folder/detail.txt"
     cleanup
     for ((index=0; index<count; index++)); do
@@ -64,3 +75,4 @@ build raid6-v12 6 1.2 4 parity-last
 build raid10-v12 10 1.2 4 n2
 build linear-v12 linear 1.2 2 ""
 build raid5-v090 5 0.90 3 left-symmetric
+build raid0-ext4 0 1.2 2 "" ext4

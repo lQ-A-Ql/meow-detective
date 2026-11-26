@@ -126,6 +126,7 @@ fs-f2fs = { path = "crates/fs-f2fs" }
 fs-erofs = { path = "crates/fs-erofs" }
 fs-btrfs = { path = "crates/fs-btrfs" }
 rust-fs-btrfs = "=0.10.2"
+ruzstd = "=0.9.1"
 rust-fs-core = "=0.3.14"
 fs-xfs = { path = "crates/fs-xfs" }
 fs-lvm = { path = "crates/fs-lvm" }

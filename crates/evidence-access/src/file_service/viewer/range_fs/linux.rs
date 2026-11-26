@@ -13,7 +13,7 @@ use crate::file_service::{
 
 use super::{
     common::{read_descriptor_range, read_entry_range, record_failure, ReaderFactory},
-    factory::open_filesystem_reader,
+    open_filesystem_reader,
 };
 
 pub(crate) fn try_read_linux_image_range_for_descriptor(

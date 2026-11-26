@@ -13,30 +13,27 @@ use super::lvm::open_lvm_logical_volume_reader;
 pub(crate) fn open_mdraid_file(
     source_path: &str,
     entry: &FileEntry,
+    partition_index: Option<usize>,
 ) -> Result<Box<dyn Read>, FileServiceError> {
-    let reader =
-        crate::mdraid::open_persisted_mdraid_reader(Path::new(source_path)).map_err(|error| {
-            FileServiceError::other(format!("Failed to open MD RAID source: {error}"))
-        })?;
-    let filesystem = fs_btrfs::BtrfsReader::open(Box::new(reader) as Box<dyn EvidenceReader>, 0)
-        .map_err(FileServiceError::Io)?;
-    filesystem
-        .open_file(&entry.path)
+    let filesystem = crate::mdraid::open_mdraid_partition(Path::new(source_path), partition_index)?;
+    let size = entry
+        .size
+        .ok_or_else(|| FileServiceError::other("MD file size is missing"))?;
+    crate::file_service::open_filesystem_range_file(filesystem, entry.path.clone(), size)
+        .map(|reader| reader as Box<dyn Read>)
         .map_err(FileServiceError::Io)
 }
 
 pub(crate) fn open_mdraid_file_seekable(
     source_path: &str,
     entry: &FileEntry,
+    partition_index: Option<usize>,
 ) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
-    let reader =
-        crate::mdraid::open_persisted_mdraid_reader(Path::new(source_path)).map_err(|error| {
-            FileServiceError::other(format!("Failed to open MD RAID source: {error}"))
-        })?;
-    let filesystem = fs_btrfs::BtrfsReader::open(Box::new(reader) as Box<dyn EvidenceReader>, 0)
-        .map_err(FileServiceError::Io)?;
-    filesystem
-        .open_file_seekable(&entry.path)
+    let filesystem = crate::mdraid::open_mdraid_partition(Path::new(source_path), partition_index)?;
+    let size = entry
+        .size
+        .ok_or_else(|| FileServiceError::other("MD file size is missing"))?;
+    crate::file_service::open_filesystem_range_file(filesystem, entry.path.clone(), size)
         .map_err(FileServiceError::Io)
 }
 

@@ -1,16 +1,12 @@
 use evidence_core::FileSystemReader;
 
-use crate::file_service::{
-    viewer::{looks_like_exfat_boot_sector, PreviewPartitionCandidate},
-    FileServiceError,
-};
+use crate::file_service::{viewer::looks_like_exfat_boot_sector, FileServiceError};
 
-pub(crate) fn open_filesystem_reader(
-    candidate: &PreviewPartitionCandidate,
+pub fn open_block_filesystem(
+    kind: &str,
     reader: Box<dyn evidence_core::EvidenceReader>,
     filesystem_offset: u64,
 ) -> Result<Box<dyn FileSystemReader + Send>, FileServiceError> {
-    let kind = candidate.filesystem_kind.as_str();
     let filesystem = match kind {
         kind if kind.eq_ignore_ascii_case("NTFS") => {
             fs_ntfs::NtfsReader::open(reader, filesystem_offset)

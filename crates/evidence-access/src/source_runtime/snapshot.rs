@@ -2,14 +2,14 @@
 use sha2::{Digest, Sha256};
 use std::{io, path::PathBuf, time::SystemTime};
 
-#[derive(Clone)]
-pub(super) struct SourceSnapshot(Vec<(PathBuf, u64, SystemTime, Option<SystemTime>)>);
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct SourceSnapshot(Vec<(PathBuf, u64, SystemTime, Option<SystemTime>)>);
 impl SourceSnapshot {
     pub(super) fn metadata_bytes(&self) -> u64 {
         (self.0.capacity() * std::mem::size_of::<(PathBuf, u64, SystemTime, Option<SystemTime>)>()
             + self.0.iter().map(|e| e.0.capacity()).sum::<usize>()) as u64
     }
-    pub(super) fn metadata_identity(&self) -> String {
+    pub fn metadata_identity(&self) -> String {
         let mut digest = Sha256::new();
         for (path, length, modified, created) in &self.0 {
             let path = path.as_os_str().as_encoded_bytes();
@@ -24,7 +24,7 @@ impl SourceSnapshot {
         }
         format!("metadata-v1:{}", hex::encode(digest.finalize()))
     }
-    pub(super) fn capture(paths: &[PathBuf]) -> io::Result<Self> {
+    pub fn capture(paths: &[PathBuf]) -> io::Result<Self> {
         paths
             .iter()
             .map(|path| {
@@ -39,7 +39,7 @@ impl SourceSnapshot {
             .collect::<io::Result<Vec<_>>>()
             .map(Self)
     }
-    pub(super) fn validate(&self) -> io::Result<()> {
+    pub fn validate(&self) -> io::Result<()> {
         for (path, length, modified, created) in &self.0 {
             let metadata = std::fs::metadata(path)?;
             if metadata.len() != *length
@@ -53,6 +53,10 @@ impl SourceSnapshot {
             }
         }
         Ok(())
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 }
 

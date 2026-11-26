@@ -1,23 +1,13 @@
 use super::{MdRaidArrayPlan, MdRaidMemberOrigin, MdRaidMemberPlan, MdRaidPlanError};
 use crate::datasource_service::{self, LvmPhysicalVolumeSource};
+use crate::source_runtime::snapshot::SourceSnapshot;
 use domain::DataSourceKind;
 use std::collections::BTreeMap;
-use std::hash::{Hash, Hasher};
-use std::io::SeekFrom;
-use std::sync::{Mutex, OnceLock};
 
 /// One physical member of a Linux evidence set, as needed for MD RAID discovery.
 pub struct MdRaidDiscoveryMember<'a> {
     pub source_path: &'a std::path::Path,
     pub source_kind: &'a DataSourceKind,
-}
-
-type Cache = BTreeMap<String, CacheEntry>;
-
-#[derive(Clone)]
-struct CacheEntry {
-    fingerprint: u64,
-    arrays: Vec<MdRaidArrayPlan>,
 }
 
 struct PvEvidence {
@@ -26,45 +16,8 @@ struct PvEvidence {
     volume_group: fs_lvm::VolumeGroup,
 }
 
-static CACHE: OnceLock<Mutex<Cache>> = OnceLock::new();
-
 pub fn discover_linux_evidence_set_mdraid(
-    root_path: &std::path::Path,
-    members: &[MdRaidDiscoveryMember<'_>],
-) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
-    let cache_key = root_path.to_string_lossy().to_string();
-    let fingerprint = plan_fingerprint(members);
-    let cache = CACHE.get_or_init(|| Mutex::new(BTreeMap::new()));
-    {
-        let guard = cache.lock().map_err(|_| {
-            MdRaidPlanError::Io(std::io::Error::other("MD RAID cache lock poisoned"))
-        })?;
-        if let Some(entry) = guard.get(&cache_key) {
-            if entry.fingerprint == fingerprint {
-                return Ok(entry.arrays.clone());
-            }
-        }
-    }
-    let arrays = discover_uncached(members)?;
-    let mut guard = cache
-        .lock()
-        .map_err(|_| MdRaidPlanError::Io(std::io::Error::other("MD RAID cache lock poisoned")))?;
-    if guard.len() >= 8 {
-        if let Some(first) = guard.keys().next().cloned() {
-            guard.remove(&first);
-        }
-    }
-    guard.insert(
-        cache_key,
-        CacheEntry {
-            fingerprint,
-            arrays: arrays.clone(),
-        },
-    );
-    Ok(arrays)
-}
-
-fn discover_uncached(
+    _root_path: &std::path::Path,
     members: &[MdRaidDiscoveryMember<'_>],
 ) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
     let mut arrays = BTreeMap::new();
@@ -76,8 +29,8 @@ fn discover_uncached(
     }
     merge_lvm_arrays(members, &mut arrays)?;
     let mut plans = arrays.into_values().collect::<Vec<_>>();
-    plans.retain(|plan| plan.members.len() <= plan.raid_disks as usize);
     for array in &mut plans {
+        array.source_snapshot = capture_array_sources(array)?;
         array
             .members
             .sort_by_key(|member| member.superblock.slot_index());
@@ -93,6 +46,58 @@ fn discover_uncached(
             .any(|member| member.superblock.data_size_sectors != array.min_data_size_sectors);
     }
     Ok(plans)
+}
+
+pub(super) fn capture_array_sources(
+    plan: &MdRaidArrayPlan,
+) -> Result<SourceSnapshot, MdRaidPlanError> {
+    let mut paths = BTreeMap::new();
+    for member in &plan.members {
+        match &member.origin {
+            MdRaidMemberOrigin::Direct {
+                source_path,
+                source_kind,
+                ..
+            } => {
+                paths.insert(source_path.clone(), source_kind.clone());
+            }
+            MdRaidMemberOrigin::Lvm { identity, .. } => {
+                for source in &identity.pv_sources {
+                    let kind = source.source_kind.clone().ok_or_else(|| {
+                        std::io::Error::other("LVM physical volume source kind is missing")
+                    })?;
+                    paths.insert(source.source_path.clone(), kind);
+                }
+            }
+        }
+    }
+    let mut backing_paths = std::collections::BTreeSet::new();
+    for (source_path, kind) in paths {
+        let path = std::path::Path::new(&source_path);
+        match kind {
+            DataSourceKind::E01 => backing_paths.extend(
+                image_e01::E01Reader::open(path)?
+                    .open_plan()?
+                    .segment_paths(),
+            ),
+            DataSourceKind::Raw => backing_paths.extend(
+                evidence_core::RawImageReader::open(path)?
+                    .backing_paths()
+                    .iter()
+                    .cloned(),
+            ),
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "MD RAID requires immutable RAW or E01 sources",
+                )
+                .into())
+            }
+        }
+    }
+    Ok(SourceSnapshot::capture(
+        &backing_paths.into_iter().collect::<Vec<_>>(),
+    )?)
 }
 
 fn merge_lvm_arrays(
@@ -111,14 +116,13 @@ fn merge_lvm_arrays(
         let Some(pool) = open_complete_pool(&evidence)? else {
             continue;
         };
-        let sources = pool_sources(&evidence, &pool);
-        for (index, volume) in pool.list_volumes().iter().enumerate() {
+        let sources = pool_sources(&evidence, &pool)?;
+        for (index, volume) in pool.list_readable_volumes() {
             let mut reader = pool.open_volume_reader(index)?;
             let size = evidence_core::EvidenceReader::info(&*reader).size;
             let Some(superblock) =
                 fs_lvm::mdraid::probe_superblock(&mut *reader, size).map(|probe| probe.superblock)
             else {
-                log_probe(&mut *reader, size, &volume.name);
                 continue;
             };
             let identity = datasource_service::LvmLogicalVolumeIdentity {
@@ -248,18 +252,12 @@ fn inspect_pv(
     offset: u64,
 ) -> Result<Option<PvEvidence>, MdRaidPlanError> {
     let label = fs_lvm::label::parse_pv_label(reader, offset)?;
-    let mut best = None;
-    for area in &label.metadata_areas {
-        if let Ok(volume_group) = fs_lvm::metadata::parse_metadata(reader, area, offset) {
-            let newer = best
-                .as_ref()
-                .is_none_or(|current: &fs_lvm::VolumeGroup| volume_group.seqno > current.seqno);
-            if newer {
-                best = Some(volume_group);
-            }
-        }
+    if label.metadata_areas.is_empty() {
+        return Ok(None);
     }
-    Ok(best.map(|volume_group| PvEvidence {
+    let volume_group =
+        fs_lvm::metadata::parse_metadata_from_regions(reader, &label.metadata_areas, offset)?;
+    Ok(Some(PvEvidence {
         source: LvmPhysicalVolumeSource {
             source_path: source_path.to_string_lossy().into_owned(),
             source_kind: Some(source_kind.clone()),
@@ -273,43 +271,67 @@ fn inspect_pv(
 }
 
 fn open_complete_pool(evidence: &[PvEvidence]) -> Result<Option<fs_lvm::LvmPool>, MdRaidPlanError> {
-    let Some(volume_group) = evidence.first().map(|item| &item.volume_group) else {
+    let Some(volume_group) = evidence
+        .iter()
+        .max_by_key(|item| item.volume_group.seqno)
+        .map(|item| &item.volume_group)
+    else {
         return Ok(None);
     };
     let mut readers = Vec::new();
     let mut offsets = Vec::new();
     for pv in &volume_group.physical_volumes {
-        let Some(found) = evidence
+        let matching = evidence
             .iter()
-            .find(|item| same_uuid(&item.label.pv_uuid, &pv.uuid))
-        else {
+            .filter(|item| same_uuid(&item.label.pv_uuid, &pv.uuid))
+            .collect::<Vec<_>>();
+        let Some(found) = matching.first() else {
             return Ok(None);
         };
+        if matching.len() != 1 {
+            return Err(fs_lvm::LvmError::MetadataParseError {
+                line: 0,
+                message: format!("multiple sources claim physical volume {}", pv.name),
+            }
+            .into());
+        }
         readers.push(datasource_service::open_evidence_reader(
             std::path::Path::new(&found.source.source_path),
             found
                 .source
                 .source_kind
                 .as_ref()
-                .unwrap_or(&DataSourceKind::E01),
+                .ok_or_else(|| std::io::Error::other("physical volume source kind is missing"))?,
         )?);
         offsets.push(found.source.offset);
     }
     Ok(Some(fs_lvm::LvmPool::discover(readers, offsets)?))
 }
 
-fn pool_sources(evidence: &[PvEvidence], pool: &fs_lvm::LvmPool) -> Vec<LvmPhysicalVolumeSource> {
+fn pool_sources(
+    evidence: &[PvEvidence],
+    pool: &fs_lvm::LvmPool,
+) -> Result<Vec<LvmPhysicalVolumeSource>, MdRaidPlanError> {
     pool.physical_volume_offsets()
         .iter()
-        .filter_map(|(name, offset)| {
-            evidence
+        .map(|(name, offset)| {
+            let pv = pool
+                .volume_group()
+                .physical_volumes
                 .iter()
-                .find(|item| item.source.offset == *offset)
-                .map(|item| {
-                    let mut source = item.source.clone();
-                    source.pv_name = Some(name.clone());
-                    source
+                .find(|pv| pv.name == *name)
+                .ok_or_else(|| std::io::Error::other("physical volume metadata is missing"))?;
+            let item = evidence
+                .iter()
+                .find(|item| {
+                    item.source.offset == *offset && same_uuid(&item.label.pv_uuid, &pv.uuid)
                 })
+                .ok_or_else(|| {
+                    std::io::Error::other("physical volume source binding is missing")
+                })?;
+            let mut source = item.source.clone();
+            source.pv_name = Some(name.clone());
+            Ok(source)
         })
         .collect()
 }
@@ -334,6 +356,7 @@ fn insert_member(
         raid_disks: member.superblock.raid_disks,
         min_data_size_sectors: member.superblock.data_size_sectors,
         capacity_mismatch: false,
+        source_snapshot: SourceSnapshot::default(),
         members: Vec::new(),
     });
     if let Some(index) = plan
@@ -342,10 +365,7 @@ fn insert_member(
         .position(|known| known.superblock.slot_index() == Some(slot))
     {
         let known = &plan.members[index];
-        if known.superblock.device_uuid == member.superblock.device_uuid {
-            if member.superblock.events > known.superblock.events {
-                plan.members[index] = member;
-            }
+        if known == &member {
             return Ok(());
         }
         return Err(MdRaidPlanError::MdRaid(
@@ -382,55 +402,6 @@ fn same_uuid(left: &str, right: &str) -> bool {
             .filter(|character| *character != '-'))
 }
 
-fn plan_fingerprint(members: &[MdRaidDiscoveryMember<'_>]) -> u64 {
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    for member in members {
-        member.source_path.hash(&mut hasher);
-        member.source_kind.to_string().hash(&mut hasher);
-        if let Ok(metadata) = std::fs::metadata(member.source_path) {
-            metadata.len().hash(&mut hasher);
-            metadata
-                .modified()
-                .ok()
-                .and_then(|value| value.duration_since(std::time::UNIX_EPOCH).ok())
-                .hash(&mut hasher);
-        }
-    }
-    hasher.finish()
-}
-
-fn log_probe(reader: &mut dyn evidence_core::EvidenceReader, size: u64, volume_name: &str) {
-    let sectors = size / 512;
-    for (offset, version) in [
-        (4096u64, fs_lvm::mdraid::MdRaidMetadataVersion::V1_2),
-        (0u64, fs_lvm::mdraid::MdRaidMetadataVersion::V1_1),
-        (
-            (sectors.saturating_sub(16) & !7) * 512,
-            fs_lvm::mdraid::MdRaidMetadataVersion::V1_0,
-        ),
-    ] {
-        let mut bytes = [0u8; 4096];
-        let parsed = reader
-            .seek(SeekFrom::Start(offset))
-            .and_then(|_| reader.read_exact(&mut bytes))
-            .map_err(|error| error.to_string())
-            .and_then(|_| {
-                fs_lvm::mdraid::parse_superblock_version(&bytes, version)
-                    .map_err(|error| error.to_string())
-            });
-        tracing::debug!(
-            volume = volume_name,
-            offset,
-            ?version,
-            result = ?parsed.map(|superblock| (
-                superblock.name,
-                superblock.level,
-                superblock.dev_number,
-                superblock.events,
-                superblock.super_offset_sectors,
-                superblock.checksum_valid,
-            )),
-            "MD RAID superblock probe candidate"
-        );
-    }
-}
+#[cfg(test)]
+#[path = "../../tests/unit/mdraid_discovery.rs"]
+mod tests;

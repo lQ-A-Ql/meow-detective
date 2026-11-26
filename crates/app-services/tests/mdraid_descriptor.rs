@@ -52,6 +52,7 @@ fn plan() -> MdRaidArrayPlan {
         raid_disks: 1,
         min_data_size_sectors: 16,
         capacity_mismatch: false,
+        source_snapshot: Default::default(),
         members: vec![MdRaidMemberPlan {
             superblock,
             origin: app_services::cluster_service::MdRaidMemberOrigin::Lvm {
@@ -70,7 +71,14 @@ fn persists_mdraid_descriptor_under_case_derived_storage() {
     let case_root = tempfile::tempdir().expect("case root");
     let plan = plan();
     let path = write_mdraid_descriptor(case_root.path(), &plan).expect("write descriptor");
-    assert_eq!(path, mdraid_descriptor_path(case_root.path(), &[7; 16]));
+    assert_eq!(
+        path,
+        mdraid_descriptor_path(
+            case_root.path(),
+            &[7; 16],
+            &evidence_access::mdraid::mdraid_array_fingerprint(&plan).unwrap()
+        )
+    );
     let stored: MdRaidArrayPlan =
         serde_json::from_slice(&std::fs::read(&path).expect("descriptor payload"))
             .expect("descriptor JSON");

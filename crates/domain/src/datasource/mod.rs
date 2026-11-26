@@ -24,7 +24,7 @@ pub enum DataSourceKind {
     CephRbd,
     /// A reconstructed CephFS namespace backed by a cluster source set.
     CephFs,
-    /// A persisted read-only Linux MD RAID0 array descriptor.
+    /// A persisted read-only Linux MD array descriptor bound to its member inputs.
     MdRaid,
     /// A fixed VHD payload read from a registered parent file.
     NestedRange,

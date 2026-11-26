@@ -155,7 +155,11 @@ pub(crate) fn open_file_content_for_entry(
                 open_raw_file(&source_path, entry, partition_index)
             }
         }
-        "md_raid" => open_mdraid_file(&source_path, entry),
+        "md_raid" => open_mdraid_file(
+            &source_path,
+            entry,
+            resolve_partition_index_for_entry(repo, entry)?,
+        ),
         other => unsupported_source(other),
     }
 }
@@ -192,9 +196,12 @@ pub(crate) fn open_range_content_for_entry(
                     .map(RangeContentReader::Streaming)
             }
         }
-        "md_raid" => {
-            open_mdraid_file_seekable(&source_path, entry).map(RangeContentReader::Seekable)
-        }
+        "md_raid" => open_mdraid_file_seekable(
+            &source_path,
+            entry,
+            resolve_partition_index_for_entry(repo, entry)?,
+        )
+        .map(RangeContentReader::Seekable),
         other => unsupported_source(other),
     }
 }
@@ -217,5 +224,6 @@ fn open_mdraid_descriptor_file(
     descriptor: &PreviewDescriptor,
 ) -> Result<RangeContentReader, FileServiceError> {
     let entry = crate::file_service::viewer::descriptor_file_entry(descriptor);
-    open_mdraid_file_seekable(&descriptor.source_path, &entry).map(RangeContentReader::Seekable)
+    open_mdraid_file_seekable(&descriptor.source_path, &entry, descriptor.partition_index)
+        .map(RangeContentReader::Seekable)
 }

@@ -70,7 +70,7 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         )
         .expect("read persisted partition metadata");
     assert_eq!(partitions.records.len(), 1);
-    assert_eq!(partitions.records[0].partition_index, 0);
+    assert_eq!(partitions.records[0].partition_index, 1);
     assert_eq!(partitions.records[0].filesystem.as_deref(), Some("Btrfs"));
     assert!(native
         .partition_projection_complete(&snapshot, &source.id.0)
@@ -91,7 +91,7 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         "case tree should expose the MD RAID source"
     );
     let entry = FileRepo::new(&source_conn)
-        .find_by_partition_and_path(&source.id, 0, "@rootfs/etc/passwd")
+        .find_by_partition_and_path(&source.id, 1, "@rootfs/etc/passwd")
         .expect("look up passwd")
         .expect("passwd entry");
     let header_cache = app_services::file_service::FileHeaderReadCache::new(case_id.0.clone());

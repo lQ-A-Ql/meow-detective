@@ -1,5 +1,6 @@
 //! File browsing, metadata routing, preview, and extraction services.
 
+mod block_filesystem;
 mod browse;
 mod catalog_browse;
 mod cephfs_adapter;
@@ -11,6 +12,7 @@ mod error;
 mod extraction;
 mod file_graph;
 pub mod filesystem_locators;
+mod filesystem_range;
 mod fjall_read;
 pub use fjall_read::record_to_domain;
 mod linux_root_mounts;
@@ -23,6 +25,7 @@ mod source_read;
 mod viewer;
 mod visibility;
 
+pub use block_filesystem::open_block_filesystem;
 pub use browse::{
     get_file_children_lazy, get_file_children_lazy_with_visibility, get_file_jump_context,
     get_file_rows_for_request, get_file_tree_real, get_file_tree_real_with_visibility,
@@ -47,6 +50,7 @@ pub use extraction::{
     FileExtractionProgressPhase, FileExtractionProgressUpdate,
 };
 pub use file_graph::populate_file_graph_for_data_source;
+pub use filesystem_range::open_filesystem_range_file;
 pub use metadata::preview_sessions::{
     close_preview_session_for_case, invalidate_preview_source, open_preview_session_for_case,
     open_preview_session_for_case_with_bitlocker, preview_session_file_id,
@@ -72,7 +76,9 @@ pub use metadata::source_routing::{
     read_file_range_for_source_case, read_preview_bytes_for_source_case,
     text_preview_for_source_case,
 };
-pub use parallel_enumeration::enumerate_filesystem_parallel_with_factory;
+pub use parallel_enumeration::{
+    enumerate_filesystem_parallel_with_factory, enumerate_partition_parallel_with_factory,
+};
 pub use partition_roots::partition_placeholder_status;
 pub use partition_roots::{
     insert_partition_placeholder_root, remove_partition_placeholder_root,

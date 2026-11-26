@@ -1,12 +1,16 @@
 use domain::DataSourceKind;
 use fs_lvm::mdraid::MdRaidSuperblock;
+use sha2::Digest;
 use thiserror::Error;
 
 use crate::datasource_service::{self, LvmLogicalVolumeIdentity};
 
 mod discovery;
+mod filesystem;
 
 pub use discovery::{discover_linux_evidence_set_mdraid, MdRaidDiscoveryMember};
+pub(crate) use filesystem::open_mdraid_partition;
+pub use filesystem::{open_mdraid_filesystem, probe_mdraid_filesystems};
 
 #[derive(Debug, Error)]
 pub enum MdRaidPlanError {
@@ -20,6 +24,16 @@ pub enum MdRaidPlanError {
     MdRaid(#[from] fs_lvm::mdraid::MdRaidError),
     #[error("MD RAID descriptor serialization failed: {0}")]
     Json(#[from] serde_json::Error),
+    #[error("MD RAID catalog database operation failed: {0}")]
+    Database(#[from] persistence_sqlite::DbError),
+    #[error("MD RAID catalog storage operation failed: {0}")]
+    Storage(#[from] persistence_source::runtime::StorageRuntimeError),
+    #[error("MD RAID catalog generation failed: {0}")]
+    Generation(#[from] persistence_source::fjall::FjallStorageError),
+    #[error("MD RAID catalog build is already active")]
+    Busy,
+    #[error("MD RAID catalog publication is inconsistent")]
+    InvalidPublication,
     #[error("MD RAID catalog materialization cancelled")]
     Cancelled,
 }
@@ -27,12 +41,22 @@ pub enum MdRaidPlanError {
 impl transport::ServiceErrorCategory for MdRaidPlanError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::Io(_) | Self::Lvm(_) => transport::ErrorCategory::Io,
+            Self::Io(_) | Self::Lvm(_) | Self::Database(_) | Self::Storage(_) => {
+                transport::ErrorCategory::Io
+            }
             Self::MdRaid(_) => transport::ErrorCategory::Unsupported,
             Self::Classification(error) => error.category(),
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::Cancelled => transport::ErrorCategory::Cancelled,
+            Self::Generation(_) | Self::InvalidPublication => transport::ErrorCategory::Parser,
+            Self::Busy => transport::ErrorCategory::Validation,
         }
+    }
+}
+
+impl From<rusqlite::Error> for MdRaidPlanError {
+    fn from(error: rusqlite::Error) -> Self {
+        Self::Database(error.into())
     }
 }
 
@@ -107,21 +131,61 @@ pub struct MdRaidArrayPlan {
     pub raid_disks: u32,
     pub min_data_size_sectors: u64,
     pub capacity_mismatch: bool,
+    pub source_snapshot: crate::source_runtime::snapshot::SourceSnapshot,
     pub members: Vec<MdRaidMemberPlan>,
 }
 
 pub fn open_mdraid_reader(
     plan: &MdRaidArrayPlan,
 ) -> Result<fs_lvm::mdraid::MdRaidReader, MdRaidPlanError> {
+    validate_plan_shape(plan)?;
+    validate_source_snapshot(plan)?;
     let mut members = Vec::with_capacity(plan.members.len());
     for member in &plan.members {
-        let reader = open_member_reader(&member.origin)?;
+        let mut reader = open_member_reader(&member.origin)?;
+        let size = reader.info().size;
+        let current = fs_lvm::mdraid::probe_superblock(&mut *reader, size)
+            .ok_or_else(|| {
+                fs_lvm::mdraid::MdRaidError::MetadataConflict(
+                    "member metadata is no longer readable".to_string(),
+                )
+            })?
+            .superblock;
+        if current != member.superblock {
+            return Err(fs_lvm::mdraid::MdRaidError::MetadataConflict(
+                "member metadata changed since the read plan was created".to_string(),
+            )
+            .into());
+        }
         members.push(fs_lvm::mdraid::MdRaidMember::new(
             member.superblock.clone(),
             reader,
         ));
     }
     Ok(fs_lvm::mdraid::MdRaidReader::open(members)?)
+}
+
+fn validate_source_snapshot(plan: &MdRaidArrayPlan) -> Result<(), MdRaidPlanError> {
+    if plan.source_snapshot.is_empty() {
+        return Err(fs_lvm::mdraid::MdRaidError::MetadataConflict(
+            "MD RAID source snapshot is missing".to_string(),
+        )
+        .into());
+    }
+    plan.source_snapshot.validate()?;
+    if discovery::capture_array_sources(plan)? != plan.source_snapshot {
+        return Err(fs_lvm::mdraid::MdRaidError::MetadataConflict(
+            "MD RAID backing source identity changed since discovery".to_string(),
+        )
+        .into());
+    }
+    Ok(())
+}
+
+pub fn mdraid_array_fingerprint(plan: &MdRaidArrayPlan) -> Result<String, MdRaidPlanError> {
+    validate_plan_shape(plan)?;
+    let serialized = serde_json::to_vec(plan)?;
+    Ok(hex::encode(sha2::Sha256::digest(serialized)))
 }
 
 fn open_member_reader(
@@ -153,13 +217,16 @@ fn open_member_reader(
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())?;
+            if identity.vg_uuid.is_empty() || pool.volume_group().id != identity.vg_uuid {
+                return Err(fs_lvm::mdraid::MdRaidError::MetadataConflict(
+                    "logical volume group identity does not match the read plan".to_string(),
+                )
+                .into());
+            }
             let volumes = pool.list_volumes();
             let index = volumes
                 .iter()
-                .position(|volume| {
-                    (!lv_uuid.is_empty() && volume.uuid == *lv_uuid)
-                        || (lv_uuid.is_empty() && volume.name == *lv_name)
-                })
+                .position(|volume| !lv_uuid.is_empty() && volume.uuid == *lv_uuid)
                 .ok_or_else(|| {
                     MdRaidPlanError::Classification(datasource_service::DataSourceError::Evidence(
                         format!("LVM logical volume '{lv_name}' was not found"),
@@ -189,11 +256,12 @@ fn open_member_reader(
 pub fn mdraid_descriptor_path(
     case_root: &std::path::Path,
     array_uuid: &[u8; 16],
+    fingerprint: &str,
 ) -> std::path::PathBuf {
     case_root
         .join("derived")
         .join("mdraid")
-        .join(format!("{}.json", hex::encode(array_uuid)))
+        .join(format!("{}-{fingerprint}.json", hex::encode(array_uuid)))
 }
 
 pub fn write_mdraid_descriptor(
@@ -201,18 +269,30 @@ pub fn write_mdraid_descriptor(
     plan: &MdRaidArrayPlan,
 ) -> Result<std::path::PathBuf, MdRaidPlanError> {
     validate_plan_shape(plan)?;
-    let path = mdraid_descriptor_path(case_root, &plan.array_uuid);
-    let parent = path
+    let fingerprint = mdraid_array_fingerprint(plan)?;
+    let target = mdraid_descriptor_path(case_root, &plan.array_uuid, &fingerprint);
+    let parent = target
         .parent()
         .ok_or_else(|| std::io::Error::other("MD RAID descriptor has no parent"))?;
     std::fs::create_dir_all(parent)?;
-    let temporary = path.with_extension("json.tmp");
-    std::fs::write(&temporary, serde_json::to_vec_pretty(plan)?)?;
-    if let Err(error) = std::fs::rename(&temporary, &path) {
-        let _ = std::fs::remove_file(&temporary);
-        return Err(error.into());
+    let payload = serde_json::to_vec_pretty(plan)?;
+    if target.exists() {
+        if std::fs::read(&target)? != payload {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "MD RAID descriptor identity conflicts with its contents",
+            )
+            .into());
+        }
+        return Ok(target);
     }
-    Ok(path)
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    std::io::Write::write_all(&mut temporary, &payload)?;
+    temporary.as_file().sync_all()?;
+    temporary
+        .persist_noclobber(&target)
+        .map_err(|error| error.error)?;
+    Ok(target)
 }
 
 pub fn open_persisted_mdraid_reader(

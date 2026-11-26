@@ -31,7 +31,7 @@ pub fn parse_metadata<R: Read + Seek + ?Sized>(
     }
 }
 
-pub(crate) fn parse_metadata_from_regions<R: Read + Seek + ?Sized>(
+pub fn parse_metadata_from_regions<R: Read + Seek + ?Sized>(
     reader: &mut R,
     mda_regions: &[DataRegion],
     pv_offset: u64,

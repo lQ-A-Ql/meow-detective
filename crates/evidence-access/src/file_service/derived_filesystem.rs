@@ -46,18 +46,5 @@ pub(super) fn open_derived_filesystem(
         )
     };
 
-    match candidate.filesystem_kind.to_ascii_lowercase().as_str() {
-        "ext4" => fs_ext4::Ext4Reader::open(reader, filesystem_offset)
-            .map(|filesystem| Box::new(filesystem) as Box<dyn FileSystemReader + Send>)
-            .map_err(FileServiceError::Io),
-        "xfs" => fs_xfs::XfsReader::open(reader, filesystem_offset)
-            .map(|filesystem| Box::new(filesystem) as Box<dyn FileSystemReader + Send>)
-            .map_err(FileServiceError::Io),
-        "btrfs" => fs_btrfs::BtrfsReader::open(reader, filesystem_offset)
-            .map(|filesystem| Box::new(filesystem) as Box<dyn FileSystemReader + Send>)
-            .map_err(FileServiceError::Io),
-        other => Err(FileServiceError::Unsupported(format!(
-            "Ceph RBD preview does not support filesystem '{other}'",
-        ))),
-    }
+    super::open_block_filesystem(&candidate.filesystem_kind, reader, filesystem_offset)
 }

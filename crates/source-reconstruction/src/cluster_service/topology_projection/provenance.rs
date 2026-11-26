@@ -11,23 +11,31 @@ pub(super) fn persist_topology_provenance(
     case_id: &CaseId,
     import_set_id: &str,
 ) -> Result<()> {
-    let pattern = format!("scope:%:{import_set_id}%");
-    persist_membership_provenance(conn, case_id, &pattern)?;
-    persist_edge_provenance(conn, case_id, &pattern)?;
+    persist_membership_provenance(conn, case_id, import_set_id)?;
+    persist_edge_provenance(conn, case_id, import_set_id)?;
     persist_lineage_provenance(conn, case_id)?;
     Ok(())
 }
 
-fn persist_membership_provenance(conn: &Connection, case_id: &CaseId, pattern: &str) -> Result<()> {
+fn persist_membership_provenance(
+    conn: &Connection,
+    case_id: &CaseId,
+    import_set_id: &str,
+) -> Result<()> {
     let repo = ProvenanceAssertionRepo::new(conn);
     let mut membership_query = conn.prepare(
         "SELECT membership.scope_id, membership.data_source_id, membership.role,
                 membership.confidence, membership.provenance_json
          FROM linux_topology_memberships AS membership
          JOIN linux_topology_scopes AS scope ON scope.id = membership.scope_id
-         WHERE scope.case_id = ?1 AND scope.id LIKE ?2",
+         WHERE scope.case_id = ?1
+           AND substr(scope.id, 1, 6) = 'scope:'
+           AND (
+               substr(scope.id, 7 + instr(substr(scope.id, 7), ':')) = ?2
+               OR substr(scope.id, 7 + instr(substr(scope.id, 7), ':'), length(?2) + 1) = ?2 || ':'
+           )",
     )?;
-    let rows = membership_query.query_map(rusqlite::params![case_id.0, pattern], |row| {
+    let rows = membership_query.query_map(rusqlite::params![case_id.0, import_set_id], |row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
@@ -57,16 +65,21 @@ fn persist_membership_provenance(conn: &Connection, case_id: &CaseId, pattern: &
     Ok(())
 }
 
-fn persist_edge_provenance(conn: &Connection, case_id: &CaseId, pattern: &str) -> Result<()> {
+fn persist_edge_provenance(conn: &Connection, case_id: &CaseId, import_set_id: &str) -> Result<()> {
     let repo = ProvenanceAssertionRepo::new(conn);
     let mut edge_query = conn.prepare(
         "SELECT edge.source_scope_id, edge.target_scope_id, edge.edge_kind,
                 edge.confidence, edge.provenance_json
          FROM linux_topology_edges AS edge
          JOIN linux_topology_scopes AS source ON source.id = edge.source_scope_id
-         WHERE source.case_id = ?1 AND source.id LIKE ?2",
+         WHERE source.case_id = ?1
+           AND substr(source.id, 1, 6) = 'scope:'
+           AND (
+               substr(source.id, 7 + instr(substr(source.id, 7), ':')) = ?2
+               OR substr(source.id, 7 + instr(substr(source.id, 7), ':'), length(?2) + 1) = ?2 || ':'
+           )",
     )?;
-    let rows = edge_query.query_map(rusqlite::params![case_id.0, pattern], |row| {
+    let rows = edge_query.query_map(rusqlite::params![case_id.0, import_set_id], |row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,

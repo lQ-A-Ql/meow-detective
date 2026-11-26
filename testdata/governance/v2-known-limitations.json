@@ -1,7 +1,19 @@
 {
   "lastVerifiedAt": "2026-11-16T00:00:00Z",
-  "documentedLimitCount": 63,
+  "documentedLimitCount": 64,
   "items": [
+    {
+      "category": "Linux MD",
+      "item": "全部阵列状态、layout 与文件系统组合",
+      "status": "partial",
+      "summary": "公开原生镜像验证 linear、RAID0/1/5/6/10 的指定布局以及 RAID0/EXT4 目录和预览；RAID4、更多 layout、分区后的 MD、MD 后 LVM、XFS/Btrfs 仍需独立公开验收。reshape、重建状态、未知 feature、events 不一致或可读取副本内容冲突均拒绝。成员元数据快照不证明修改时间被保持时的内容一致性",
+      "affectedChains": [
+        "MD",
+        "LVM",
+        "EXT4"
+      ],
+      "sourceDoc": "docs/known-unsupported-formats.md"
+    },
     {
       "category": "E01",
       "item": "多段复杂样本",
