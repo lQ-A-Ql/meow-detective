@@ -33,6 +33,7 @@ export interface DrawerIssue {
   meta: DrawerIssueMeta[];
   details?: string;
   suggestion?: string;
+  jobId?: string;
 }
 
 export interface BottomDrawerModel {
@@ -188,6 +189,7 @@ function buildApiErrorMeta(apiError: ApiErrorDto | undefined, source: string, t:
 function buildFailedJobIssue(job: JobSnapshot, t: TFunction, countsAvailable: boolean): DrawerIssue {
   return {
     id: `job-${job.id}`,
+    jobId: job.id,
     severity: 'error',
     title: job.name,
     detail: job.detail || t('bottomDrawer.jobs.failedFallback'),
@@ -200,6 +202,7 @@ function buildImportPhaseIssue(phase: ImportPhaseProgress | undefined, t: TFunct
   if (!phase || (phase.state !== 'failed' && failedCount === 0)) return undefined;
   return {
     id: `import-phase-${phase.jobId}-${phase.phase}`,
+    jobId: phase.jobId,
     severity: 'error',
     title: t('bottomDrawer.issues.importPhaseTitle'),
     detail: phase.detail || t('bottomDrawer.jobs.failedFallback'),
@@ -230,6 +233,7 @@ function buildJobWarningIssues(jobs: JobSnapshot[], t: TFunction, storedJobIds: 
     .filter((job) => job.status === 'warning' || job.partial || job.warningCount > 0 || job.skippedCount > 0)
     .map((job) => ({
       id: `job-warning-${job.id}`,
+      jobId: job.id,
       severity: 'warning' as const,
       title: job.name,
       detail: job.detail || job.scope || t('bottomDrawer.issues.jobWarningFallback'),

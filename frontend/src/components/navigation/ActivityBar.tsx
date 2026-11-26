@@ -18,6 +18,7 @@ const iconByPage: Record<NavigationLink['page'], SidebarIconName> = {
   timeline: 'timeline',
   artifacts: 'artifacts',
   reports: 'reports',
+  logs: 'logs',
 };
 
 const railItemClass =

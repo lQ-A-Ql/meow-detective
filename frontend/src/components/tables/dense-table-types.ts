@@ -55,4 +55,6 @@ export interface DenseDataTableProps<T> {
   minColumnWidth?: number;
   /** 开启客户端搜索/列筛选工具条；过滤只作用于当前已加载行。 */
   filterable?: boolean;
+  followLatest?: boolean;
+  onFollowLatestChange?: (following: boolean) => void;
 }

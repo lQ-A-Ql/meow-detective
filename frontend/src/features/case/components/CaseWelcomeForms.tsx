@@ -121,6 +121,12 @@ export function CaseWelcomeForms({ state, ...props }: CaseWelcomeFormsProps & { 
           onOpen={state.openRecent}
           onDelete={state.deleteRecent}
         />
+        <Button shape="pill" variant="forensicsGhost" asChild>
+          <a href="/logs">
+            <ActionIcon name="list" />
+            {t('logs.title')}
+          </a>
+        </Button>
       </main>
     </ScrollArea>
   );

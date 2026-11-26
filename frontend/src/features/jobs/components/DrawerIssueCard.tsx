@@ -2,6 +2,8 @@ import { AlertCircle } from '@/components/icons';
 import { useTranslation } from 'react-i18next';
 import { ScrollArea } from '@/app/components/ui/scroll-area';
 import type { DrawerIssue } from '@/features/jobs/model/bottom-drawer-model';
+import { Link } from 'react-router';
+import { Button } from '@/app/components/ui/button';
 
 export function DrawerIssueCard({ issue }: { issue: DrawerIssue }) {
   const { t } = useTranslation();
@@ -73,6 +75,11 @@ export function DrawerIssueCard({ issue }: { issue: DrawerIssue }) {
         >
           <pre className="whitespace-pre-wrap break-words px-2 py-1.5 font-mono text-[10px]">{issue.details}</pre>
         </ScrollArea>
+      ) : null}
+      {issue.jobId ? (
+        <Button shape="pill" variant="forensicsGhost" size="sm" asChild>
+          <Link to={`/logs?jobId=${encodeURIComponent(issue.jobId)}`}>{t('logs.title')}</Link>
+        </Button>
       ) : null}
     </div>
   );

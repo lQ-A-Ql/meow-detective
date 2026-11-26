@@ -3430,6 +3430,10 @@
       "reports": {
         "label": "报告导出",
         "context": "模板、导出任务与报告产物"
+      },
+      "logs": {
+        "label": "运行日志",
+        "context": "运行信息、告警与错误"
       }
     },
     "jobsRunning": "{{count}} 运行中"

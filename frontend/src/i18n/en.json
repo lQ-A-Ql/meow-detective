@@ -3430,6 +3430,10 @@
       "reports": {
         "label": "Reports",
         "context": "Templates, export jobs and report artifacts"
+      },
+      "logs": {
+        "label": "Application Logs",
+        "context": "Runtime information, warnings and errors"
       }
     },
     "jobsRunning": "{{count}} running"

@@ -28,6 +28,7 @@ const sidebarIcons = {
   timeline: faTimeline,
   artifacts: faCubes,
   reports: faFileLines,
+  logs: faListCheck,
   settings: faGear,
   jobs: faListCheck,
 } as const satisfies Record<string, IconDefinition>;

@@ -1,8 +1,14 @@
-import { render, screen } from '@testing-library/react';
+import { render as renderComponent, screen } from '@testing-library/react';
+import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BottomDrawerContainer as BottomDrawer } from '@/features/jobs/containers/BottomDrawerContainer';
 import { JobStatusCard } from '@/features/jobs/components/JobStatusCard';
 import type { ImportPhaseProgress, JobSnapshot } from '@/types/models';
+
+function render(component: ReactNode) {
+  return renderComponent(<MemoryRouter>{component}</MemoryRouter>);
+}
 
 const publishingJob: JobSnapshot = {
   id: 'import',

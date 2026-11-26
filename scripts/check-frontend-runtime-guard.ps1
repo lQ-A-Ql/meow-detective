@@ -569,6 +569,8 @@ Assert-NoMatchesInRuntimeFiles `
     'frontend/src/features/search/use-search-workspace-model.ts',
     'frontend/src/components/tables/useDenseTableFilter.ts',
     'frontend/src/features/mcp/use-mcp-clipboard.ts',
+    # Schedules the next bounded log query after completion and suspends hidden-page polling.
+    'frontend/src/features/logs/use-log-workspace-model.ts',
     # Auto-dismisses a transient confirmation; it never fabricates progress or data.
     'frontend/src/app/components/ui/toast.tsx'
   ) `

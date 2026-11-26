@@ -11,7 +11,8 @@ export type PageKey =
   | 'search'
   | 'timeline'
   | 'artifacts'
-  | 'reports';
+  | 'reports'
+  | 'logs';
 type ViewerTabKey = 'metadata' | 'text' | 'hex' | 'preview';
 type FileSortKey = 'name' | 'size' | 'modifiedAt' | 'ext';
 type FileSortDirection = 'asc' | 'desc';

@@ -8,6 +8,8 @@ import registryHardwareZh from './registry-hardware/zh-CN.json';
 import registryHardwareEn from './registry-hardware/en.json';
 import appUpdateZh from './app-update/zh-CN.json';
 import appUpdateEn from './app-update/en.json';
+import logsZh from './logs/zh-CN.json';
+import logsEn from './logs/en.json';
 
 /** One composition point for centrally owned, independently maintained copy modules. */
 export const i18nTranslations = {
@@ -17,6 +19,7 @@ export const i18nTranslations = {
     carving: carvingZh,
     registryHardware: registryHardwareZh,
     appUpdate: appUpdateZh,
+    logs: logsZh,
   },
   en: {
     ...en,
@@ -24,5 +27,6 @@ export const i18nTranslations = {
     carving: carvingEn,
     registryHardware: registryHardwareEn,
     appUpdate: appUpdateEn,
+    logs: logsEn,
   },
 };

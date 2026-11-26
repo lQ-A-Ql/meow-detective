@@ -1,0 +1,120 @@
+.log-workspace {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  container-type: inline-size;
+}
+.log-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--color-forensics-line);
+}
+.log-toolbar h1 {
+  font-size: 1rem;
+  font-weight: 500;
+}
+.log-filters {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  min-width: 15rem;
+}
+.log-filters input {
+  width: 9rem;
+  flex: 1;
+  min-width: 6rem;
+}
+.log-panels {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+.log-panel {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.log-panel-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--color-forensics-line);
+}
+.log-panel-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+.log-panel-warning .log-panel-title {
+  color: var(--color-forensics-warning);
+}
+.log-panel-error .log-panel-title,
+.log-failure {
+  color: var(--color-forensics-error-text);
+}
+.log-panel-count {
+  flex: 1;
+  font-size: 0.65rem;
+  color: var(--color-forensics-muted);
+}
+.log-panel-footer {
+  padding: 0.4rem 1rem;
+  font-size: 0.65rem;
+  color: var(--color-forensics-muted);
+}
+.log-failure {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: var(--color-forensics-error-bg);
+}
+.log-details {
+  width: min(56rem, 92vw);
+  max-width: 56rem;
+}
+.log-details-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 0.75rem;
+}
+.log-details-fields {
+  display: grid;
+  grid-template-columns: minmax(6rem, auto) 1fr;
+  gap: 0.65rem 1rem;
+  margin-top: 1rem;
+  font-size: 0.75rem;
+}
+.log-details-fields dt {
+  color: var(--color-forensics-muted);
+}
+.log-details-fields dd {
+  overflow-wrap: anywhere;
+  font-family: monospace;
+}
+@container (max-width: 899px) {
+  .log-panels > [data-panel-group] {
+    flex-direction: column !important;
+  }
+  .log-panels > [data-panel-group] > [data-panel-resize-handle-enabled] {
+    display: none;
+  }
+  .log-panels > [data-panel-group] > [data-panel]:first-child {
+    flex: 1 !important;
+  }
+  .log-panels > [data-panel-group] > [data-panel]:last-child {
+    flex: 2 !important;
+  }
+}

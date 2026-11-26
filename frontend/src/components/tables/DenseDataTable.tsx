@@ -80,6 +80,8 @@ export function DenseDataTable<T>({
   horizontalScroll = false,
   minColumnWidth = 140,
   filterable = false,
+  followLatest = false,
+  onFollowLatestChange,
 }: DenseDataTableProps<T>) {
   const { t } = useTranslation();
   // Defaults live in i18n so the shared primitive never carries hardcoded copy.
@@ -237,12 +239,18 @@ export function DenseDataTable<T>({
     (event: React.UIEvent<HTMLDivElement>) => {
       const container = event.currentTarget;
       const remaining = container.scrollHeight - container.scrollTop - container.clientHeight;
+      if (remaining > DENSE_TABLE_ROW_HEIGHT * 2) onFollowLatestChange?.(false);
       if (remaining <= DENSE_TABLE_ROW_HEIGHT * OVERSCAN_ROWS) {
         requestMore();
       }
     },
-    [requestMore],
+    [onFollowLatestChange, requestMore],
   );
+
+  useEffect(() => {
+    if (!followLatest || !visibleRows.length) return;
+    rowVirtualizer.scrollToIndex(visibleRows.length - 1, { align: 'end' });
+  }, [followLatest, visibleRows, rowVirtualizer]);
 
   useEffect(() => {
     const container = containerRef.current;

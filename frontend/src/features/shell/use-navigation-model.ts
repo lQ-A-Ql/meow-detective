@@ -20,6 +20,7 @@ const productionLinks: NavigationLink[] = [
   { to: '/timeline', page: 'timeline' },
   { to: '/artifacts', page: 'artifacts' },
   { to: '/reports', page: 'reports' },
+  { to: '/logs', page: 'logs' },
 ];
 
 /** Navigation destinations and job status for the activity rail. */

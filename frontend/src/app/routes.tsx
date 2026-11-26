@@ -97,6 +97,12 @@ export const appRoutes: RouteObject[] = [
             }),
           },
           {
+            path: 'logs',
+            lazy: async () => ({
+              Component: (await import('./pages/Logs')).Logs,
+            }),
+          },
+          {
             path: 'settings',
             lazy: async () => ({
               Component: (await import('./pages/Settings')).Settings,

@@ -1,0 +1,33 @@
+{
+  "title": "运行日志",
+  "levels": { "info": "INFO", "warning": "WARNING", "error": "ERROR" },
+  "filters": {
+    "text": "搜索日志",
+    "target": "模块",
+    "caseId": "案件标识",
+    "dataSourceId": "来源标识",
+    "jobId": "任务标识"
+  },
+  "pause": "暂停显示",
+  "resume": "恢复实时显示",
+  "clear": "清空当前显示",
+  "history": "读取更早日志",
+  "latest": "返回最新",
+  "empty": "暂无日志",
+  "count": "{{count}} 条 / 累计 {{total}} 条",
+  "time": "时间",
+  "message": "消息",
+  "module": "模块",
+  "sequence": "序号",
+  "thread": "线程",
+  "details": "日志详情",
+  "copy": "复制记录",
+  "copied": "已复制",
+  "truncated": "记录内容已达到长度上限",
+  "retention": "已淘汰 {{evicted}} 条 · 文件遗漏 {{dropped}} 条 · 截断 {{truncated}} 条",
+  "writerFailed": "日志文件写入失败",
+  "failedRecords": "累计 {{count}} 条日志文件写入失败",
+  "retry": "重试文件写入",
+  "resizeColumns": "调整日志左右区域",
+  "resizeRows": "调整告警与错误区域"
+}

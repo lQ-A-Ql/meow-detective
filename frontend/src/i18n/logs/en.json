@@ -1,0 +1,33 @@
+{
+  "title": "Application Logs",
+  "levels": { "info": "INFO", "warning": "WARNING", "error": "ERROR" },
+  "filters": {
+    "text": "Search logs",
+    "target": "Module",
+    "caseId": "Case identifier",
+    "dataSourceId": "Source identifier",
+    "jobId": "Task identifier"
+  },
+  "pause": "Pause display",
+  "resume": "Resume live display",
+  "clear": "Clear display",
+  "history": "Load earlier logs",
+  "latest": "Return to latest",
+  "empty": "No logs",
+  "count": "{{count}} shown / {{total}} total",
+  "time": "Time",
+  "message": "Message",
+  "module": "Module",
+  "sequence": "Sequence",
+  "thread": "Thread",
+  "details": "Log details",
+  "copy": "Copy record",
+  "copied": "Copied",
+  "truncated": "Record reached its length limit",
+  "retention": "{{evicted}} evicted · {{dropped}} omitted from files · {{truncated}} truncated",
+  "writerFailed": "Log file writer failed",
+  "failedRecords": "{{count}} records failed to write to log files",
+  "retry": "Retry file writer",
+  "resizeColumns": "Resize log columns",
+  "resizeRows": "Resize warning and error panels"
+}

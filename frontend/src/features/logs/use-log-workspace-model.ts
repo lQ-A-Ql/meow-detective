@@ -1,0 +1,177 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
+import { useTranslation } from 'react-i18next';
+import { getApplicationLog, readApplicationLogs, reopenApplicationLogWriter } from '@/lib/api/applicationLog';
+import { emptyLogBuffer, mergeLogSnapshot, type LogBuffer } from './log-buffer';
+import { errorMessage } from '@/lib/errors';
+import type { ApplicationLogFilter, ApplicationLogRecord } from '@/types/applicationLog';
+
+let retainedBuffer = emptyLogBuffer();
+let retainedFilter = '';
+
+export function useLogWorkspaceModel() {
+  const [params] = useSearchParams();
+  const { t } = useTranslation();
+  const [filter, setFilter] = useState<ApplicationLogFilter>({
+    text: '',
+    target: '',
+    caseId: params.get('caseId') ?? '',
+    dataSourceId: params.get('dataSourceId') ?? '',
+    jobId: params.get('jobId') ?? '',
+  });
+  const [buffer, setBuffer] = useState<LogBuffer>(() =>
+    retainedFilter === JSON.stringify(filter) ? retainedBuffer : emptyLogBuffer(),
+  );
+  const [paused, setPaused] = useState(false);
+  const [error, setError] = useState<string>();
+  const [selected, setSelected] = useState<ApplicationLogRecord>();
+  const [refresh, setRefresh] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<string>();
+  const bufferRef = useRef(buffer);
+  const version = useRef(0);
+  const requestActive = useRef(false);
+  const clearPending = useRef(false);
+  const filterKey = JSON.stringify(filter);
+  const update = useCallback((next: LogBuffer) => {
+    bufferRef.current = next;
+    retainedBuffer = next;
+    setBuffer(next);
+  }, []);
+
+  useEffect(() => {
+    const generation = ++version.current;
+    if (retainedFilter !== filterKey) {
+      retainedFilter = filterKey;
+      update(emptyLogBuffer());
+    }
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    async function poll() {
+      if (cancelled || paused || document.hidden) return;
+      if (requestActive.current) {
+        timer = setTimeout(poll, 250);
+        return;
+      }
+      requestActive.current = true;
+      const current = bufferRef.current;
+      try {
+        const snapshot = await readApplicationLogs({
+          direction: current.forward.length ? 'forward' : 'latest',
+          cursors: current.forward,
+          filter,
+          limitPerLevel: 100,
+        });
+        if (!cancelled && generation === version.current) {
+          const incoming = clearPending.current
+            ? { ...snapshot, pages: snapshot.pages.map((page) => ({ ...page, records: [] })) }
+            : snapshot;
+          update(mergeLogSnapshot(bufferRef.current, incoming));
+          clearPending.current = false;
+          setError(undefined);
+        }
+      } catch (failure) {
+        if (!cancelled && generation === version.current) {
+          setError(errorMessage(failure));
+          if ((failure as { code?: string }).code === 'INVALID_INPUT') update(emptyLogBuffer());
+        }
+      } finally {
+        requestActive.current = false;
+        if (!cancelled) timer = setTimeout(poll, 250);
+      }
+    }
+    const visible = () => {
+      if (timer) clearTimeout(timer);
+      if (!document.hidden) void poll();
+    };
+    void poll();
+    document.addEventListener('visibilitychange', visible);
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      document.removeEventListener('visibilitychange', visible);
+    };
+  }, [filter, filterKey, paused, refresh, update]);
+
+  async function loadHistory() {
+    if (requestActive.current || !bufferRef.current.backward.length) return;
+    setPaused(true);
+    requestActive.current = true;
+    setBusy(true);
+    const current = bufferRef.current;
+    try {
+      const snapshot = await readApplicationLogs({
+        direction: 'backward',
+        cursors: current.backward,
+        filter,
+        limitPerLevel: 100,
+      });
+      if (retainedFilter === filterKey) {
+        update(mergeLogSnapshot(bufferRef.current, snapshot, true));
+        setError(undefined);
+      }
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      requestActive.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function reopenWriter() {
+    setBusy(true);
+    try {
+      await reopenApplicationLogWriter();
+      setError(undefined);
+      setRefresh((value) => value + 1);
+    } catch (failure) {
+      setError(errorMessage(failure));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copySelected() {
+    if (!selected) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(selected, null, 2));
+      setCopyStatus(t('logs.copied'));
+    } catch (failure) {
+      setError(errorMessage(failure));
+    }
+  }
+
+  return {
+    filter,
+    setFilter,
+    buffer,
+    paused,
+    setPaused,
+    selected,
+    select(record: ApplicationLogRecord) {
+      setSelected(record);
+      setCopyStatus(undefined);
+      void getApplicationLog(record.sessionId, record.sequence).then(
+        (detail) => setSelected((current) => (current?.sequence === detail.sequence ? detail : current)),
+        (failure) => setError(errorMessage(failure)),
+      );
+    },
+    closeDetails() {
+      setSelected(undefined);
+    },
+    clearDisplay() {
+      version.current++;
+      clearPending.current = true;
+      update({ ...bufferRef.current, rows: { info: [], warning: [], error: [] }, forward: [] });
+      setRefresh((value) => value + 1);
+    },
+    loadHistory,
+    reopenWriter,
+    copySelected,
+    copyStatus,
+    busy,
+    error,
+  };
+}
+
+export type LogWorkspaceModel = ReturnType<typeof useLogWorkspaceModel>;
