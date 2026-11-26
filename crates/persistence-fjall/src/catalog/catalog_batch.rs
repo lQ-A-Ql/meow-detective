@@ -109,6 +109,7 @@ impl CatalogRecordStore {
             .collect::<std::collections::BTreeSet<_>>()
         {
             super::browse_counts::mark(&mut actions, source)?;
+            super::path_lookup::mark(&mut actions, source)?;
         }
         crate::record_metrics::advance(snapshot, &mut actions, "catalog")?;
         Ok(actions)

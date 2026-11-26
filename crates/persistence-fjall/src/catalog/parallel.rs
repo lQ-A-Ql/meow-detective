@@ -167,6 +167,7 @@ impl CatalogRecordStore {
                 }
                 record_metrics::advance(snapshot, &mut actions, "catalog")?;
                 super::browse_counts::mark(&mut actions, source)?;
+                super::path_lookup::mark(&mut actions, source)?;
                 Ok(actions)
             })?;
         Ok(())

@@ -95,6 +95,7 @@ impl CatalogRecordStore {
                     record_metrics::append(snapshot, &mut actions, metrics)?;
                     record_metrics::advance(snapshot, &mut actions, "catalog")?;
                     super::browse_counts::mark(&mut actions, source_id)?;
+                    super::path_lookup::mark(&mut actions, source_id)?;
                     for action in actions {
                         stream_action(writer, action);
                     }

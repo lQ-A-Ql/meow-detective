@@ -4,6 +4,22 @@ use crate::{
     Result, ScanDirection, SourceReadSnapshot,
 };
 
+fn marker(source: &str) -> Result<Vec<u8>> {
+    encode_key(
+        "catalog.partition-path-ci-format",
+        &[KeyPart::Text(source.into())],
+    )
+}
+
+pub(super) fn mark(actions: &mut Vec<crate::WriteAction>, source: &str) -> Result<()> {
+    actions.push(crate::WriteAction::Put {
+        keyspace: crate::KeyspaceName::Meta,
+        key: marker(source)?,
+        value: vec![3],
+    });
+    Ok(())
+}
+
 fn normalized(path: &str, partition: u32) -> String {
     let prefix = format!("[P{partition}]/");
     path.trim_start_matches('/')
@@ -43,6 +59,13 @@ impl CatalogRecordStore {
         cursor: Option<&[u8]>,
         limit: usize,
     ) -> Result<CatalogPage> {
+        if snapshot
+            .get(crate::KeyspaceName::Meta, &marker(source)?)?
+            .as_deref()
+            != Some(&[3])
+        {
+            return Err(crate::FjallStorageError::CatalogIndexCorrupt);
+        }
         self.page_from_index(
             snapshot,
             &prefix(source, partition, path)?,
