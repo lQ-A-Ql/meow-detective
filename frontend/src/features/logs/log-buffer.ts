@@ -2,7 +2,7 @@ import type { ApplicationLogLevel, ApplicationLogRecord, ApplicationLogSnapshot 
 
 export const LOG_LEVELS: ApplicationLogLevel[] = ['info', 'warning', 'error'];
 const MAX_RECORDS = { info: 1000, warning: 500, error: 500 };
-const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = { info: 2 * 1024 * 1024, warning: 1024 * 1024, error: 1024 * 1024 };
 
 export interface LogBuffer {
   sessionId: string;
@@ -18,17 +18,7 @@ export function emptyLogBuffer(): LogBuffer {
 
 export function mergeLogSnapshot(current: LogBuffer, snapshot: ApplicationLogSnapshot, history = false): LogBuffer {
   const base = current.sessionId === snapshot.sessionId ? current : emptyLogBuffer();
-  if (snapshot.pages.every((page) => page.records.length === 0)) {
-    return {
-      ...base,
-      sessionId: snapshot.sessionId,
-      latest: snapshot,
-      forward: history ? base.forward : snapshot.pages.map((page) => page.forwardCursor),
-      backward: history ? snapshot.pages.map((page) => page.backwardCursor) : base.backward,
-    };
-  }
   const rows = { ...base.rows };
-  let bytes = 0;
   for (const page of snapshot.pages) {
     const unique = new Map<number, ApplicationLogRecord>();
     for (const record of [...rows[page.level], ...page.records]) unique.set(record.sequence, record);
@@ -36,11 +26,12 @@ export function mergeLogSnapshot(current: LogBuffer, snapshot: ApplicationLogSna
     rows[page.level] = history ? ordered.slice(0, MAX_RECORDS[page.level]) : ordered.slice(-MAX_RECORDS[page.level]);
   }
   for (const level of LOG_LEVELS) {
+    let bytes = 0;
     const retained: ApplicationLogRecord[] = [];
     const candidates = history ? rows[level] : [...rows[level]].reverse();
     for (const record of candidates) {
       const size = new TextEncoder().encode(JSON.stringify(record)).length;
-      if (bytes + size > MAX_BYTES) break;
+      if (bytes + size > MAX_BYTES[level]) break;
       bytes += size;
       retained.push(record);
     }

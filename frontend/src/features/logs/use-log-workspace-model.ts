@@ -32,6 +32,8 @@ export function useLogWorkspaceModel() {
   const version = useRef(0);
   const requestActive = useRef(false);
   const clearPending = useRef(false);
+  const mounted = useRef(true);
+  const detailVersion = useRef(0);
   const filterKey = JSON.stringify(filter);
   const update = useCallback((next: LogBuffer) => {
     bufferRef.current = next;
@@ -40,17 +42,31 @@ export function useLogWorkspaceModel() {
   }, []);
 
   useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const generation = ++version.current;
     if (retainedFilter !== filterKey) {
       retainedFilter = filterKey;
+      clearPending.current = false;
+      detailVersion.current++;
+      setSelected(undefined);
       update(emptyLogBuffer());
     }
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
+    function schedule() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(poll, 250);
+    }
     async function poll() {
-      if (cancelled || paused || document.hidden) return;
+      if (cancelled || (paused && !clearPending.current) || document.hidden) return;
       if (requestActive.current) {
-        timer = setTimeout(poll, 250);
+        schedule();
         return;
       }
       requestActive.current = true;
@@ -77,7 +93,7 @@ export function useLogWorkspaceModel() {
         }
       } finally {
         requestActive.current = false;
-        if (!cancelled) timer = setTimeout(poll, 250);
+        if (!cancelled) schedule();
       }
     }
     const visible = () => {
@@ -99,6 +115,8 @@ export function useLogWorkspaceModel() {
     requestActive.current = true;
     setBusy(true);
     const current = bufferRef.current;
+    const isCurrent = () =>
+      mounted.current && retainedFilter === filterKey && bufferRef.current.backward === current.backward;
     try {
       const snapshot = await readApplicationLogs({
         direction: 'backward',
@@ -106,12 +124,12 @@ export function useLogWorkspaceModel() {
         filter,
         limitPerLevel: 100,
       });
-      if (retainedFilter === filterKey) {
+      if (isCurrent()) {
         update(mergeLogSnapshot(bufferRef.current, snapshot, true));
         setError(undefined);
       }
     } catch (failure) {
-      setError(errorMessage(failure));
+      if (isCurrent()) setError(errorMessage(failure));
     } finally {
       requestActive.current = false;
       setBusy(false);
@@ -149,20 +167,32 @@ export function useLogWorkspaceModel() {
     setPaused,
     selected,
     select(record: ApplicationLogRecord) {
+      const generation = ++detailVersion.current;
       setSelected(record);
       setCopyStatus(undefined);
       void getApplicationLog(record.sessionId, record.sequence).then(
-        (detail) => setSelected((current) => (current?.sequence === detail.sequence ? detail : current)),
-        (failure) => setError(errorMessage(failure)),
+        (detail) => {
+          if (mounted.current && generation === detailVersion.current) {
+            setSelected((current) =>
+              current?.sessionId === detail.sessionId && current.sequence === detail.sequence ? detail : current,
+            );
+          }
+        },
+        (failure) => {
+          if (mounted.current && generation === detailVersion.current) setError(errorMessage(failure));
+        },
       );
     },
     closeDetails() {
+      detailVersion.current++;
       setSelected(undefined);
     },
     clearDisplay() {
       version.current++;
       clearPending.current = true;
-      update({ ...bufferRef.current, rows: { info: [], warning: [], error: [] }, forward: [] });
+      detailVersion.current++;
+      setSelected(undefined);
+      update({ ...bufferRef.current, rows: { info: [], warning: [], error: [] }, forward: [], backward: [] });
       setRefresh((value) => value + 1);
     },
     loadHistory,

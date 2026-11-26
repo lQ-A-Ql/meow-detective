@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { LogWorkspaceView } from '@/features/logs/components/LogWorkspaceView';
@@ -22,6 +23,14 @@ suite('actual Rust application log response', () => {
     expect(second.rows.warning[0].message).toBe('warning');
     expect(second.rows.error[0].message).toBe('error');
     expect(second.forward).toHaveLength(3);
+  });
+
+  it('keeps query boundaries when the real service returns empty filtered pages', () => {
+    const input = JSON.parse(readFileSync(join(dirname(fixturePath!), 'empty.json'), 'utf8')) as ApplicationLogSnapshot;
+    const buffer = mergeLogSnapshot(emptyLogBuffer(), input);
+    expect(Object.values(buffer.rows).flat()).toHaveLength(0);
+    expect(buffer.forward).toEqual(input.pages.map((page) => page.forwardCursor));
+    expect(buffer.backward).toEqual(input.pages.map((page) => page.backwardCursor));
   });
 
   it('renders INFO, WARNING and ERROR in their own panels and routes selection', () => {
