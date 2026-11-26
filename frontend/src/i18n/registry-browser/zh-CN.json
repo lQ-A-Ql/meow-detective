@@ -84,6 +84,7 @@
     "expiredSession": "浏览会话已失效，请重新打开配置单元",
     "invalidRequest": "请求超出浏览边界",
     "unsupportedHive": "此配置单元格式不受支持",
+    "deletedHive": "该配置单元已删除",
     "browserBusy": "浏览内存已达到上限，请重新打开配置单元",
     "recoveryFailed": "日志恢复未能完成；可切回基础 Hive 检查原始数据。"
   },

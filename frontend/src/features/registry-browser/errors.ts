@@ -9,6 +9,7 @@ export function registryBrowserErrorCode(error: unknown): string {
     'expiredSession',
     'invalidRequest',
     'unsupportedHive',
+    'deletedHive',
     'browserBusy',
     'recoveryFailed',
   ].includes(code)

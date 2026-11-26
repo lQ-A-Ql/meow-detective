@@ -84,6 +84,7 @@
     "expiredSession": "The browsing session expired; reopen the hive",
     "invalidRequest": "Request exceeds browser limits",
     "unsupportedHive": "This hive format is unsupported",
+    "deletedHive": "The selected hive is deleted",
     "browserBusy": "Browser capacity reached; reopen the hive",
     "recoveryFailed": "Log recovery could not be completed. Switch to the base hive to inspect original data."
   },
