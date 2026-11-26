@@ -56,13 +56,15 @@
     {
       "id": "ntfs-mft-boundaries",
       "source": "crates/fs-ntfs/tests/unit/mft_scanner.rs",
-      "sourceSha256": "3d09cbe6022e9b7084cbf857e4a31995a43781dfabfcda47d049798d659d7df4",
+      "sourceSha256": "42331dcddf5a22e4357773d01b5c043c617c32e32b6ed0c2a725175c0f7b5f58",
       "license": "Repository MIT",
       "features": [
         "deleted",
         "ADS",
         "encrypted metadata",
         "filename namespace",
+        "parent sequence identity",
+        "hidden and system attributes",
         "bounded mutation"
       ],
       "inputBudgetBytes": 131072,
@@ -87,12 +89,14 @@
     {
       "id": "ntfs-path-boundaries",
       "source": "crates/import-core/tests/unit/parallel_enum/path_projection.rs",
-      "sourceSha256": "f909ea6e32bf471fb1bd6429ace2d4e5d75a3d47f566a587ec9890d3989641f3",
+      "sourceSha256": "ab39710eaa8af2e42b08f0c8055de5b153d68aa0a84baacad2160ff9a4dfce1a",
       "license": "Repository MIT",
       "features": [
         "long names",
         "deep chain",
         "orphan",
+        "parent sequence validation",
+        "canonical unresolved paths",
         "cycle",
         "cancellation"
       ],
