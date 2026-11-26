@@ -5,7 +5,6 @@ use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::{
     ceph_osd_repo::CephOsdRepo,
     datasource_repo::DataSourceRepo,
-    linux_import_set_repo::LinuxImportSetRepo,
     linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
     linux_topology_edge_repo::LinuxTopologyEdgeRepo,
     linux_topology_membership_repo::LinuxTopologyMembershipRepo,
@@ -15,10 +14,7 @@ use persistence_sqlite::repositories::{
 
 use source_kernel::source_db;
 
-use super::{
-    discover_kubernetes_member_artifacts, ClusterServiceError, Result, TopologyEdgeKind,
-    TopologyMemberRole, TopologyScopeKind,
-};
+use super::{Result, TopologyEdgeKind, TopologyMemberRole, TopologyScopeKind};
 
 mod pve;
 use pve::register_pve_scope;
@@ -54,27 +50,8 @@ pub fn project_import_set_topology(
     case_id: &CaseId,
     import_set_id: &str,
 ) -> Result<ImportSetTopologyProjection> {
-    let members = LinuxImportSetRepo::new(case_connection).find_members(import_set_id)?;
-    if members.is_empty() {
-        return Err(ClusterServiceError::InvalidClusterId);
-    }
-    if members.iter().any(|member| {
-        !matches!(member.import_state.as_str(), "ready" | "ready_metadata")
-            || member.data_source_id.as_deref().is_none_or(str::is_empty)
-    }) {
-        return Err(ClusterServiceError::IncompleteImportSet);
-    }
-    let source_members = members
-        .into_iter()
-        .filter_map(|member| {
-            member
-                .data_source_id
-                .map(|source_id| (member.member_index, source_id))
-        })
-        .collect::<Vec<_>>();
-    if source_members.is_empty() {
-        return Err(ClusterServiceError::InsufficientSources);
-    }
+    let source_members =
+        super::member_binding::ready_import_members(case_connection, case_id, import_set_id)?;
 
     let mut projection = ImportSetTopologyProjection::default();
     let scope_repo = LinuxTopologyScopeRepo::new(case_connection);
@@ -137,13 +114,7 @@ pub fn project_import_set_topology(
         &member_sources,
     )?;
     provenance::persist_topology_provenance(case_connection, case_id, import_set_id)?;
-    provenance::persist_analysis_links(
-        case_connection,
-        case_root,
-        case_id,
-        import_set_id,
-        &member_sources,
-    )?;
+    provenance::persist_analysis_links(case_connection, case_root, import_set_id, &member_sources)?;
     Ok(projection)
 }
 
@@ -251,13 +222,10 @@ fn observe_source(
     source_id: &str,
     observations: &mut SourceObservations,
 ) -> Result<()> {
-    let entries = FileRepo::new(source_connection).find_by_data_source(source)?;
-    if entries.iter().any(|entry| is_pve_path(&entry.path)) {
-        observations
-            .pve_sources
-            .push((member_index, source_id.to_string()));
-    }
-    for entry in &entries {
+    let mut pve_present = false;
+    let mut kubernetes = super::kubernetes_inventory::MemberArtifactCollector::new(source.clone());
+    FileRepo::new(source_connection).visit_all(Some(&source.0), |entry| {
+        pve_present |= is_pve_path(&entry.path);
         if let Some(vm_id) = pve_qemu_vm_id(&entry.path) {
             observations
                 .pve_virtual_machines
@@ -265,6 +233,14 @@ fn observe_source(
                 .or_default()
                 .push((member_index, source_id.to_string(), entry.path.clone()));
         }
+        kubernetes.observe(entry);
+        Ok(())
+    })?;
+    let inventory = kubernetes.finish();
+    if pve_present {
+        observations
+            .pve_sources
+            .push((member_index, source_id.to_string()));
     }
     if !CephOsdRepo::new(source_connection)
         .find_by_data_source(source_id)?
@@ -274,9 +250,12 @@ fn observe_source(
             .ceph_sources
             .push((member_index, source_id.to_string()));
     }
-    let inventory = discover_kubernetes_member_artifacts(source_connection, source)?;
     if !inventory.artifacts.is_empty() {
-        let role = k8_member_role(&inventory.artifacts);
+        let role = if inventory.control_plane_observed {
+            TopologyMemberRole::ControlPlane
+        } else {
+            TopologyMemberRole::Unknown
+        };
         observations
             .kubernetes_sources
             .push((member_index, source_id.to_string(), role));
@@ -285,23 +264,6 @@ fn observe_source(
             .extend(inventory.artifacts);
     }
     Ok(())
-}
-
-fn k8_member_role(
-    artifacts: &[super::kubernetes_inventory::KubernetesMemberArtifact],
-) -> TopologyMemberRole {
-    if artifacts.iter().any(|artifact| {
-        matches!(
-            artifact.kind,
-            super::kubernetes_paths::KubernetesArtifactKind::StaticPodManifest
-                | super::kubernetes_paths::KubernetesArtifactKind::EtcdBackend
-                | super::kubernetes_paths::KubernetesArtifactKind::EtcdWal
-        )
-    }) {
-        TopologyMemberRole::ControlPlane
-    } else {
-        TopologyMemberRole::Unknown
-    }
 }
 
 #[allow(clippy::too_many_arguments)]

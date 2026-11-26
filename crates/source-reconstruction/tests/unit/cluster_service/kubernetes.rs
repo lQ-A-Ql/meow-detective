@@ -84,3 +84,68 @@ fn cluster_inventory_rejects_a_non_kubernetes_topology_scope() {
         crate::cluster_service::ClusterServiceError::Unsupported
     ));
 }
+
+#[test]
+fn member_inventory_retains_the_ordered_limit_while_visiting_every_catalog_page() {
+    let source_id = DataSourceId("bounded-kubernetes".into());
+    let root = tempfile::tempdir().unwrap();
+    let database_path = root.path().join("source.db");
+    let connection = persistence_sqlite::open_or_create_source(&database_path).unwrap();
+    persistence_source::detail::configure_source_identity(&connection, &source_id.0).unwrap();
+    persistence_source::detail::configure_source_fjall(&connection, &database_path).unwrap();
+    let limit = crate::cluster_service::kubernetes_paths::MAX_KUBERNETES_ARTIFACTS;
+    let count = limit + 17;
+    let mut entries = (0..count)
+        .map(|index| FileEntry {
+            id: FileEntryId(format!("file-{:05}", count - index)),
+            parent_id: None,
+            data_source_id: source_id.clone(),
+            path: format!("/etc/kubernetes/pki/cert-{index:05}.crt"),
+            name: format!("cert-{index:05}.crt"),
+            entry_type: EntryType::File,
+            size: Some(index as u64),
+            ext: Some("crt".into()),
+            deleted: false,
+            hidden: false,
+            system: false,
+            encrypted: false,
+            read_only: true,
+            archive: false,
+            unix_mode: Some(0o600),
+            created_at: None,
+            modified_at: None,
+            accessed_at: None,
+            changed_at: None,
+            hash_sha256: None,
+        })
+        .collect::<Vec<_>>();
+    let wal = entries.last_mut().unwrap();
+    wal.path = "/var/lib/etcd/member/wal/0000000000000000-0000000000000001.wal".into();
+    wal.name = "0000000000000000-0000000000000001.wal".into();
+    wal.ext = Some("wal".into());
+    FileRepo::new(&connection).insert_batch(&entries).unwrap();
+    let inventory = discover_kubernetes_member_artifacts(&connection, &source_id).unwrap();
+    assert_eq!(inventory.scanned_entries, count as u64);
+    assert_eq!(inventory.matched_entries, count);
+    assert!(inventory.control_plane_observed);
+    assert_eq!(inventory.artifacts.len(), limit);
+    assert!(inventory.truncated);
+    assert!(matches!(
+        inventory.require_complete(),
+        Err(crate::cluster_service::KubernetesParserError::Limit {
+            actual, max, ..
+        }) if actual == count && max == limit,
+    ));
+    for (index, artifact) in inventory.artifacts.iter().enumerate() {
+        assert_eq!(
+            artifact.path,
+            format!("/etc/kubernetes/pki/cert-{index:05}.crt")
+        );
+        assert_eq!(
+            artifact.kind,
+            crate::cluster_service::KubernetesArtifactKind::Certificate
+        );
+    }
+    drop(connection);
+    root.close().unwrap();
+}

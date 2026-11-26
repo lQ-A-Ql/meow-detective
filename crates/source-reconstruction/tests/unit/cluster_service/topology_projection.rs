@@ -334,6 +334,34 @@ fn projection_does_not_create_kubernetes_scope_without_kubernetes_evidence() {
         &["/var/log/messages"],
     );
 
+    assert!(project_import_set_topology(
+        &conn,
+        root.path(),
+        &CaseId("other-case".into()),
+        "plain-linux-set",
+    )
+    .is_err());
+    assert_eq!(
+        conn.query_row("SELECT COUNT(*) FROM linux_topology_scopes", [], |row| row
+            .get::<_, i64>(
+            0
+        ),)
+            .unwrap(),
+        0
+    );
+    let source_repo = DataSourceRepo::new(&conn);
+    let plain_source = DataSourceId("plain-a".into());
+    source_repo
+        .update_import_state(&plain_source, "failed", Some("injected failure"))
+        .unwrap();
+    assert!(matches!(
+        project_import_set_topology(&conn, root.path(), &case_id, "plain-linux-set"),
+        Err(crate::cluster_service::ClusterServiceError::IncompleteImportSet),
+    ));
+    source_repo
+        .update_import_state(&plain_source, "ready", None)
+        .unwrap();
+    populate_projected_analysis(root.path(), "plain-a");
     let projection =
         project_import_set_topology(&conn, root.path(), &case_id, "plain-linux-set").unwrap();
     assert_eq!(projection.kubernetes_scope_id, None);
@@ -345,6 +373,56 @@ fn projection_does_not_create_kubernetes_scope_without_kubernetes_evidence() {
         )
         .unwrap();
     assert_eq!(k8_scope_count, 0);
+    for kind in ["artifact", "timeline_event"] {
+        let linked = conn
+            .query_row(
+                "SELECT COUNT(*) FROM analysis_object_links
+             WHERE analysis_kind=?1 AND evidence_source_id='plain-a'",
+                [kind],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap();
+        assert_eq!(linked, 1100);
+    }
+}
+
+fn populate_projected_analysis(root: &std::path::Path, source_id: &str) {
+    use persistence_source::fjall::{ArtifactRecord, PersistMode, TimelineRecord};
+    let source =
+        source_db::open_registered_fjall_source_read_write(root, &DataSourceId(source_id.into()))
+            .unwrap();
+    let artifacts = (0..1100)
+        .map(|index| ArtifactRecord {
+            id: format!("artifact-{index}"),
+            data_source_id: source_id.into(),
+            artifact_type: "LinuxJournal".into(),
+            source_object_id: Some(format!("{source_id}-file-0")),
+            content_sha256: None,
+            attrs: serde_json::json!({"message": format!("event {index}")}),
+        })
+        .collect::<Vec<_>>();
+    source
+        .artifact_upsert_batch(&artifacts, PersistMode::Buffer)
+        .unwrap();
+    let events = (0..1100)
+        .map(|index| TimelineRecord {
+            id: format!("event-{index}"),
+            data_source_id: source_id.into(),
+            source_object_id: format!("{source_id}-file-0"),
+            event_type: "FILE_CREATED".into(),
+            timestamp: Utc::now(),
+            title: format!("event {index}"),
+            description: "persisted event".into(),
+            parser_id: Some("fixture.topology".into()),
+            parser_version: Some("1".into()),
+            confidence: Some(1.0),
+            source_attribution: None,
+            attrs: Default::default(),
+        })
+        .collect::<Vec<_>>();
+    source
+        .timeline_upsert_batch(&events, PersistMode::SyncAll)
+        .unwrap();
 }
 
 fn register_source(

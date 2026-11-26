@@ -13,7 +13,7 @@ pub(super) fn persist_topology_provenance(
 ) -> Result<()> {
     persist_membership_provenance(conn, case_id, import_set_id)?;
     persist_edge_provenance(conn, case_id, import_set_id)?;
-    persist_lineage_provenance(conn, case_id)?;
+    persist_lineage_provenance(conn, case_id, import_set_id)?;
     Ok(())
 }
 
@@ -109,16 +109,25 @@ fn persist_edge_provenance(conn: &Connection, case_id: &CaseId, import_set_id: &
     Ok(())
 }
 
-fn persist_lineage_provenance(conn: &Connection, case_id: &CaseId) -> Result<()> {
+fn persist_lineage_provenance(
+    conn: &Connection,
+    case_id: &CaseId,
+    import_set_id: &str,
+) -> Result<()> {
     let repo = ProvenanceAssertionRepo::new(conn);
     let mut lineage_query = conn.prepare(
-        "SELECT derived_data_source_id, parent_ceph_scope_id, 'ceph_rbd'
-         FROM ceph_rbd_derived_lineage
+        "SELECT lineage.derived_data_source_id, lineage.parent_ceph_scope_id, 'ceph_rbd'
+         FROM ceph_rbd_derived_lineage AS lineage
+         JOIN data_sources AS source ON source.id = lineage.derived_data_source_id
+         WHERE source.case_id = ?1 AND lineage.parent_ceph_scope_id = ?2
          UNION ALL
-         SELECT derived_data_source_id, parent_ceph_scope_id, 'ceph_fs'
-         FROM ceph_fs_derived_lineage",
+         SELECT lineage.derived_data_source_id, lineage.parent_ceph_scope_id, 'ceph_fs'
+         FROM ceph_fs_derived_lineage AS lineage
+         JOIN data_sources AS source ON source.id = lineage.derived_data_source_id
+         WHERE source.case_id = ?1 AND lineage.parent_ceph_scope_id = ?2",
     )?;
-    let lineages = lineage_query.query_map([], |row| {
+    let scope_id = format!("scope:ceph:{import_set_id}");
+    let lineages = lineage_query.query_map(rusqlite::params![case_id.0, scope_id], |row| {
         Ok((
             row.get::<_, String>(0)?,
             row.get::<_, String>(1)?,
@@ -153,10 +162,21 @@ fn persist_lineage_provenance(conn: &Connection, case_id: &CaseId) -> Result<()>
 pub(super) fn persist_analysis_links(
     case_connection: &Connection,
     case_root: &std::path::Path,
-    case_id: &CaseId,
     import_set_id: &str,
     member_sources: &[(u32, String, String)],
 ) -> Result<()> {
+    let mut artifact_insert = case_connection.prepare_cached(
+        "INSERT OR IGNORE INTO analysis_object_links
+         (analysis_object_id, analysis_kind, environment_object_id,
+          storage_object_id, evidence_source_id, relation_kind, provenance_assertion_id)
+         VALUES (?1, 'artifact', ?2, NULL, ?3, 'observed_on', NULL)",
+    )?;
+    let mut timeline_insert = case_connection.prepare_cached(
+        "INSERT OR IGNORE INTO analysis_object_links
+         (analysis_object_id, analysis_kind, environment_object_id,
+          storage_object_id, evidence_source_id, relation_kind, provenance_assertion_id)
+         VALUES (?1, 'timeline_event', ?2, NULL, ?3, 'observed_on', NULL)",
+    )?;
     for (member_index, source_id, _) in member_sources {
         let environment_object_id = format!("env:os:{import_set_id}:{member_index}");
         let fjall = source_kernel::source_db::open_registered_fjall_source_read_only(
@@ -165,7 +185,6 @@ pub(super) fn persist_analysis_links(
         )
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
         let snapshot = fjall.snapshot();
-        let mut artifact_ids = Vec::new();
         let mut cursor = None;
         loop {
             let page = fjall
@@ -177,22 +196,18 @@ pub(super) fn persist_analysis_links(
                     512,
                 )
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            artifact_ids.extend(page.records.into_iter().map(|record| record.id));
+            for record in page.records {
+                artifact_insert.execute(rusqlite::params![
+                    record.id,
+                    environment_object_id,
+                    source_id,
+                ])?;
+            }
             cursor = page.next_cursor;
             if cursor.is_none() {
                 break;
             }
         }
-        for artifact_id in artifact_ids {
-            case_connection.execute(
-                "INSERT OR IGNORE INTO analysis_object_links
-                 (analysis_object_id, analysis_kind, environment_object_id,
-                  storage_object_id, evidence_source_id, relation_kind, provenance_assertion_id)
-                 VALUES (?1, 'artifact', ?2, NULL, ?3, 'observed_on', NULL)",
-                rusqlite::params![artifact_id, environment_object_id, source_id],
-            )?;
-        }
-        let mut timeline_ids = Vec::new();
         let mut cursor = None;
         loop {
             let page = fjall
@@ -204,22 +219,18 @@ pub(super) fn persist_analysis_links(
                     512,
                 )
                 .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
-            timeline_ids.extend(page.records.into_iter().map(|record| record.id));
+            for record in page.records {
+                timeline_insert.execute(rusqlite::params![
+                    record.id,
+                    environment_object_id,
+                    source_id,
+                ])?;
+            }
             cursor = page.next_cursor;
             if cursor.is_none() {
                 break;
             }
         }
-        for timeline_id in timeline_ids {
-            case_connection.execute(
-                "INSERT OR IGNORE INTO analysis_object_links
-                 (analysis_object_id, analysis_kind, environment_object_id,
-                  storage_object_id, evidence_source_id, relation_kind, provenance_assertion_id)
-                 VALUES (?1, 'timeline_event', ?2, NULL, ?3, 'observed_on', NULL)",
-                rusqlite::params![timeline_id, environment_object_id, source_id],
-            )?;
-        }
     }
-    let _ = case_id;
     Ok(())
 }

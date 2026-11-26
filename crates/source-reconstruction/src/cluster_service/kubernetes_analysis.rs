@@ -91,17 +91,25 @@ fn summarize_member(
     member: super::kubernetes_inventory::KubernetesMemberArtifactInventory,
     source_names: &HashMap<String, String>,
 ) -> (KubernetesClusterNodeDto, Vec<KubernetesClusterArtifactDto>) {
-    let control_plane = is_control_plane_candidate(&member.artifacts);
+    let control_plane = member.control_plane_observed;
     let artifact_count = member.artifacts.len() as u64;
     let source_name = source_names
         .get(&member.data_source_id.0)
         .cloned()
         .unwrap_or_else(|| member.data_source_id.0.clone());
-    let diagnostics = if control_plane {
+    let mut diagnostics = if control_plane {
         vec!["control-plane evidence is present; node identity is not yet proven".to_string()]
     } else {
         vec!["no control-plane evidence was discovered in this source".to_string()]
     };
+    if member.truncated {
+        diagnostics.push(format!(
+            "artifact inventory contains {} candidates; {} retained from {} catalog entries",
+            member.matched_entries,
+            member.artifacts.len(),
+            member.scanned_entries,
+        ));
+    }
     let node = KubernetesClusterNodeDto {
         data_source_id: member.data_source_id.0.clone(),
         source_name,
@@ -134,19 +142,6 @@ fn summarize_member(
         })
         .collect();
     (node, artifacts)
-}
-
-fn is_control_plane_candidate(
-    artifacts: &[super::kubernetes_inventory::KubernetesMemberArtifact],
-) -> bool {
-    artifacts.iter().any(|artifact| {
-        matches!(
-            artifact.kind,
-            super::kubernetes_paths::KubernetesArtifactKind::StaticPodManifest
-                | super::kubernetes_paths::KubernetesArtifactKind::EtcdBackend
-                | super::kubernetes_paths::KubernetesArtifactKind::EtcdWal
-        )
-    })
 }
 
 fn not_found_summary(data_source_id: &DataSourceId) -> KubernetesClusterSummaryDto {
@@ -294,6 +289,7 @@ fn process_kubernetes_sources(
         .map_err(|error| super::ClusterServiceError::Db(error.into_db_error()))?;
         let inventory =
             super::discover_kubernetes_member_artifacts(&source.connection, &source_id)?;
+        inventory.require_complete()?;
         let mut read_context = evidence_access::file_service::SourceReadContext::new(
             &source.connection,
             case_connection,
