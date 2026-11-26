@@ -21,11 +21,13 @@ pub(super) fn build_magic_probe<'a, F>(
     file_reader: &'a mut F,
 ) -> impl FnMut(&FileEntryRecord) -> Result<Option<&'static str>, String> + 'a
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     move |entry| {
         let candidate = magic_probe_candidate(entry);
-        match file_reader(&candidate, IMAGE_MAGIC_HEADER_BYTES)? {
+        match file_reader(&candidate, IMAGE_MAGIC_HEADER_BYTES)
+            .map_err(|error| error.to_string())?
+        {
             CandidateSource::Bytes(bytes) => Ok(file_magic::detect(&bytes, "")
                 .filter(|magic| magic.family == "images")
                 .map(|magic| magic.file_type)),
@@ -73,13 +75,13 @@ pub(super) fn load_checkpoint_scans(
 
 pub(super) fn guarded_candidate_reader<F>(
     mut file_reader: F,
-) -> impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>
+) -> impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     move |candidate, read_limit| {
         if let Some(warning) = encrypted_candidate_warning(candidate) {
-            return Err(warning);
+            return Err(FileServiceError::Unsupported(warning));
         }
         file_reader(candidate, read_limit)
     }

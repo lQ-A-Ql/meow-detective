@@ -164,7 +164,7 @@ fn seal(connection: &rusqlite::Connection, source_id: &str) {
 const SOFTWARE: &str = "Windows/System32/config/SOFTWARE";
 
 #[test]
-fn physical_log_read_failures_count_each_pending_candidate_once() {
+fn physical_log_read_failures_persist_each_pending_candidate_once() {
     for hives in [
         vec![SOFTWARE],
         vec![
@@ -181,7 +181,7 @@ fn physical_log_read_failures_count_each_pending_candidate_once() {
         let execution = fixture.run(&mut Vec::new());
         assert_eq!(execution.retryable_failure_count, hives.len() as u64);
         assert_eq!(execution.dto.warnings.len(), hives.len());
-        for path in hives {
+        for path in &hives {
             assert_eq!(
                 execution
                     .dto
@@ -200,7 +200,7 @@ fn physical_log_read_failures_count_each_pending_candidate_once() {
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(checkpoints, 0);
+        assert_eq!(checkpoints, hives.len() as u64);
     }
 }
 
@@ -212,6 +212,67 @@ fn physical_primary_read_failure_keeps_one_original_reason() {
     assert_eq!(execution.retryable_failure_count, 1);
     assert_eq!(execution.dto.warnings.len(), 1);
     assert!(execution.dto.warnings[0].starts_with(&format!("{SOFTWARE} read failed:")));
+}
+
+#[test]
+fn physical_log_failure_is_persisted_and_retried_after_restore() {
+    use persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo;
+
+    let fixture = Fixture::new(&[SOFTWARE], 0);
+    let candidate = fixture.candidates().remove(0);
+    let log_path = fixture.evidence.join(format!("{SOFTWARE}.LOG1"));
+    fs::remove_file(&log_path).unwrap();
+    let failed = fixture.run(&mut Vec::new());
+    assert_eq!(failed.retryable_failure_count, 1);
+    let repository = AnalysisScanRepo::new(&fixture.connection);
+    let version = crate::analysis_service::capability::REGISTRY_EXTRACTOR_VERSION;
+    let diagnostics = repository.list_diagnostics_for_version(version).unwrap();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].source_object_id, candidate.file_id.0);
+    assert_eq!(diagnostics[0].diagnostic_counts, [0, 0, 1, 0, 0]);
+    assert_eq!(diagnostics[0].warnings, failed.dto.warnings);
+    fs::write(&log_path, []).unwrap();
+    let mut reads = Vec::new();
+    let recovered = fixture.run(&mut reads);
+    assert_eq!(recovered.retryable_failure_count, 0);
+    assert!(reads.contains(&format!("{SOFTWARE}.LOG1")));
+    assert!(repository
+        .list_diagnostics_for_version(version)
+        .unwrap()
+        .is_empty());
+    assert_eq!(
+        repository.list_complete_for_version(version).unwrap().len(),
+        1
+    );
+}
+
+#[test]
+fn physical_hive_length_change_is_persisted_as_corrupt_input() {
+    let fixture = Fixture::new(&[SOFTWARE], 0);
+    let candidate = fixture.candidates().remove(0);
+    let actual_size = candidate.size - 512;
+    fs::File::options()
+        .write(true)
+        .open(fixture.evidence.join(SOFTWARE))
+        .unwrap()
+        .set_len(actual_size)
+        .unwrap();
+    let execution = fixture.run(&mut Vec::new());
+    assert_eq!(execution.retryable_failure_count, 0);
+    assert_eq!(execution.dto.diagnostic_counts.corrupt_inputs, 1);
+    assert_eq!(execution.dto.diagnostic_counts.read_failures, 0);
+    assert!(execution.dto.warnings[0].contains(&format!(
+        "registry hive length mismatch: expected {} bytes, read {actual_size} bytes",
+        candidate.size
+    )));
+    let diagnostics = persistence_sqlite::repositories::analysis_scan_repo::AnalysisScanRepo::new(
+        &fixture.connection,
+    )
+    .list_diagnostics_for_version(crate::analysis_service::capability::REGISTRY_EXTRACTOR_VERSION)
+    .unwrap();
+    assert_eq!(diagnostics.len(), 1);
+    assert_eq!(diagnostics[0].diagnostic_counts, [0, 1, 0, 0, 0]);
+    assert_eq!(diagnostics[0].warnings, execution.dto.warnings);
 }
 
 #[test]
@@ -259,11 +320,12 @@ fn unknown_catalog_size_nonempty_log_is_read_and_rejected() {
     let mut reads = Vec::new();
     let execution = fixture.run(&mut reads);
     assert!(reads.contains(&log.path));
-    assert_eq!(execution.retryable_failure_count, 1);
+    assert_eq!(execution.retryable_failure_count, 0);
+    assert_eq!(execution.dto.diagnostic_counts.corrupt_inputs, 1);
     assert_eq!(execution.dto.warnings.len(), 1);
     assert_eq!(
         execution.dto.warnings[0],
-        format!("{SOFTWARE} LOG1 read failed: registry log was truncated")
+        format!("{SOFTWARE} LOG1 read failed: registry log length mismatch: expected 0 bytes, read 8 bytes")
     );
 }
 

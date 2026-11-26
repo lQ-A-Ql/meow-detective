@@ -1,5 +1,5 @@
 //! Compile multi-file systemd evidence before single-file checkpoint decisions.
-use super::{reader::read_candidate_bytes_with_progress, CandidateSource, ExtractionOutcome};
+use super::{reader::read_candidate_bytes_with_progress, CandidateReadResult, ExtractionOutcome};
 use crate::analysis_service::{
     cancellation::ensure_not_cancelled,
     candidates::{EvidenceCandidate, PreparationCatalog},
@@ -94,7 +94,7 @@ pub(super) fn prepare(
     catalog: &PreparationCatalog,
     candidates: &[EvidenceCandidate],
     cancel: &AtomicBool,
-    read: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    read: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<SystemdPreload, AnalysisServiceError> {
     let selected = candidates
         .iter()
@@ -148,7 +148,7 @@ pub(super) fn prepare(
 fn prepare_scope(
     rows: &BTreeMap<String, SystemdCatalogRow>,
     cancel: &AtomicBool,
-    read: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    read: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     preload: &mut SystemdPreload,
 ) -> Result<(), AnalysisServiceError> {
     let mut cache = BTreeMap::<String, Vec<u8>>::new();

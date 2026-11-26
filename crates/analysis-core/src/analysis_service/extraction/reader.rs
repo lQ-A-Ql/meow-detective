@@ -1,5 +1,6 @@
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::EvidenceCandidate;
+use evidence_access::file_service::FileServiceError;
 use std::io::Read;
 use std::sync::atomic::AtomicBool;
 
@@ -26,11 +27,21 @@ pub(crate) enum CandidateSource {
     Bytes(Vec<u8>),
 }
 
+pub(crate) type CandidateReadResult = Result<CandidateSource, FileServiceError>;
+
+pub(super) fn corrupt_read(error: &FileServiceError) -> bool {
+    matches!(
+        error,
+        FileServiceError::Io(error)
+            if matches!(error.kind(), std::io::ErrorKind::InvalidData | std::io::ErrorKind::UnexpectedEof)
+    )
+}
+
 pub(super) fn read_candidate_bytes_with_progress(
     candidate: &EvidenceCandidate,
     read_limit: usize,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     on_read: impl FnMut(usize),
 ) -> Result<Vec<u8>, CandidateExtractionError> {
     check_candidate_cancelled(cancel_token)?;
@@ -38,7 +49,12 @@ pub(super) fn read_candidate_bytes_with_progress(
         return Err(CandidateExtractionError::Warning(warning));
     }
     let source = file_reader(candidate, read_limit).map_err(|error| {
-        CandidateExtractionError::Warning(format!("{} read failed: {error}", candidate.path))
+        let reason = format!("{} read failed: {error}", candidate.path);
+        if corrupt_read(&error) {
+            CandidateExtractionError::CorruptInput(reason)
+        } else {
+            CandidateExtractionError::Warning(reason)
+        }
     })?;
     read_candidate_source_with_progress(candidate, source, read_limit, cancel_token, on_read)
 }
@@ -70,7 +86,10 @@ pub(super) fn read_candidate_source_with_progress(
         check_candidate_cancelled(cancel_token)?;
         let read = limited.read(&mut buffer).map_err(|error| {
             let reason = format!("{} read failed: {error}", candidate.path);
-            if error.kind() == std::io::ErrorKind::InvalidData {
+            if matches!(
+                error.kind(),
+                std::io::ErrorKind::InvalidData | std::io::ErrorKind::UnexpectedEof
+            ) {
                 CandidateExtractionError::CorruptInput(reason)
             } else {
                 CandidateExtractionError::Warning(reason)

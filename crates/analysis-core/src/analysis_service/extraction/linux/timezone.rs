@@ -20,7 +20,7 @@
 //! Parsers whose formats provably carry no zone (web/MySQL error logs)
 //! instead keep the raw text with an `unverified-timezone` marker.
 
-use super::super::reader::{read_candidate_source_with_progress, CandidateSource};
+use super::super::reader::{read_candidate_source_with_progress, CandidateReadResult};
 use crate::analysis_service::candidates::{EvidenceCandidate, PreparationCatalog};
 use artifacts_linux::LogClock;
 use chrono::{DateTime, LocalResult, NaiveDateTime, TimeZone, Utc};
@@ -175,7 +175,7 @@ const TIMEZONE_SOURCES: &[(&str, ZoneExtractor)] = &[
 pub(in crate::analysis_service::extraction) fn resolve_linux_log_time(
     catalog: &PreparationCatalog,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> (LinuxLogTimeContext, Vec<String>) {
     let scopes = catalog
         .records()
@@ -218,7 +218,7 @@ pub(in crate::analysis_service::extraction) fn resolve_linux_log_time(
 fn resolve_scoped_log_time(
     catalog: &PreparationCatalog,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> (LinuxLogTimeContext, Vec<String>) {
     let mut warnings = Vec::new();
     for (path, extract) in TIMEZONE_SOURCES {
@@ -247,7 +247,7 @@ fn read_zone_text(
     catalog: &PreparationCatalog,
     path: &str,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<Option<String>, String> {
     let Some(candidate) = catalog.shortest_suffix(path) else {
         return Ok(None);

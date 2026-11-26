@@ -11,7 +11,7 @@ use super::plugin::extract_plugin_candidate;
 use super::progress::{CandidateProgressResult, ExtractionProgressReporter};
 pub(super) use super::reader::read_candidate_bytes_with_progress;
 pub(super) use super::reader::{
-    encrypted_candidate_warning, CandidateExtractionError, CandidateSource,
+    encrypted_candidate_warning, CandidateExtractionError, CandidateReadResult, CandidateSource,
 };
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::{
@@ -126,7 +126,7 @@ pub(super) fn process_candidates<'context, 'work, 'callback, F>(
     progress: &'work mut ExtractionProgressReporter<'callback>,
 ) -> Result<(), AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let work_items = candidates
         .into_iter()
@@ -231,7 +231,7 @@ fn prepare_candidate<F>(
     item: CandidateWorkItem,
 ) -> Result<PreparedWork<PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     ensure_not_cancelled(coordinator.context.cancel_token)?;
     let CandidateWorkItem {
@@ -411,13 +411,21 @@ fn apply_candidate<F>(
     completion: CandidateCompletion,
 ) -> Result<(), AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let CandidateCompletion {
         candidate,
         capability,
         kind,
     } = completion;
+    let _candidate_span = tracing::info_span!(
+        "artifact_candidate",
+        category = capability.key,
+        source_object_id = %candidate.file_id.0,
+        evidence_path = %candidate.path,
+        data_source_id = %candidate.data_source_id,
+    )
+    .entered();
     let result = match kind {
         CandidateCompletionKind::Persisted {
             observation,
@@ -429,11 +437,11 @@ where
             observation,
             plugin_failures,
         )?,
-        CandidateCompletionKind::Deferred(warning) => {
+        CandidateCompletionKind::Deferred(warning) | CandidateCompletionKind::Warning(warning) => {
             output::preserve_failed_candidate(coordinator.context, &candidate, capability)?;
             coordinator
                 .state
-                .record_retryable_failure(capability, warning);
+                .record_candidate_failure(capability, &candidate, warning);
             CandidateProgressResult {
                 warning: true,
                 ..CandidateProgressResult::default()
@@ -449,14 +457,6 @@ where
             warning,
             diagnostic_counts,
         )?,
-        CandidateCompletionKind::Warning(warning) => {
-            output::preserve_failed_candidate(coordinator.context, &candidate, capability)?;
-            coordinator.state.record_warning(capability, warning);
-            CandidateProgressResult {
-                warning: true,
-                ..CandidateProgressResult::default()
-            }
-        }
         CandidateCompletionKind::Blocked(warning) => {
             output::retire_blocked_candidate(coordinator, &candidate, capability, warning)?
         }

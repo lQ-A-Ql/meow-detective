@@ -7,7 +7,7 @@ pub(super) fn prepare<F>(
     capability: AnalysisCapability,
 ) -> Result<PreparedWork<PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let source =
         match (coordinator.file_reader)(&candidate, candidate.size.min(usize::MAX as u64) as usize)

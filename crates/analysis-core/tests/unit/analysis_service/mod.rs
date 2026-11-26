@@ -817,7 +817,7 @@ fn run_analysis_extraction_can_use_bounded_bytes_reader_without_full_open() {
         |file_id, read_limit| {
             assert_eq!(file_id.0, "email");
             let bytes = reader_probe.read_header(read_limit);
-            Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
+            Ok::<Box<dyn Read>, std::io::Error>(Box::new(std::io::Cursor::new(bytes)))
         },
     )
     .unwrap();
@@ -853,7 +853,7 @@ fn linux_analysis_extraction_uses_smaller_text_log_read_cap() {
         |file_id, read_limit| {
             assert_eq!(file_id.0, "auth");
             let bytes = reader_probe.read_header(read_limit);
-            Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
+            Ok::<Box<dyn Read>, std::io::Error>(Box::new(std::io::Cursor::new(bytes)))
         },
     )
     .unwrap();
@@ -893,7 +893,7 @@ fn linux_analysis_passes_each_route_limit_to_the_evidence_reader() {
             observed_reader
                 .borrow_mut()
                 .insert(file_id.0.clone(), read_limit);
-            Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(Vec::<u8>::new())))
+            Ok::<Box<dyn Read>, std::io::Error>(Box::new(std::io::Cursor::new(Vec::<u8>::new())))
         },
     )
     .unwrap();

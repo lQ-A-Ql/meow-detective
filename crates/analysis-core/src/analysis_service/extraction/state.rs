@@ -283,6 +283,11 @@ impl ExtractionState {
         capability: AnalysisCapability,
         warning: String,
     ) {
+        tracing::error!(
+            category = capability.key,
+            reason = %warning,
+            "Artifact candidate extraction failed: {warning}"
+        );
         self.diagnostic_counts.read_failures += 1;
         self.retryable_failure_count += 1;
         self.sections
@@ -291,6 +296,24 @@ impl ExtractionState {
             .warnings
             .push(warning.clone());
         self.warnings.push(warning);
+    }
+
+    pub(super) fn record_candidate_failure(
+        &mut self,
+        capability: AnalysisCapability,
+        candidate: &EvidenceCandidate,
+        warning: String,
+    ) {
+        self.diagnostic_scans.push(DiagnosticAnalysisCandidateScan {
+            source_object_id: candidate.file_id.0.clone(),
+            capability_key: capability.key.to_owned(),
+            extractor_version: capability.extractor_version().to_owned(),
+            source_size: candidate.size,
+            content_identity: candidate.content_identity.clone(),
+            warnings: vec![warning.clone()],
+            diagnostic_counts: [0, 0, 1, 0, 0],
+        });
+        self.record_retryable_failure(capability, warning);
     }
 
     pub(super) fn into_dto(
@@ -384,8 +407,9 @@ pub(super) fn existing_diagnostic_scan_keys(
         scans.extend(AnalysisScanRepo::new(conn).list_diagnostics_for_version(version)?);
     }
     for scan in scans {
-        if !find_capability(&scan.capability_key)
-            .is_some_and(|capability| capability.extractor_version() == scan.extractor_version)
+        if scan.diagnostic_counts[2] > 0
+            || !find_capability(&scan.capability_key)
+                .is_some_and(|capability| capability.extractor_version() == scan.extractor_version)
         {
             continue;
         }

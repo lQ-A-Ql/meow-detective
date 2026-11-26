@@ -67,7 +67,7 @@ fn identity(
         &mut |dependency, _| {
             fs::File::open(root.join(&dependency.file_id.0))
                 .map(|file| CandidateSource::Reader(Box::new(file)))
-                .map_err(|error| error.to_string())
+                .map_err(Into::into)
         },
     )
     .unwrap();

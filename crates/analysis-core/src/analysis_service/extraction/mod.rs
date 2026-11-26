@@ -35,7 +35,7 @@ pub use self::evtx::extract_evtx_candidate;
 pub use self::linux::extract_linux_candidate;
 pub use self::native_output::StagedGeneration as StagedSourceGeneration;
 pub(crate) use self::progress::{ExtractionProgressUpdate, PERSISTING_DETAIL};
-pub(crate) use self::reader::{encrypted_candidate_warning, CandidateSource};
+pub(crate) use self::reader::{encrypted_candidate_warning, CandidateReadResult, CandidateSource};
 pub use self::registry::extract_registry_candidate;
 pub use self::runner::run_analysis_extraction;
 pub use self::runner::{
@@ -53,7 +53,9 @@ pub use self::summary::{
 use super::error::AnalysisServiceError;
 use domain::{Artifact, TimelineEvent};
 
-pub fn run_analysis_extraction_execution_with_cancel<E: std::fmt::Display>(
+pub fn run_analysis_extraction_execution_with_cancel<
+    E: Into<evidence_access::file_service::FileServiceError>,
+>(
     conn: &rusqlite::Connection,
     case_id: &str,
     platform: domain::DataSourcePlatform,

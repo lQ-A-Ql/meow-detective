@@ -1,8 +1,11 @@
-use super::candidate_processing::{capability_for_candidate, CandidateSource, ExistingCheckpoints};
+use super::candidate_processing::{
+    capability_for_candidate, CandidateReadResult, CandidateSource, ExistingCheckpoints,
+};
 use super::registry_preload::{preload_registry_context, RegistryPreloadContext};
 use crate::analysis_service::candidates::EvidenceCandidate;
 use crate::analysis_service::capability::AnalysisCapability;
 use domain::FileEntryId;
+use evidence_access::file_service::FileServiceError;
 use std::collections::HashMap;
 use std::io::{Cursor, Read};
 use std::sync::atomic::AtomicBool;
@@ -12,7 +15,7 @@ pub(super) fn prepare_registry_preload(
     selected: &[AnalysisCapability],
     checkpoints: &ExistingCheckpoints<'_>,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<RegistryPreloadContext, crate::analysis_service::error::AnalysisServiceError> {
     let readable_candidates = candidates
         .iter()
@@ -36,11 +39,16 @@ pub(super) fn prepare_registry_preload(
         }
     }
     let mut registry_reader = |file_id: &FileEntryId, read_limit: usize| {
-        let candidate = candidates_by_id
-            .get(file_id.0.as_str())
-            .ok_or_else(|| format!("analysis candidate '{}' was not discovered", file_id.0))?;
+        let candidate = candidates_by_id.get(file_id.0.as_str()).ok_or_else(|| {
+            FileServiceError::not_found(format!(
+                "analysis candidate '{}' was not discovered",
+                file_id.0
+            ))
+        })?;
         if candidate.encrypted {
-            return Err("registry companion content is encrypted or its status is unknown".into());
+            return Err(FileServiceError::Unsupported(
+                "registry companion content is encrypted or its status is unknown".into(),
+            ));
         }
         file_reader(candidate, read_limit).map(|source| match source {
             CandidateSource::Seekable(reader) => reader as Box<dyn Read>,

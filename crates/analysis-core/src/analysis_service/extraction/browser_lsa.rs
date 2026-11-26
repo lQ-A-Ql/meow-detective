@@ -3,7 +3,7 @@
 //! v10/v11 decryption path keeps working.
 
 use super::browser_preload::{read_locator, read_registry_locator};
-use super::candidate_processing::CandidateSource;
+use super::reader::CandidateReadResult;
 use crate::analysis_service::candidates::{
     normalize_evidence_path, EvidenceCandidate, PreparationCatalog,
 };
@@ -76,7 +76,7 @@ pub(super) fn extend_prekeys_from_lsa_secrets(
     data_source_id: &str,
     seed: &PrekeySeed<'_>,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     prekeys: &mut Vec<[u8; 20]>,
     warnings: &mut Vec<String>,
 ) -> Result<(), AnalysisServiceError> {
@@ -136,7 +136,7 @@ pub(super) fn read_cng_chromekey_file(
     catalog: &PreparationCatalog,
     data_source_id: &str,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
     for locator in catalog.matching(data_source_id, "/crypto/systemkeys/") {
         let bytes = read_locator(&locator, cancel_token, file_reader)?;
@@ -157,7 +157,7 @@ pub(super) fn read_elevation_service(
     data_source_id: &str,
     family: ChromiumFamily,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<Option<Vec<u8>>, AnalysisServiceError> {
     let path_marker = match family {
         ChromiumFamily::Chrome => "/google/chrome/application/",

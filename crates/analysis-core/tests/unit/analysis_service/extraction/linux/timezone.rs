@@ -1,5 +1,5 @@
 use super::*;
-use crate::analysis_service::extraction::reader::CandidateSource;
+use crate::analysis_service::extraction::reader::{CandidateReadResult, CandidateSource};
 crate::native_source_test_support!();
 use chrono::NaiveDate;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
@@ -47,7 +47,7 @@ fn conn_with_files(paths: &[&str]) -> NativeSourceFixture {
 
 fn bytes_reader(
     content: &'static str,
-) -> impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String> {
+) -> impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult {
     move |_, _| Ok(CandidateSource::Bytes(content.as_bytes().to_vec()))
 }
 
@@ -172,7 +172,7 @@ fn resolves_zone_from_sysconfig_clock_when_others_absent() {
 #[test]
 fn unknown_zone_falls_through_to_next_source() {
     let conn = conn_with_files(&["/etc/localtime", "/etc/timezone"]);
-    let mut reader = |candidate: &EvidenceCandidate, _| -> Result<CandidateSource, String> {
+    let mut reader = |candidate: &EvidenceCandidate, _| -> CandidateReadResult {
         let text = if candidate.path.ends_with("/etc/localtime") {
             "../usr/share/zoneinfo/Not/AZone"
         } else {
@@ -255,7 +255,7 @@ fn timezone_files_are_resolved_for_each_partition() {
         resolve_linux_log_time(&catalog, &AtomicBool::new(false), &mut |candidate, _| {
             std::fs::File::open(root.path().join(&candidate.file_id.0))
                 .map(|reader| CandidateSource::Reader(Box::new(reader)))
-                .map_err(|error| error.to_string())
+                .map_err(Into::into)
         });
     for (partition, expected) in [
         (1, "2024-01-15T10:30:00+00:00"),

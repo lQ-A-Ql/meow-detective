@@ -14,7 +14,7 @@ use super::progress::{ExtractionProgressReporter, ExtractionProgressUpdate};
 use super::registry_preload::RegistryPreloadContext;
 use super::scheduler::acquire_extraction_slot;
 use super::state::{existing_clean_scan_keys, existing_diagnostic_scan_keys, ExtractionState};
-use super::{PluginExtractFailure, PluginLoadRecord};
+use super::{CandidateReadResult, PluginExtractFailure, PluginLoadRecord};
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{
     discover_plugin_candidates, EvidenceCandidate, LinuxCatalogMetadata, PreparationCatalog,
@@ -25,6 +25,7 @@ use crate::analysis_service::platforms::analyzer_for;
 use analysis_plugins::plugin_loader::{PluginExtractor, PluginLoadReport, PluginRejection};
 use artifacts_core::ArtifactExtractor;
 use domain::{DataSourcePlatform, FileEntryId};
+use evidence_access::file_service::FileServiceError;
 use rusqlite::Connection;
 use std::io::Read;
 use std::sync::atomic::AtomicBool;
@@ -63,7 +64,7 @@ pub struct AnalysisExtractionExecution {
     /// Plugin extraction failures (audit: `plugin.extract_failed`).
     pub plugin_extract_failures: Vec<PluginExtractFailure>,
 }
-pub fn run_analysis_extraction<E: std::fmt::Display>(
+pub fn run_analysis_extraction<E: Into<FileServiceError>>(
     conn: &Connection,
     case_id: &str,
     platform: DataSourcePlatform,
@@ -80,7 +81,7 @@ pub fn run_analysis_extraction<E: std::fmt::Display>(
         |file_id, _read_limit| file_reader(file_id),
     )
 }
-pub fn run_analysis_extraction_with_reader_limits<E: std::fmt::Display>(
+pub fn run_analysis_extraction_with_reader_limits<E: Into<FileServiceError>>(
     conn: &Connection,
     case_id: &str,
     platform: DataSourcePlatform,
@@ -97,7 +98,7 @@ pub fn run_analysis_extraction_with_reader_limits<E: std::fmt::Display>(
         file_reader,
     )
 }
-pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
+pub fn run_analysis_extraction_with_cancel<E: Into<FileServiceError>>(
     conn: &Connection,
     case_id: &str,
     platform: DataSourcePlatform,
@@ -116,14 +117,14 @@ pub fn run_analysis_extraction_with_cancel<E: std::fmt::Display>(
         |candidate, read_limit| {
             file_reader(&candidate.file_id, read_limit)
                 .map(CandidateSource::Reader)
-                .map_err(|error| error.to_string())
+                .map_err(Into::into)
         },
     )
     .map(|execution| execution.dto)
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn run_analysis_extraction_with_source_and_progress<E: std::fmt::Display>(
+pub fn run_analysis_extraction_with_source_and_progress<E: Into<FileServiceError>>(
     conn: &Connection,
     case_id: &str,
     platform: DataSourcePlatform,
@@ -141,9 +142,7 @@ pub fn run_analysis_extraction_with_source_and_progress<E: std::fmt::Display>(
         cancel_token,
         browser_password,
         progress,
-        |candidate, read_limit| {
-            file_reader(candidate, read_limit).map_err(|error| error.to_string())
-        },
+        |candidate, read_limit| file_reader(candidate, read_limit).map_err(Into::into),
         &analysis_plugins::plugin_loader::load_all_report,
     )
 }
@@ -155,7 +154,7 @@ fn run_analysis_extraction_with_source(
     categories: &[&str],
     cancel_token: &AtomicBool,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
-    file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     run_analysis_extraction_with_plugin_loader(
         conn,
@@ -177,7 +176,7 @@ fn run_analysis_extraction_with_plugin_loader(
     categories: &[&str],
     cancel_token: &AtomicBool,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
-    file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     plugin_loader: &dyn Fn() -> PluginLoadReport,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     run_analysis_extraction_with_plugin_loader_with_password(
@@ -201,7 +200,7 @@ fn run_analysis_extraction_with_plugin_loader_with_password(
     cancel_token: &AtomicBool,
     browser_password: Option<&str>,
     progress: &mut dyn FnMut(ExtractionProgressUpdate),
-    mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    mut file_reader: impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     plugin_loader: &dyn Fn() -> PluginLoadReport,
 ) -> Result<AnalysisExtractionExecution, AnalysisServiceError> {
     let discovery_started = Instant::now();
@@ -274,7 +273,7 @@ fn extract_discovered_candidates(
     cancel_token: &AtomicBool,
     browser_password: Option<&str>,
     progress_reporter: &mut ExtractionProgressReporter<'_>,
-    file_reader: impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     discovery_started: Instant,
     plugin_extractors: &[&dyn ArtifactExtractor],
     plugin_loads: Vec<PluginLoadRecord>,
@@ -379,7 +378,7 @@ fn prepare_run_preloads(
     progress: &mut ExtractionProgressReporter<'_>,
     cancel_token: &AtomicBool,
     browser_password: Option<&str>,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<RunPreloads, AnalysisServiceError> {
     let started = Instant::now();
     let registry =

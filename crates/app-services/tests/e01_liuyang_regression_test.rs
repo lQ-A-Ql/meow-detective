@@ -2358,14 +2358,19 @@ fn liuyang_e01_email_extraction_regression() {
                 &case_id.0,
                 domain::DataSourcePlatform::Windows,
                 &["Email"],
-                |file_id, read_limit| {
+                |file_id, read_limit| -> Result<Box<dyn Read>, std::io::Error> {
                     let path = entry_map
                         .get(&file_id.0)
                         .cloned()
-                        .ok_or_else(|| format!("missing file entry for {}", file_id.0))?;
+                        .ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::NotFound,
+                                format!("missing file entry for {}", file_id.0),
+                            )
+                        })?;
                     let boxed: Box<dyn EvidenceReader> =
-                        Box::new(E01Reader::open(&fixture_for_reader).map_err(|e| e.to_string())?);
-                    let fs = fs_ntfs::NtfsReader::open(boxed, offset).map_err(|e| e.to_string())?;
+                        Box::new(E01Reader::open(&fixture_for_reader)?);
+                    let fs = fs_ntfs::NtfsReader::open(boxed, offset)?;
                     // Catalog paths carry the display-only partition marker.
                     // Mirror the production image reader's path candidates:
                     // try the raw filesystem path, then the inode-local id.
@@ -2375,14 +2380,12 @@ fn liuyang_e01_email_extraction_regression() {
                         .unwrap_or(&path);
                     let reader = fs
                         .open_file(raw_path)
-                        .or_else(|_| fs.open_file(&file_id.0))
-                        .map_err(|e| e.to_string())?;
+                        .or_else(|_| fs.open_file(&file_id.0))?;
                     let mut bytes = Vec::new();
                     reader
                         .take(read_limit as u64)
-                        .read_to_end(&mut bytes)
-                        .map_err(|e| e.to_string())?;
-                    Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(bytes)))
+                        .read_to_end(&mut bytes)?;
+                    Ok(Box::new(std::io::Cursor::new(bytes)))
                 },
             )
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;

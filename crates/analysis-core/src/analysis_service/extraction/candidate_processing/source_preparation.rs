@@ -61,7 +61,7 @@ pub(super) fn prepare_source<F>(
     capability: AnalysisCapability,
 ) -> Result<PreparedWork<PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let read_limit = candidate_read_limit(&candidate, capability);
     if capability.read_policy == CandidateReadPolicy::Full
@@ -174,7 +174,7 @@ fn read_plugin_companions<F>(
     capability: AnalysisCapability,
 ) -> Result<Vec<ArtifactCompanion>, CandidateExtractionError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let mut loaded = Vec::with_capacity(primary.companions.len());
     for companion in &primary.companions {
@@ -228,7 +228,7 @@ fn prepare_image_structure<F>(
     capability: AnalysisCapability,
 ) -> Result<PreparedWork<PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let source = match (coordinator.file_reader)(&candidate, 0) {
         Ok(source) => source,
@@ -328,7 +328,7 @@ fn prepare_evtx_source<F>(
     read_limit: usize,
 ) -> Result<PreparedWork<PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let source = match (coordinator.file_reader)(&candidate, read_limit) {
         Ok(source) => source,
@@ -420,7 +420,7 @@ fn read_candidate_bytes<F>(
     read_limit: usize,
 ) -> Result<Vec<u8>, CandidateExtractionError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     read_candidate_bytes_with_progress(
         candidate,

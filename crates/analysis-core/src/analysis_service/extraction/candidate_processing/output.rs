@@ -51,8 +51,19 @@ pub(super) fn record_input_diagnostic<F>(
     diagnostic_counts: transport::dto::AnalysisDiagnosticCountsDto,
 ) -> Result<CandidateProgressResult, AnalysisServiceError> {
     preserve_failed_candidate(coordinator.context, candidate, capability)?;
+    tracing::warn!(
+        corrupt_inputs = diagnostic_counts.corrupt_inputs,
+        capability_limits = diagnostic_counts.capability_limits,
+        reason = %warning,
+        "Artifact input diagnostic: {warning}"
+    );
+    let warning = if warning.starts_with(&candidate.path) {
+        warning
+    } else {
+        format!("{}: {warning}", candidate.path)
+    };
     let outcome = super::ExtractionOutcome {
-        warnings: vec![format!("{}: {warning}", candidate.path)],
+        warnings: vec![warning],
         diagnostic_counts,
         ..Default::default()
     };
@@ -74,6 +85,13 @@ pub(super) fn apply_outcome<F>(
     plugin_failures: Vec<PluginExtractFailure>,
 ) -> Result<CandidateProgressResult, AnalysisServiceError> {
     let context = coordinator.context;
+    for warning in &observation.warnings {
+        if observation.diagnostic_counts.read_failures > 0 || !plugin_failures.is_empty() {
+            tracing::error!(reason = %warning, "Artifact candidate extraction failed: {warning}");
+        } else {
+            tracing::warn!(reason = %warning, "Artifact input diagnostic: {warning}");
+        }
+    }
     let scopes = replacements(context, candidate, capability);
     let started = Instant::now();
     let mut retired = 0;
@@ -140,7 +158,9 @@ pub(super) fn retire_blocked_candidate<F>(
         &replacements(context, candidate, capability),
         context.cancel_token,
     )?;
-    coordinator.state.record_warning(capability, warning);
+    coordinator
+        .state
+        .record_candidate_failure(capability, candidate, warning);
     Ok(CandidateProgressResult {
         warning: true,
         ..CandidateProgressResult::default()

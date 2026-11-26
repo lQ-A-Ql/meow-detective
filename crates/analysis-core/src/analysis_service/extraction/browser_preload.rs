@@ -1,8 +1,8 @@
 use super::browser_lsa::{
     extend_prekeys_from_lsa_secrets, read_cng_chromekey_file, read_elevation_service, PrekeySeed,
 };
-use super::candidate_processing::{read_candidate_bytes_with_progress, CandidateSource};
-use super::reader::CandidateExtractionError;
+use super::candidate_processing::read_candidate_bytes_with_progress;
+use super::reader::{CandidateExtractionError, CandidateReadResult};
 use crate::analysis_service::candidates::{
     normalize_evidence_path, EvidenceCandidate, PreparationCatalog,
 };
@@ -82,7 +82,7 @@ pub(super) fn prepare_browser_preload(
     candidates: &[EvidenceCandidate],
     cancel_token: &AtomicBool,
     manual_password: Option<&str>,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<BrowserPreloadContext, AnalysisServiceError> {
     let roots = browser_roots(candidates);
     if roots.is_empty() {
@@ -143,7 +143,7 @@ fn prepare_source_context(
     roots: Vec<String>,
     cancel_token: &AtomicBool,
     manual_password: Option<&str>,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
     let data_source_id = scope.data_source_id;
@@ -208,7 +208,7 @@ fn install_profile_decryptors(
     roots: Vec<String>,
     master_keys: &[DecryptedMasterKey],
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     context: &mut BrowserPreloadContext,
 ) -> Result<(), AnalysisServiceError> {
     let data_source_id = scope.data_source_id;
@@ -319,7 +319,7 @@ fn load_master_keys(
     data_source_id: &str,
     prekeys: &[[u8; 20]],
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<Vec<DecryptedMasterKey>, AnalysisServiceError> {
     let locators = locate_master_key_files(catalog, data_source_id);
     let mut recovered = HashMap::<String, DecryptedMasterKey>::new();
@@ -338,7 +338,7 @@ fn load_master_keys(
 pub(super) fn read_locator(
     locator: &EvidenceCandidate,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<Vec<u8>, AnalysisServiceError> {
     let limit = if locator
         .path
@@ -375,7 +375,7 @@ pub(super) fn read_registry_locator(
     locator: &EvidenceCandidate,
     registry: &super::registry_preload::RegistryPreloadContext,
     cancel_token: &AtomicBool,
-    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    file_reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<Vec<u8>, AnalysisServiceError> {
     ensure_not_cancelled(cancel_token)?;
     match registry.snapshot(locator) {

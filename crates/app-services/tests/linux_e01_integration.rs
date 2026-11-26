@@ -2113,7 +2113,6 @@ fn linux_e01_analysis_summary_reports_candidate_coverage_and_unsupported_sources
         |file_id, read_limit| {
             file_service::read_file_header_by_id(&conn, file_id, read_limit)
                 .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-                .map_err(|error| error.to_string())
         },
     )
     .expect("LinuxArtifacts extraction should run against real root LV candidates");
@@ -2774,7 +2773,6 @@ fn linux_e01_analysis_extraction_produces_linux_artifacts() {
         |file_id, read_limit| {
             file_service::read_file_header_by_id(&conn, file_id, read_limit)
                 .map(|bytes| Box::new(std::io::Cursor::new(bytes)) as Box<dyn Read>)
-                .map_err(|error| error.to_string())
         },
     )
     .expect("analysis extraction should succeed");

@@ -1,4 +1,4 @@
-use super::super::reader::CandidateSource;
+use super::super::reader::{CandidateReadResult, CandidateSource};
 use crate::analysis_service::{
     cancellation::ensure_not_cancelled,
     candidates::{
@@ -22,7 +22,7 @@ pub(super) fn annotate(
     catalog: &PreparationCatalog,
     password: Option<&str>,
     cancel: &AtomicBool,
-    read: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    read: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<(), AnalysisServiceError> {
     let mut cache = BTreeMap::new();
     let run_identity = uuid::Uuid::new_v4().to_string();
@@ -125,7 +125,7 @@ fn fingerprint_dependencies(
     dependencies: &[EvidenceCandidate],
     run_identity: &str,
     cancel: &AtomicBool,
-    read: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    read: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<String, AnalysisServiceError> {
     let mut fingerprint = Sha256::new();
     fingerprint.update(b"analysis-dependency-input-set-v1");
@@ -147,15 +147,15 @@ fn fingerprint_dependencies(
 fn fingerprint_input(
     dependency: &EvidenceCandidate,
     cancel: &AtomicBool,
-    read: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    read: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 ) -> Result<String, AnalysisServiceError> {
     if dependency.encrypted || dependency.size > MAX_REGISTRY_ANALYSIS_BYTES as u64 {
         return Err(AnalysisServiceError::Unsupported(
             "dependency input exceeds its readable scope".into(),
         ));
     }
-    let source =
-        read(dependency, MAX_REGISTRY_ANALYSIS_BYTES).map_err(AnalysisServiceError::Read)?;
+    let source = read(dependency, MAX_REGISTRY_ANALYSIS_BYTES)
+        .map_err(|error| AnalysisServiceError::Read(error.to_string()))?;
     let reader: Box<dyn Read> = match source {
         CandidateSource::Seekable(reader) => reader,
         CandidateSource::Reader(reader) => reader,

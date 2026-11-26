@@ -9,7 +9,7 @@ pub(super) fn run(
     checkpoints: &ExistingCheckpoints<'_>,
     preloads: &RunPreloads,
     output: native_output::StreamingGeneration,
-    reader: &mut impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    reader: &mut impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
     progress: &mut ExtractionProgressReporter<'_>,
     discovery_started: Instant,
     plugins: &[&dyn ArtifactExtractor],

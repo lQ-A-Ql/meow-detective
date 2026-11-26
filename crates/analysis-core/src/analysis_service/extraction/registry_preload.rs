@@ -1,9 +1,11 @@
+use super::reader::corrupt_read;
 use crate::analysis_service::cancellation::ensure_not_cancelled;
 use crate::analysis_service::candidates::{normalize_evidence_path, EvidenceCandidate};
 use crate::analysis_service::error::AnalysisServiceError;
 use crate::analysis_service::MAX_REGISTRY_ANALYSIS_BYTES;
 use artifacts_windows::registry::{RegistryHiveSource, RegistrySnapshot};
 use domain::FileEntryId;
+use evidence_access::file_service::FileServiceError;
 use std::collections::{HashMap, HashSet};
 use std::io::Read;
 use std::sync::atomic::AtomicBool;
@@ -63,7 +65,7 @@ impl RegistryPreloadContext {
     }
 }
 
-pub(super) fn preload_registry_context<E: std::fmt::Display>(
+pub(super) fn preload_registry_context<E: Into<FileServiceError>>(
     candidates: &[EvidenceCandidate],
     cancel_token: &AtomicBool,
     mut file_reader: impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
@@ -167,7 +169,7 @@ enum RegistryPreparationError {
     Read(String),
 }
 
-fn load_snapshot<E: std::fmt::Display>(
+fn load_snapshot<E: Into<FileServiceError>>(
     candidate: &EvidenceCandidate,
     cancel_token: &AtomicBool,
     file_reader: &mut impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
@@ -180,10 +182,14 @@ fn load_snapshot<E: std::fmt::Display>(
         cancel_token,
     )?;
     if bytes.len() as u64 != candidate.size {
-        return Err(RegistryPreparationError::Read(read_warning(
+        return Err(RegistryPreparationError::Input(read_warning(
             &candidate.path,
             None,
-            &"registry hive was truncated",
+            &format!(
+                "registry hive length mismatch: expected {} bytes, read {} bytes",
+                candidate.size,
+                bytes.len()
+            ),
         )));
     }
     let mut logs = Vec::with_capacity(2);
@@ -209,10 +215,14 @@ fn load_snapshot<E: std::fmt::Display>(
             cancel_token,
         )?;
         if bytes.len() as u64 != companion.size {
-            return Err(RegistryPreparationError::Read(read_warning(
+            return Err(RegistryPreparationError::Input(read_warning(
                 &candidate.path,
                 Some(label),
-                &"registry log was truncated",
+                &format!(
+                    "registry log length mismatch: expected {} bytes, read {} bytes",
+                    companion.size,
+                    bytes.len()
+                ),
             )));
         }
         logs.push(Some(bytes));
@@ -228,7 +238,7 @@ fn load_snapshot<E: std::fmt::Display>(
         })
 }
 
-fn read_file_entry_bytes<E: std::fmt::Display>(
+fn read_file_entry_bytes<E: Into<FileServiceError>>(
     file_reader: &mut impl FnMut(&FileEntryId, usize) -> Result<Box<dyn Read>, E>,
     file_id: &FileEntryId,
     hive_path: &str,
@@ -238,8 +248,7 @@ fn read_file_entry_bytes<E: std::fmt::Display>(
     ensure_not_cancelled(cancel_token)?;
     let result = file_reader(file_id, MAX_REGISTRY_ANALYSIS_BYTES);
     ensure_not_cancelled(cancel_token)?;
-    let mut reader = result
-        .map_err(|error| RegistryPreparationError::Read(read_warning(hive_path, label, &error)))?;
+    let mut reader = result.map_err(|error| classify_read_error(hive_path, label, error.into()))?;
     let mut bytes = Vec::with_capacity(READ_BUFFER_BYTES);
     let mut buffer = [0u8; READ_BUFFER_BYTES];
     let mut limited = reader.by_ref().take(MAX_REGISTRY_ANALYSIS_BYTES as u64 + 1);
@@ -247,9 +256,7 @@ fn read_file_entry_bytes<E: std::fmt::Display>(
         ensure_not_cancelled(cancel_token)?;
         let result = limited.read(&mut buffer);
         ensure_not_cancelled(cancel_token)?;
-        let read = result.map_err(|error| {
-            RegistryPreparationError::Read(read_warning(hive_path, label, &error))
-        })?;
+        let read = result.map_err(|error| classify_read_error(hive_path, label, error.into()))?;
         if read == 0 {
             break;
         }
@@ -264,6 +271,19 @@ fn read_file_entry_bytes<E: std::fmt::Display>(
     }
     ensure_not_cancelled(cancel_token)?;
     Ok(bytes)
+}
+
+fn classify_read_error(
+    path: &str,
+    label: Option<&str>,
+    error: FileServiceError,
+) -> RegistryPreparationError {
+    let warning = read_warning(path, label, &error);
+    if corrupt_read(&error) {
+        RegistryPreparationError::Input(warning)
+    } else {
+        RegistryPreparationError::Read(warning)
+    }
 }
 
 fn read_warning(hive_path: &str, label: Option<&str>, error: &impl std::fmt::Display) -> String {

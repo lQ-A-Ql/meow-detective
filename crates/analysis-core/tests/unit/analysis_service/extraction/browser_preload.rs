@@ -1,4 +1,5 @@
 use super::*;
+use crate::analysis_service::extraction::reader::CandidateSource;
 use domain::{DataSourceId, EntryType, FileEntry, FileEntryId};
 use rusqlite::Connection;
 
@@ -118,7 +119,7 @@ fn dependency_short_read_is_retryable() {
     let result = read_locator(&input, &AtomicBool::new(false), &mut |_, _| {
         std::fs::File::open(&path)
             .map(|reader| CandidateSource::Reader(Box::new(reader)))
-            .map_err(|error| error.to_string())
+            .map_err(Into::into)
     });
     assert!(matches!(result, Err(AnalysisServiceError::Read(_))));
 }
@@ -160,7 +161,7 @@ fn temporarily_unreadable_key_input_blocks_only_secret_stores() {
         &mut |input, _| {
             std::fs::File::open(directory.path().join(&input.path))
                 .map(|reader| CandidateSource::Reader(Box::new(reader)))
-                .map_err(|error| error.to_string())
+                .map_err(Into::into)
         },
     )
     .unwrap();

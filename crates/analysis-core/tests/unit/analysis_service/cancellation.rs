@@ -24,7 +24,7 @@ fn cancellation_during_candidate_read_discards_uncommitted_outputs() {
         |_, _| {
             reader_calls.fetch_add(1, Ordering::Relaxed);
             cancel_token.store(true, Ordering::Relaxed);
-            Ok::<Box<dyn Read>, String>(Box::new(std::io::Cursor::new(
+            Ok::<Box<dyn Read>, std::io::Error>(Box::new(std::io::Cursor::new(
                 b"From: analyst@example.test\r\n\r\ncancel fixture".to_vec(),
             )))
         },

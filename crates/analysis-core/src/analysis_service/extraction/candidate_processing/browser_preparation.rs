@@ -8,7 +8,7 @@ pub(super) fn prepare<F>(
     bytes: Vec<u8>,
 ) -> Result<PreparedWork<PreparedCandidate, CandidateCompletion>, AnalysisServiceError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     if !is_sqlite_path(&candidate.path) {
         unreachable!("only SQLite browser artifacts are prepared here");
@@ -59,7 +59,7 @@ fn read_companions<F>(
     capability: AnalysisCapability,
 ) -> Result<Vec<ArtifactCompanion>, CandidateExtractionError>
 where
-    F: FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String>,
+    F: FnMut(&EvidenceCandidate, usize) -> CandidateReadResult,
 {
     let mut loaded = Vec::with_capacity(primary.companions.len());
     for companion in &primary.companions {

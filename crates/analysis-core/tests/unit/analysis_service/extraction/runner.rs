@@ -43,7 +43,7 @@ fn owned_candidate_bytes_are_reused_without_a_second_content_copy() {
         4,
         &AtomicBool::new(false),
         &mut |_, _| {
-            Ok::<CandidateSource, String>(CandidateSource::Bytes(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(
                 input.take().expect("candidate bytes requested once"),
             ))
         },
@@ -85,7 +85,7 @@ fn systemd_preparation_collects_dracut_symlink_targets_outside_systemd_directori
         |candidate, _| {
             std::fs::File::open(&paths[&candidate.file_id.0])
                 .map(|file| CandidateSource::Reader(Box::new(file)))
-                .map_err(|error| error.to_string())
+                .map_err(Into::into)
         },
     )
     .unwrap();
@@ -141,9 +141,9 @@ fn candidate_reader_reports_monotonic_byte_progress() {
         candidate.size as usize,
         &AtomicBool::new(false),
         &mut |_, _| {
-            Ok::<CandidateSource, String>(CandidateSource::Reader(Box::new(std::io::Cursor::new(
-                expected.take().expect("candidate requested once"),
-            ))))
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Reader(Box::new(
+                std::io::Cursor::new(expected.take().expect("candidate requested once")),
+            )))
         },
         |bytes_read| byte_progress.push(bytes_read),
     )
@@ -603,7 +603,7 @@ fn plugin_only_preparation_uses_partition_timezones_without_systemd_parsing() {
         reads.push(candidate.file_id.0.clone());
         File::open(&paths[&candidate.file_id.0])
             .map(|file| CandidateSource::Reader(Box::new(file)))
-            .map_err(|error| error.to_string())
+            .map_err(Into::into)
     };
     let preloads = prepare_run_preloads(
         DataSourcePlatform::Linux,
@@ -662,7 +662,7 @@ fn empty_plugin_run_preserves_native_linux_catalog_metadata() {
             reads += 1;
             std::fs::File::open(&path)
                 .map(|file| CandidateSource::Reader(Box::new(file)))
-                .map_err(|error| error.to_string())
+                .map_err(Into::into)
         },
         &PluginLoadReport::default,
     )
@@ -996,7 +996,7 @@ fn complete_checkpoint_is_ignored_when_stale_producer_output_remains() {
 }
 
 #[test]
-fn internal_execution_reports_retryable_read_failures_without_checkpointing() {
+fn internal_execution_persists_retryable_read_diagnostics() {
     let connection = source_connection();
     insert_file(
         &connection,
@@ -1013,7 +1013,11 @@ fn internal_execution_reports_retryable_read_failures_without_checkpointing() {
         &["LinuxWebServices"],
         &cancel,
         &mut collect_progress,
-        |_, _| Err::<CandidateSource, String>("injected evidence read failure".to_string()),
+        |_, _| {
+            std::fs::File::open(connection._root.path().join("missing-evidence"))
+                .map(|file| CandidateSource::Reader(Box::new(file)))
+                .map_err(Into::into)
+        },
     )
     .expect("return retryable extraction result");
 
@@ -1037,7 +1041,7 @@ fn internal_execution_reports_retryable_read_failures_without_checkpointing() {
                 |row| row.get::<_, i64>(0)
             )
             .expect("count checkpoints"),
-        0
+        1
     );
 }
 
@@ -1087,7 +1091,7 @@ fn encrypted_rbd_candidate_never_opens_provider_and_removes_stale_outputs() {
         &mut ignore_progress,
         |_, _| {
             provider_calls += 1;
-            Ok::<CandidateSource, String>(CandidateSource::Bytes(b"ciphertext".to_vec()))
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(b"ciphertext".to_vec()))
         },
     )
     .expect("return explicit unsupported extraction result");
@@ -1129,7 +1133,9 @@ fn unencrypted_rbd_candidate_still_reads_through_provider() {
         &mut ignore_progress,
         |_, _| {
             provider_calls += 1;
-            Ok::<CandidateSource, String>(CandidateSource::Bytes(b"<?php echo 'ok'; ?>".to_vec()))
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(
+                b"<?php echo 'ok'; ?>".to_vec(),
+            ))
         },
     )
     .expect("extract ordinary RBD candidate");
@@ -1171,7 +1177,7 @@ fn encrypted_rbd_event_log_never_opens_seekable_provider() {
         &mut ignore_progress,
         |_, _| {
             provider_calls += 1;
-            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Seekable(Box::new(
                 std::io::Cursor::new(vec![0u8; 4096]),
             )))
         },
@@ -1205,7 +1211,7 @@ fn seekable_evtx_persists_atomically_and_replays_complete_checkpoint() {
         &cancel,
         &mut ignore_progress,
         |_, _| {
-            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Seekable(Box::new(
                 std::io::Cursor::new(bytes.clone()),
             )))
         },
@@ -1225,7 +1231,7 @@ fn seekable_evtx_persists_atomically_and_replays_complete_checkpoint() {
         &mut ignore_progress,
         |_, _| {
             provider_calls += 1;
-            Err::<CandidateSource, String>("checkpoint replay must not read evidence".to_string())
+            panic!("checkpoint replay must not read evidence")
         },
     )
     .expect("replay complete EVTX checkpoint");
@@ -1280,7 +1286,7 @@ fn seekable_evtx_insert_failure_rolls_back_output_replacement() {
         &cancel,
         &mut ignore_progress,
         |_, _| {
-            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Seekable(Box::new(
                 std::io::Cursor::new(bytes.clone()),
             )))
         },
@@ -1309,7 +1315,7 @@ fn corrupt_evtx_is_classified_and_replayed_without_retryable_read_failure() {
         &cancel,
         &mut progress,
         |_, _| {
-            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Seekable(Box::new(
                 std::io::Cursor::new(bytes.clone()),
             )))
         },
@@ -1324,7 +1330,7 @@ fn corrupt_evtx_is_classified_and_replayed_without_retryable_read_failure() {
         &["EventLogs"],
         &cancel,
         &mut progress,
-        |_, _| -> Result<CandidateSource, String> {
+        |_, _| -> CandidateReadResult {
             panic!("validated diagnostic checkpoint should be reused")
         },
     )
@@ -1348,7 +1354,7 @@ fn seekable_evtx_reparses_checkpoint_from_before_ntfs_valid_data_fix() {
         &cancel,
         &mut ignore_progress,
         |_, _| {
-            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Seekable(Box::new(
                 std::io::Cursor::new(bytes.clone()),
             )))
         },
@@ -1382,7 +1388,7 @@ fn seekable_evtx_reparses_checkpoint_from_before_ntfs_valid_data_fix() {
         &mut ignore_progress,
         |_, _| {
             provider_calls += 1;
-            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Seekable(Box::new(
                 std::io::Cursor::new(bytes.clone()),
             )))
         },
@@ -1438,7 +1444,7 @@ fn plugin_capability_stays_zero_overhead_without_loaded_plugins() {
         &[],
         &cancel,
         &mut ignore_progress,
-        |_, _| Ok::<CandidateSource, String>(CandidateSource::Bytes(vec![0u8; 16])),
+        |_, _| Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(vec![0u8; 16])),
         &plugin_loader,
     )
     .expect("run without plugins");
@@ -1471,7 +1477,7 @@ fn plugin_loader_is_never_invoked_when_capability_not_selected() {
         &["Registry"],
         &cancel,
         &mut ignore_progress,
-        |_, _| Ok::<CandidateSource, String>(CandidateSource::Bytes(vec![0u8; 16])),
+        |_, _| Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(vec![0u8; 16])),
         &plugin_loader,
     )
     .expect("built-in-only run");
@@ -1495,7 +1501,7 @@ fn empty_candidate_run_skips_streamed_output_generation() {
         &["EventLogs"],
         &cancel,
         &mut collect_progress,
-        |_, _| Ok::<CandidateSource, String>(CandidateSource::Bytes(Vec::new())),
+        |_, _| Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(Vec::new())),
         &analysis_plugins::plugin_loader::load_all_report,
     )
     .expect("complete a run that discovered no candidates");
@@ -1567,7 +1573,7 @@ fn copy_progress_cancellation_stops_the_real_extraction_run() {
         &["EventLogs"],
         &cancel,
         &mut progress,
-        |_, _| -> Result<CandidateSource, String> {
+        |_, _| -> CandidateReadResult {
             panic!("candidate content requested after copy cancellation")
         },
         &analysis_plugins::plugin_loader::load_all_report,
@@ -1606,7 +1612,7 @@ fn persisting_progress_cancellation_preserves_the_published_generation() {
         &mut progress,
         |_, _| {
             reads += 1;
-            Ok::<CandidateSource, String>(CandidateSource::Seekable(Box::new(
+            Ok::<CandidateSource, FileServiceError>(CandidateSource::Seekable(Box::new(
                 std::io::Cursor::new(bytes.clone()),
             )))
         },
@@ -1744,7 +1750,9 @@ fn magic_probe_reads_only_the_header_budget_and_maps_image_types() {
     let mut reader = |candidate: &EvidenceCandidate, limit: usize| {
         assert_eq!(candidate.category, "ImageMetadataProbe");
         limits.push(limit);
-        Ok::<CandidateSource, String>(CandidateSource::Bytes(b"\xff\xd8\xff\xe0".to_vec()))
+        Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(
+            b"\xff\xd8\xff\xe0".to_vec(),
+        ))
     };
     {
         let mut probe = super::build_magic_probe(&mut reader);
@@ -1783,13 +1791,13 @@ fn magic_probe_ignores_non_image_headers_and_streaming_sources() {
         unix_mode: None,
     };
     let mut text_reader = |_: &EvidenceCandidate, _: usize| {
-        Ok::<CandidateSource, String>(CandidateSource::Bytes(b"plain text".to_vec()))
+        Ok::<CandidateSource, FileServiceError>(CandidateSource::Bytes(b"plain text".to_vec()))
     };
     let mut text_probe = super::build_magic_probe(&mut text_reader);
     assert_eq!(text_probe(&entry).unwrap(), None);
 
     let mut streaming_reader = |_: &EvidenceCandidate, _: usize| {
-        Ok::<CandidateSource, String>(CandidateSource::Reader(Box::new(std::io::empty())))
+        Ok::<CandidateSource, FileServiceError>(CandidateSource::Reader(Box::new(std::io::empty())))
     };
     let mut streaming_probe = super::build_magic_probe(&mut streaming_reader);
     assert_eq!(streaming_probe(&entry).unwrap(), None);
@@ -1798,7 +1806,7 @@ fn magic_probe_ignores_non_image_headers_and_streaming_sources() {
 fn image_source_reader(
     bytes: Vec<u8>,
     seekable: bool,
-) -> impl FnMut(&EvidenceCandidate, usize) -> Result<CandidateSource, String> {
+) -> impl FnMut(&EvidenceCandidate, usize) -> CandidateReadResult {
     move |candidate, limit| {
         if candidate.category == "ImageMetadataProbe" {
             let available = bytes.len().min(limit);
@@ -2128,7 +2136,7 @@ fn cancelled_image_metadata_run_returns_cancelled() {
         &["ImageMetadata"],
         &cancel,
         &mut ignore_progress,
-        |_, _| Err::<CandidateSource, String>("reader must not be called".to_string()),
+        |_, _| -> CandidateReadResult { panic!("reader must not be called") },
     );
 
     assert!(matches!(result, Err(AnalysisServiceError::Cancelled)));
