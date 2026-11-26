@@ -122,7 +122,7 @@ fn execute_registry_tool(
                 &registry_context,
                 request,
             )
-            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            .map_err(McpHostServiceError::Registry)?;
             Ok(serde_json::to_value(result)?)
         }
         "forensics.resolve_registry_key" => {
@@ -133,7 +133,7 @@ fn execute_registry_tool(
                 &registry_context,
                 request,
             )
-            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            .map_err(McpHostServiceError::Registry)?;
             Ok(serde_json::to_value(result)?)
         }
         "forensics.list_registry_subkeys" => {
@@ -144,7 +144,7 @@ fn execute_registry_tool(
                 &registry_context,
                 request,
             )
-            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            .map_err(McpHostServiceError::Registry)?;
             Ok(serde_json::to_value(result)?)
         }
         "forensics.list_registry_values" => {
@@ -155,7 +155,7 @@ fn execute_registry_tool(
                 &registry_context,
                 request,
             )
-            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            .map_err(McpHostServiceError::Registry)?;
             Ok(serde_json::to_value(result)?)
         }
         "forensics.read_registry_value_range" => {
@@ -166,7 +166,7 @@ fn execute_registry_tool(
                 &registry_context,
                 request,
             )
-            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            .map_err(McpHostServiceError::Registry)?;
             Ok(serde_json::to_value(result)?)
         }
         "forensics.close_registry_hive" => {
@@ -177,7 +177,7 @@ fn execute_registry_tool(
                 &context.query.case_meta.id.0,
                 request,
             )
-            .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?;
+            .map_err(McpHostServiceError::Registry)?;
             Ok(serde_json::json!({"closed":true}))
         }
         _ => Err(McpHostServiceError::InvalidInput),

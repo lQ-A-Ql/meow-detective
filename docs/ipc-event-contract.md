@@ -89,6 +89,8 @@ offset、length、scannedBytes、bytesWritten 跨 IPC 使用规范十进制字�
   不支持 `merged`（层叠 hive 合成）或扫描任意历史日志片段。
 - 来源绑定 `caseId/dataSourceId/fileId/sourceRevision/view`；所有 keyId、valueId、
   cursor 和 sessionId 都是来源/会话范围内的身份，不能跨会话复用。
+- 已删除 Hive 返回 `code=deletedHive`、`category=unsupported` 和
+  `recoverable=false`。页面显示对应的集中管理文案，MCP 保留该错误码及分类。
 - 根键相对路径为 `""`；值名 `""` 表示确实存在的默认值。无默认值时不制造值行。
 - `typeCode/typeName` 保留 VK 原生类型；`lastWriteFiletime` 与解码后的整数文本
   以十进制字符串保留精度。`cellOffset` 是 HBIN 相对偏移，不是整盘偏移。

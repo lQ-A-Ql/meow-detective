@@ -6,6 +6,8 @@ use transport::{ErrorCategory, ServiceErrorCategory};
 pub enum RegistryBrowserError {
     #[error("registry request is invalid")]
     InvalidRequest,
+    #[error("registry hive is deleted")]
+    DeletedHive,
     #[error("registry session has expired")]
     ExpiredSession,
     #[error("registry source is unavailable")]
@@ -25,6 +27,7 @@ impl ServiceErrorCategory for RegistryBrowserError {
     fn category(&self) -> ErrorCategory {
         match self {
             Self::InvalidRequest | Self::ExpiredSession => ErrorCategory::Validation,
+            Self::DeletedHive => ErrorCategory::Unsupported,
             Self::SourceUnavailable => ErrorCategory::Io,
             Self::LockedHive => ErrorCategory::Security,
             Self::Parser(BrowserError::Unsupported | BrowserError::Limit) => {
@@ -42,6 +45,7 @@ impl ServiceErrorCategory for RegistryBrowserError {
             Self::InvalidRequest
             | Self::Parser(BrowserError::InvalidPath | BrowserError::Limit) => "invalidRequest",
             Self::ExpiredSession => "expiredSession",
+            Self::DeletedHive => "deletedHive",
             Self::SourceUnavailable => "sourceUnavailable",
             Self::LockedHive => "lockedHive",
             Self::Parser(BrowserError::NotFound) => "keyNotFound",
@@ -54,10 +58,13 @@ impl ServiceErrorCategory for RegistryBrowserError {
         })
     }
     fn user_message(&self) -> Option<&'static str> {
+        if matches!(self, Self::DeletedHive) {
+            return Some("The selected registry hive is deleted.");
+        }
         Some("Registry browser request could not be completed.")
     }
     fn recoverable(&self) -> Option<bool> {
-        Some(true)
+        Some(!matches!(self, Self::DeletedHive))
     }
     fn safe_details(&self) -> Option<serde_json::Value> {
         match self {

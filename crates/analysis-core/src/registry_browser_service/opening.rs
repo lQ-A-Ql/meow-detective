@@ -31,10 +31,12 @@ pub fn open_hive(
     let mut descriptor = mapping::descriptor(&entry);
     if descriptor.file_id != request.file_id
         || entry.data_source_id != global.data_source_id
-        || entry.deleted
         || entry.entry_type != domain::EntryType::File
     {
         return Err(RegistryBrowserError::InvalidRequest);
+    }
+    if entry.deleted {
+        return Err(RegistryBrowserError::DeletedHive);
     }
     if entry.encrypted {
         return Err(RegistryBrowserError::LockedHive);

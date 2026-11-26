@@ -50,6 +50,8 @@ pub enum McpHostServiceError {
     DataSource(#[from] crate::file_service::FileServiceError),
     #[error("读取分析数据失败")]
     Analysis(#[source] crate::analysis_service::AnalysisServiceError),
+    #[error("registry browser request failed: {0}")]
+    Registry(#[from] crate::registry_browser_service::RegistryBrowserError),
     #[error("读取数据源 {data_source_id} 失败：{source}")]
     SourceRead {
         data_source_id: String,
@@ -95,6 +97,7 @@ impl transport::ServiceErrorCategory for McpHostServiceError {
             Self::File(error) => error.category(),
             Self::FileRead { source, .. } => source.category(),
             Self::Analysis(error) => error.category(),
+            Self::Registry(error) => error.category(),
             Self::SourceRead { source, .. } => source.category(),
             Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
             Self::Timeline(error) => error.category(),
@@ -103,6 +106,34 @@ impl transport::ServiceErrorCategory for McpHostServiceError {
             Self::IncompleteRead => transport::ErrorCategory::Parser,
             Self::UnsupportedFile => transport::ErrorCategory::Unsupported,
             _ => transport::ErrorCategory::Internal,
+        }
+    }
+
+    fn code(&self) -> Option<&'static str> {
+        match self {
+            Self::Registry(error) => error.code(),
+            _ => None,
+        }
+    }
+
+    fn user_message(&self) -> Option<&'static str> {
+        match self {
+            Self::Registry(error) => error.user_message(),
+            _ => None,
+        }
+    }
+
+    fn recoverable(&self) -> Option<bool> {
+        match self {
+            Self::Registry(error) => error.recoverable(),
+            _ => None,
+        }
+    }
+
+    fn safe_details(&self) -> Option<serde_json::Value> {
+        match self {
+            Self::Registry(error) => error.safe_details(),
+            _ => None,
         }
     }
 }
