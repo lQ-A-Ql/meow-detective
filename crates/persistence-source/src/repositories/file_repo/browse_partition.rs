@@ -21,15 +21,19 @@ impl FileRepo<'_> {
             .map_err(|_| DbError::System("partition index exceeds Fjall range".into()))?;
         let catalog = persistence_fjall::CatalogRecordStore::from_source_store((*store).clone());
         let snapshot = catalog.read_snapshot();
-        for path in paths {
+        for path in paths
+            .iter()
+            .take(if case_insensitive { 1 } else { paths.len() })
+        {
             let mut cursor = None;
             loop {
                 let page = if case_insensitive {
-                    catalog.list_all(
+                    catalog.find_by_partition_path_ci(
                         &snapshot,
                         &source.0,
+                        partition,
+                        path,
                         cursor.as_deref(),
-                        persistence_fjall::ScanDirection::Forward,
                         512,
                     )
                 } else {
@@ -46,8 +50,7 @@ impl FileRepo<'_> {
                 for record in page.records {
                     if !record.deleted
                         && record.partition_index == Some(partition)
-                        && (record.path == *path
-                            || (case_insensitive && record.path.eq_ignore_ascii_case(path)))
+                        && (case_insensitive || record.path == *path)
                     {
                         return Ok(Some(Some(crate::detail::file_entry(record))));
                     }

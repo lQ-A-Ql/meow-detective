@@ -69,7 +69,55 @@ fn parallel_catalog_batches_account_for_encoded_records_and_all_indexes() {
             .unwrap();
         assert_eq!(page.records.len(), 1);
         assert_eq!(page.records[0].id, format!("catalog-record-{index:08}"));
+        let folded = store
+            .find_by_partition_path_ci(&snapshot, "source", 1, &path.to_uppercase(), None, 10)
+            .unwrap();
+        assert_eq!(folded.records[0].id, page.records[0].id);
     }
+}
+
+#[test]
+fn partition_path_index_tracks_renames_deletion_and_partition_collisions() {
+    let root = tempfile::tempdir().unwrap();
+    let store = CatalogRecordStore::open(root.path(), DatabaseConfig::default()).unwrap();
+    let mut first = record("s", "first", None, "SAM", "[P1]/Windows/SAM");
+    let mut second = first.clone();
+    second.id = "second".into();
+    second.partition_index = Some(2);
+    second.path = "/Windows/SAM".into();
+    store
+        .upsert_batch(&[first.clone(), second], PersistMode::SyncAll)
+        .unwrap();
+    let snapshot = store.read_snapshot();
+    for (partition, expected) in [(1, "first"), (2, "second")] {
+        let page = store
+            .find_by_partition_path_ci(&snapshot, "s", partition, "windows/sam", None, 10)
+            .unwrap();
+        assert_eq!(page.records.len(), 1);
+        assert_eq!(page.records[0].id, expected);
+    }
+    first.path = "Windows/SOFTWARE".into();
+    store.upsert(&first, PersistMode::SyncAll).unwrap();
+    let latest = store.read_snapshot();
+    assert!(store
+        .find_by_partition_path_ci(&latest, "s", 1, "windows/sam", None, 10)
+        .unwrap()
+        .records
+        .is_empty());
+    assert_eq!(
+        store
+            .find_by_partition_path_ci(&snapshot, "s", 1, "windows/sam", None, 10)
+            .unwrap()
+            .records
+            .len(),
+        1
+    );
+    store.delete("s", "first", PersistMode::SyncAll).unwrap();
+    assert!(store
+        .find_by_partition_path_ci(&store.read_snapshot(), "s", 1, "windows/software", None, 10)
+        .unwrap()
+        .records
+        .is_empty());
 }
 
 #[test]

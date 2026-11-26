@@ -74,12 +74,7 @@ impl FileRepo<'_> {
         partition_index: usize,
         path: &str,
     ) -> DbResult<Option<FileEntry>> {
-        let normalized = path.trim_start_matches('/');
-        let candidates = [
-            normalized.to_owned(),
-            format!("[P{partition_index}]/{normalized}"),
-            format!("/{normalized}"),
-        ];
+        let candidates = [path.to_owned()];
         if let Some(entry) =
             self.native_partition_path(data_source_id, partition_index, &candidates, true)?
         {

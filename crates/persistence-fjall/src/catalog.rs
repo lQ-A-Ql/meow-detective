@@ -21,6 +21,7 @@ mod file_feed;
 mod id_feed;
 mod metrics;
 mod parallel;
+mod path_lookup;
 pub(crate) use parallel::encoded_record_bytes;
 mod partition_subtree;
 pub use browse::{CatalogBrowsePage, CatalogBrowseQuery};
@@ -32,7 +33,7 @@ pub(super) use catalog_keys::{
 pub use catalog_stream::CatalogStreamError;
 
 const RECORD_KIND: &str = "file_entry";
-const SCHEMA_VERSION: u16 = 2;
+const SCHEMA_VERSION: u16 = 3;
 const RECORD_FAMILY: &str = "catalog.record";
 const PARENT_FAMILY: &str = "catalog.parent";
 const ROOT_DIRECTORY_FAMILY: &str = "catalog.root-directory";
@@ -358,6 +359,7 @@ impl CatalogRecordStore {
             }
         }
         actions.push(index_write(path_key(record)?, record_key.clone()));
+        actions.push(index_write(path_lookup::key(record)?, record_key.clone()));
         if record.entry_type == CatalogEntryType::File {
             actions.push(index_write(file_feed::key(record)?, record_key.clone()));
         }
@@ -400,6 +402,10 @@ impl CatalogRecordStore {
         actions.push(WriteAction::Delete {
             keyspace: KeyspaceName::CatalogIndexes,
             key: path_key(record)?,
+        });
+        actions.push(WriteAction::Delete {
+            keyspace: KeyspaceName::CatalogIndexes,
+            key: path_lookup::key(record)?,
         });
         if record.entry_type == CatalogEntryType::File {
             actions.push(WriteAction::Delete {
