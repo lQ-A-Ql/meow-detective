@@ -84,7 +84,8 @@ pub(crate) struct DatabaseState {
 
 impl SourceDatabase {
     pub fn open(path: impl AsRef<Path>, config: DatabaseConfig) -> Result<Self> {
-        let path = path.as_ref().to_path_buf();
+        std::fs::create_dir_all(path.as_ref())?;
+        let path = path.as_ref().canonicalize()?;
         if path.join(NATIVE_WRITE_INCOMPLETE_FILE).exists() {
             return Err(FjallStorageError::WriteSessionFailed);
         }
