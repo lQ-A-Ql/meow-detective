@@ -60,6 +60,8 @@ impl Raid10State {
         output: &mut [u8],
     ) -> std::io::Result<usize> {
         let mut last_error = None;
+        let mut first_read = false;
+        let mut candidate = vec![0; output.len()];
         for (slot, copy_offset) in self.geometry.copies(chunk) {
             let Some(member) = slots.get(slot).and_then(|member| *member) else {
                 continue;
@@ -70,11 +72,23 @@ impl Raid10State {
                 slots,
                 slot,
                 data_offset + copy_offset + within,
-                output,
+                &mut candidate,
             ) {
-                Ok(()) => return Ok(output.len()),
+                Ok(()) if first_read && output != candidate => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "RAID10 readable replicas disagree",
+                    ));
+                }
+                Ok(()) => {
+                    output.copy_from_slice(&candidate);
+                    first_read = true;
+                }
                 Err(error) => last_error = Some(error),
             }
+        }
+        if first_read {
+            return Ok(output.len());
         }
         Err(last_error.unwrap_or_else(|| std::io::Error::other("RAID10 has no readable copy")))
     }

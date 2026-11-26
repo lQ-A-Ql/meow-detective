@@ -16,21 +16,29 @@ impl MirrorState {
     ) -> std::io::Result<usize> {
         let count = (self.size - logical).min(output.len() as u64) as usize;
         let mut last_error = None;
+        let mut first_read = false;
+        let mut candidate = vec![0; count];
         for (slot, member) in slots.iter().enumerate() {
             let Some(member) = member else {
                 continue;
             };
             let data_offset = members[*member].superblock.data_offset_sectors * super::SECTOR_SIZE;
-            match read_member(
-                members,
-                slots,
-                slot,
-                data_offset + logical,
-                &mut output[..count],
-            ) {
-                Ok(()) => return Ok(count),
+            match read_member(members, slots, slot, data_offset + logical, &mut candidate) {
+                Ok(()) if first_read && output[..count] != candidate => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "RAID1 readable replicas disagree",
+                    ));
+                }
+                Ok(()) => {
+                    output[..count].copy_from_slice(&candidate);
+                    first_read = true;
+                }
                 Err(error) => last_error = Some(error),
             }
+        }
+        if first_read {
+            return Ok(count);
         }
         Err(last_error.unwrap_or_else(|| std::io::Error::other("RAID1 has no readable mirror")))
     }
@@ -117,7 +125,7 @@ impl ParityState {
         }
         let columns = (0..self.raid_disks)
             .map(|column| {
-                self.read_column_buffer(members, slots, row, within, column)
+                self.read_column_buffer(members, slots, row, within, column, output.len())
                     .ok()
             })
             .collect::<Vec<_>>();
@@ -140,9 +148,8 @@ impl ParityState {
         row: u64,
         within: u64,
         column: usize,
+        count: usize,
     ) -> std::io::Result<Vec<u8>> {
-        let count =
-            (self.chunk_bytes - within).min(self.size - row * self.chunk_bytes - within) as usize;
         let mut output = vec![0u8; count];
         self.read_column(members, slots, row, within, column, &mut output)?;
         Ok(output)
@@ -299,7 +306,7 @@ fn raid6_placement(layout: u32, n: usize, row: u64, position: usize) -> Placemen
             (p, q, column, column_data_index(column, p, q))
         }
         16..=20 => {
-            let mapped = parity_placement(5, layout - 16, n, row, position);
+            let mapped = parity_placement(5, layout - 16, n - 1, row, position);
             (mapped.p, n - 1, mapped.column, position)
         }
         _ => (data_disks, data_disks + 1, position, position),

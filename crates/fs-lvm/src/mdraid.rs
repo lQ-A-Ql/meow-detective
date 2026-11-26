@@ -13,6 +13,7 @@ const MD_SB_MAGIC: u32 = 0xa92b4efc;
 const MD_SB_V1_MIN_BYTES: usize = 256;
 const SECTOR_SIZE: u64 = 512;
 const ROLE_MAX: u16 = 0xff00;
+const MAX_MD_DEVICES: u32 = 4096;
 
 #[derive(Debug, thiserror::Error)]
 pub enum MdRaidError {
@@ -22,6 +23,12 @@ pub enum MdRaidError {
     InvalidMagic,
     #[error("MD superblock version {0} is unsupported")]
     UnsupportedVersion(u32),
+    #[error("MD superblock device count is invalid")]
+    InvalidDeviceCount,
+    #[error("MD superblock checksum is invalid")]
+    InvalidChecksum,
+    #[error("MD RAID state is unsupported: {0}")]
+    UnsupportedState(String),
     #[error("MD RAID level {0} is unsupported")]
     UnsupportedLevel(i32),
     #[error("MD RAID requires at least one member")]
@@ -99,7 +106,7 @@ impl MdRaidSuperblock {
     }
 
     pub fn is_rebuilding(&self) -> bool {
-        self.recovery_offset_sectors != u64::MAX
+        self.feature_map & 2 != 0 && self.recovery_offset_sectors != u64::MAX
     }
 }
 
@@ -125,19 +132,9 @@ pub fn parse_superblock_version(
     if bytes.len() < MD_SB_V1_MIN_BYTES {
         return Err(MdRaidError::Truncated);
     }
-    let magic = read_u32(bytes, 0)?;
-    if magic != MD_SB_MAGIC {
-        return Err(MdRaidError::InvalidMagic);
-    }
-    let major_version = read_u32(bytes, 4)?;
-    if major_version != 1 {
-        return Err(MdRaidError::UnsupportedVersion(major_version));
-    }
+    let max_dev = validate_v1_header(bytes)?;
+    let major_version = 1;
     let level = read_u32(bytes, 72)? as i32;
-    if level != 0 {
-        return Err(MdRaidError::UnsupportedLevel(level));
-    }
-    let max_dev = read_u32(bytes, 220)? as usize;
     let role_end = MD_SB_V1_MIN_BYTES
         .checked_add(max_dev.checked_mul(2).ok_or(MdRaidError::SizeOverflow)?)
         .ok_or(MdRaidError::SizeOverflow)?;
@@ -146,6 +143,9 @@ pub fn parse_superblock_version(
     }
     let stored_checksum = read_u32(bytes, 216)?;
     let computed_checksum = v1_checksum(&bytes[..role_end]);
+    if stored_checksum != computed_checksum {
+        return Err(MdRaidError::InvalidChecksum);
+    }
     let mut dev_roles = Vec::with_capacity(max_dev);
     for index in 0..max_dev {
         dev_roles.push(read_u16(bytes, MD_SB_V1_MIN_BYTES + index * 2)?);
@@ -190,7 +190,7 @@ pub fn read_superblock_version<R: Read + Seek + ?Sized>(
     reader.seek(SeekFrom::Start(offset))?;
     let mut header = [0u8; MD_SB_V1_MIN_BYTES];
     reader.read_exact(&mut header)?;
-    let max_dev = read_u32(&header, 220)? as usize;
+    let max_dev = validate_v1_header(&header)?;
     let role_bytes = max_dev.checked_mul(2).ok_or(MdRaidError::SizeOverflow)?;
     let mut bytes = vec![0u8; MD_SB_V1_MIN_BYTES + role_bytes];
     bytes[..MD_SB_V1_MIN_BYTES].copy_from_slice(&header);
@@ -198,6 +198,31 @@ pub fn read_superblock_version<R: Read + Seek + ?Sized>(
         reader.read_exact(&mut bytes[MD_SB_V1_MIN_BYTES..])?;
     }
     parse_superblock_version(&bytes, metadata_version)
+}
+
+fn validate_v1_header(bytes: &[u8]) -> Result<usize, MdRaidError> {
+    if read_u32(bytes, 0)? != MD_SB_MAGIC {
+        return Err(MdRaidError::InvalidMagic);
+    }
+    let version = read_u32(bytes, 4)?;
+    if version != 1 {
+        return Err(MdRaidError::UnsupportedVersion(version));
+    }
+    let level = read_u32(bytes, 72)? as i32;
+    if !is_supported_level(level) {
+        return Err(MdRaidError::UnsupportedLevel(level));
+    }
+    let count = read_u32(bytes, 220)?;
+    let raid_disks = read_u32(bytes, 92)?;
+    if count == 0
+        || count > MAX_MD_DEVICES
+        || raid_disks == 0
+        || raid_disks > count
+        || read_u32(bytes, 160)? >= count
+    {
+        return Err(MdRaidError::InvalidDeviceCount);
+    }
+    Ok(count as usize)
 }
 
 pub fn probe_superblock<R: Read + Seek + ?Sized>(

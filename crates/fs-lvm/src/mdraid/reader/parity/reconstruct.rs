@@ -20,7 +20,7 @@ pub(super) fn rebuild(
         .filter_map(|(position, bytes)| bytes.is_none().then_some(position))
         .collect::<Vec<_>>();
     match missing.as_slice() {
-        [] | [_] => rebuild_one(level, layout, n, row, target, &data, columns, output),
+        [_] => rebuild_one(level, layout, n, row, target, &data, columns, output),
         [first, second] => rebuild_two(
             level, layout, n, row, target, &data, columns, *first, *second, output,
         ),

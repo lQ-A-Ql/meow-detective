@@ -253,8 +253,8 @@ fn raid10_near_two_reads_adjacent_mirrors() {
     let mut members = Vec::new();
     for slot in 0..4u32 {
         let mut bytes = vec![0u8; 512 + 2048];
-        bytes[512..1024].fill(b'A' + slot as u8);
-        bytes[1024..1536].fill(b'E' + slot as u8);
+        bytes[512..1024].fill(b'A' + (slot / 2) as u8);
+        bytes[1024..1536].fill(b'E' + (slot / 2) as u8);
         members.push(MdRaidMember::new(
             raid_superblock(10, 0x102, 4, slot, slot as u8 + 1, 4),
             Box::new(MemoryReader::new(bytes)),
@@ -264,7 +264,7 @@ fn raid10_near_two_reads_adjacent_mirrors() {
     let mut output = vec![0u8; 1024];
     reader.read_exact(&mut output).unwrap();
     assert_eq!(&output[..512], vec![b'A'; 512]);
-    assert_eq!(&output[512..1024], vec![b'C'; 512]);
+    assert_eq!(&output[512..1024], vec![b'B'; 512]);
 }
 
 fn gf_multiply(mut left: u8, mut right: u8) -> u8 {

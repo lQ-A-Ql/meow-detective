@@ -115,19 +115,10 @@ struct PreparedMembers {
 }
 
 impl PreparedMembers {
-    fn new(mut members: Vec<MdRaidMember>) -> Result<Self, MdRaidError> {
-        let latest_events = members
-            .iter()
-            .map(|member| member.superblock.events)
-            .max()
-            .unwrap_or_default();
-        members.retain(|member| {
-            member.superblock.events == latest_events
-                || member.superblock.events.saturating_add(1) == latest_events
-        });
+    fn new(members: Vec<MdRaidMember>) -> Result<Self, MdRaidError> {
         let first = members.first().ok_or(MdRaidError::EmptyMembers)?;
-        if first.superblock.raid_disks == 0 {
-            return Err(MdRaidError::EmptyMembers);
+        if first.superblock.raid_disks == 0 || first.superblock.raid_disks > super::MAX_MD_DEVICES {
+            return Err(MdRaidError::InvalidDeviceCount);
         }
         let raid_disks = first.superblock.raid_disks;
         let mut slots = vec![None; raid_disks as usize];
@@ -149,11 +140,16 @@ impl PreparedMembers {
                     .data_offset_sectors
                     .checked_mul(SECTOR_SIZE)
                     .ok_or(MdRaidError::InvalidDataRange)?,
-                data_size_bytes: member
-                    .superblock
-                    .data_size_sectors
-                    .checked_mul(SECTOR_SIZE)
-                    .ok_or(MdRaidError::InvalidDataRange)?,
+                data_size_bytes: (if matches!(first.superblock.level, -1 | 0) {
+                    member.superblock.data_size_sectors
+                } else {
+                    member
+                        .superblock
+                        .data_size_sectors
+                        .min(member.superblock.size_sectors)
+                })
+                .checked_mul(SECTOR_SIZE)
+                .ok_or(MdRaidError::InvalidDataRange)?,
                 events: member.superblock.events,
                 rebuilding: member.superblock.is_rebuilding(),
             });
@@ -164,7 +160,11 @@ impl PreparedMembers {
             raid_disks,
             layout: first.superblock.layout,
             size_sectors: first.superblock.size_sectors,
-            chunk_bytes: first.superblock.chunk_bytes()?,
+            chunk_bytes: if matches!(first.superblock.level, -1 | 1) {
+                SECTOR_SIZE
+            } else {
+                first.superblock.chunk_bytes()?
+            },
             members,
             slots,
             geometry,
@@ -300,25 +300,61 @@ impl PreparedMembers {
 
 fn validate_member(member: &MdRaidMember, first: &MdRaidSuperblock) -> Result<(), MdRaidError> {
     let sb = &member.superblock;
+    if !sb.checksum_valid {
+        return Err(MdRaidError::InvalidChecksum);
+    }
     if sb.array_uuid != first.array_uuid
         || sb.level != first.level
         || sb.raid_disks != first.raid_disks
         || sb.layout != first.layout
         || sb.chunk_sectors != first.chunk_sectors
+        || sb.size_sectors != first.size_sectors
+        || sb.events != first.events
+        || sb.metadata_version != first.metadata_version
     {
         return Err(MdRaidError::MetadataConflict(
-            "array UUID, level, member count, chunk, or layout differs".to_string(),
+            "array identity, geometry, metadata version, or events differs".to_string(),
         ));
     }
+    if sb.feature_map & !(1 | 4096) != 0
+        || (sb.level != 0 && sb.feature_map & 4096 != 0)
+        || (matches!(sb.level, 1 | 4 | 5 | 6 | 10) && sb.resync_offset_sectors != u64::MAX)
+    {
+        return Err(MdRaidError::UnsupportedState(
+            "member requires recovery, reshape, bad-block, journal, or unsupported feature handling"
+                .to_string(),
+        ));
+    }
+    validate_layout(sb)?;
     let data_end = sb
         .data_offset_sectors
         .checked_add(sb.data_size_sectors)
         .and_then(|sector| sector.checked_mul(SECTOR_SIZE))
         .ok_or(MdRaidError::InvalidDataRange)?;
-    if data_end > member.reader.info().size {
+    if sb.data_size_sectors == 0 || data_end > member.reader.info().size {
         return Err(MdRaidError::InvalidDataRange);
     }
     Ok(())
+}
+
+fn validate_layout(sb: &MdRaidSuperblock) -> Result<(), MdRaidError> {
+    let supported = match sb.level {
+        -1 | 1 => sb.layout == 0,
+        0 => matches!(sb.layout, 0..=2),
+        4 => sb.layout == 0,
+        5 => matches!(sb.layout, 0..=5),
+        6 => matches!(sb.layout, 0..=5 | 8..=10 | 16..=20),
+        10 => sb.layout & !0x7ffff == 0,
+        _ => false,
+    };
+    if supported {
+        Ok(())
+    } else {
+        Err(MdRaidError::UnsupportedState(format!(
+            "RAID{} layout {} is unsupported",
+            sb.level, sb.layout
+        )))
+    }
 }
 
 fn require_complete(actual: usize, expected: usize) -> Result<(), MdRaidError> {

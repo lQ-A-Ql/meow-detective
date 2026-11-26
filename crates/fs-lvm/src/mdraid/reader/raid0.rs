@@ -4,7 +4,6 @@ pub(super) struct Raid0State {
     zones: Vec<Raid0Zone>,
     chunk_bytes: u64,
     layout: u32,
-    size: u64,
 }
 
 struct Raid0Zone {
@@ -21,15 +20,10 @@ impl Raid0State {
         chunk_bytes: u64,
     ) -> Result<Self, MdRaidError> {
         let zones = build_zones(geometry, chunk_bytes)?;
-        let size = zones
-            .last()
-            .map(|zone| zone.logical_end)
-            .unwrap_or_default();
         Ok(Self {
             zones,
             chunk_bytes,
             layout,
-            size,
         })
     }
 
@@ -65,7 +59,7 @@ impl Raid0State {
             let member_offset =
                 data_offset + zone.device_start + member_chunk * self.chunk_bytes + within;
             let count = (self.chunk_bytes - within)
-                .min(self.size - logical)
+                .min(zone.logical_end - logical)
                 .min((output.len() - total) as u64) as usize;
             read_member(
                 members,
@@ -87,7 +81,7 @@ fn build_zones(
 ) -> Result<Vec<Raid0Zone>, MdRaidError> {
     let mut thresholds = geometry
         .iter()
-        .map(|member| member.data_size_bytes)
+        .map(|member| member.data_size_bytes / chunk_bytes.max(1) * chunk_bytes.max(1))
         .collect::<Vec<_>>();
     thresholds.sort_unstable();
     thresholds.dedup();
@@ -97,7 +91,9 @@ fn build_zones(
     for threshold in thresholds {
         let slots = geometry
             .iter()
-            .filter(|member| member.data_size_bytes >= threshold)
+            .filter(|member| {
+                member.data_size_bytes / chunk_bytes.max(1) * chunk_bytes.max(1) >= threshold
+            })
             .map(|member| member.slot)
             .collect::<Vec<_>>();
         if slots.is_empty() || threshold <= device_start {
