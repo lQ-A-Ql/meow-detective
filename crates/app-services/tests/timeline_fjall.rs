@@ -13,6 +13,8 @@ use std::collections::BTreeMap;
 
 #[path = "support/fjall_projection.rs"]
 mod projection_support;
+#[path = "support/timeline_projection.rs"]
+mod timeline_projection;
 
 fn event(id: &str, timestamp: chrono::DateTime<Utc>) -> TimelineRecord {
     TimelineRecord {
@@ -66,6 +68,7 @@ fn publish_source(
         fjall.timeline_upsert(record, PersistMode::Buffer).unwrap();
     }
     fjall.persist(PersistMode::SyncAll).unwrap();
+    timeline_projection::mark_complete(fjall.source_store(), source_id, records.len() as u64);
     let receipt = projection_support::mark_source_projection_complete(&fjall, source_id);
     persistence_source::fjall::seal_source_generation_with_control(
         fjall.source_store(),
@@ -252,6 +255,7 @@ fn timeline_service_reads_fjall_projection_and_freezes_revision_cursor() {
 
     let fjall = open_registered_fjall_source_read_write(&case.case_root, &source.id).unwrap();
     projection_support::mark_source_projection_complete(&fjall, &source.id.0);
+    timeline_projection::mark_complete(fjall.source_store(), &source.id.0, 3);
     drop(fjall);
     let source_conn = open_source_db(&case.case_root, &source.id).unwrap();
     let revision_before =

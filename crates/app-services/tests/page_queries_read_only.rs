@@ -17,6 +17,9 @@ use rusqlite::Connection;
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 
+#[path = "support/timeline_projection.rs"]
+mod timeline_projection;
+
 fn source(
     case: &Connection,
     root: &Path,
@@ -93,6 +96,11 @@ fn publish_source_generation(conn: &Connection, source_id: &DataSourceId) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
+    timeline_projection::mark_complete(
+        &store,
+        &source_id.0,
+        TimelineRepo::new(conn).count().unwrap(),
+    );
     persistence_source::fjall::seal_source_generation_with_control(
         &store,
         &source_id.0,

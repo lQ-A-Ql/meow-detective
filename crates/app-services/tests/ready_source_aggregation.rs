@@ -15,6 +15,9 @@ use persistence_source::repositories::{
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 use transport::{ErrorCategory, ServiceErrorCategory};
 
+#[path = "support/timeline_projection.rs"]
+mod timeline_projection;
+
 #[test]
 fn case_aggregators_ignore_sources_until_import_is_ready() {
     let temp = tempfile::TempDir::new().expect("create case parent");
@@ -609,6 +612,11 @@ fn publish_source(conn: &rusqlite::Connection, source_id: &DataSourceId) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .expect("open source store")
         .expect("configured source store");
+    timeline_projection::mark_complete(
+        &store,
+        &source_id.0,
+        TimelineRepo::new(conn).count().unwrap(),
+    );
     persistence_source::fjall::replace_source_generation(
         &store,
         &source_id.0,

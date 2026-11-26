@@ -1,8 +1,7 @@
 //! Timeline projection state markers stored in the source Fjall Meta keyspace.
 //!
-//! Family: `timeline_projection_state`; a missing marker means `complete` for
-//! legacy-case compatibility. Only an explicitly written `building` or
-//! `deferred` marker blocks reads.
+//! Family: `timeline_projection_state`; published timelines carry an explicit
+//! `complete`, `building`, or `deferred` marker.
 
 use crate::{
     codec::{encode_key, KeyPart, VersionedEnvelope},

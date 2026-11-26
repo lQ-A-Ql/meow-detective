@@ -20,6 +20,8 @@ use transport::commands::ExportScopeDto;
 use transport::dto::{AnalysisParseStatusDto, TimelineEventDto};
 use transport::{ErrorCategory, ServiceErrorCategory};
 
+use crate::report::tests::timeline_projection;
+
 fn setup_case() -> (rusqlite::Connection, tempfile::TempDir, CaseId) {
     let case_conn = persistence_sqlite::open_in_memory().expect("open case database");
     persistence_sqlite::runner::run_all(&case_conn).expect("run case migrations");
@@ -581,4 +583,8 @@ fn seed_source_report_records(case_root: &Path, case_id: &CaseId, source_id: &st
             &case_id.0,
         )
         .expect("insert source timeline event");
+    let store = persistence_source::detail::open_store_for_write(&source_conn)
+        .unwrap()
+        .unwrap();
+    timeline_projection::mark_complete(&store, &data_source_id.0, 1);
 }

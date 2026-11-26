@@ -25,6 +25,9 @@ use transport::dto::{
     AnalysisProvenanceDto, AnalysisSystemInfoDto,
 };
 
+#[path = "../../support/timeline_projection.rs"]
+pub(super) mod timeline_projection;
+
 fn setup_report_case() -> (rusqlite::Connection, TempDir, CaseMeta, DataSourceId) {
     let tmp = TempDir::new().unwrap();
     std::fs::create_dir_all(tmp.path().join("artifacts/objects")).unwrap();
@@ -87,6 +90,11 @@ fn seal_report_source(connection: &rusqlite::Connection, source_id: &str) {
     let store = persistence_source::detail::open_store_for_write(connection)
         .expect("open report source store")
         .expect("configured report source store");
+    timeline_projection::mark_complete(
+        &store,
+        source_id,
+        TimelineRepo::new(connection).count().unwrap(),
+    );
     persistence_source::fjall::replace_source_generation(
         &store,
         source_id,
@@ -717,7 +725,7 @@ fn report_exports_include_correlation_section() {
 }
 
 #[test]
-fn report_exports_tolerate_legacy_missing_provenance() {
+fn report_exports_preserve_optional_provenance_fields() {
     let (conn, tmp, case, ds_id) = setup_report_case();
     insert_artifact_without_provenance(&conn, &case.id.0, &ds_id);
     insert_timeline_event(&conn, &case.id.0);

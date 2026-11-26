@@ -9,6 +9,8 @@ use transport::{paging::MAX_PAGE_OFFSET, CommandError, ErrorCategory};
 
 #[path = "support/fjall_projection.rs"]
 mod projection_support;
+#[path = "support/timeline_projection.rs"]
+mod timeline_projection;
 
 const SOURCE: &str = "offset-source";
 const RECORDS: u64 = MAX_PAGE_OFFSET + 4;
@@ -76,6 +78,7 @@ fn register_source(case: &app_services::active_case::ActiveCase) {
             .unwrap();
     }
     handle.persist(PersistMode::SyncAll).unwrap();
+    timeline_projection::mark_complete(handle.source_store(), SOURCE, RECORDS);
     let receipt = projection_support::mark_source_projection_complete(&handle, SOURCE);
     persistence_source::fjall::seal_source_generation_with_control(
         handle.source_store(),

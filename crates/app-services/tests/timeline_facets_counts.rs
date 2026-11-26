@@ -13,6 +13,9 @@ use transport::dto::{TimelineFacetCountDto, TimelineFacetsDto};
 const SOURCE: &str = "source-a";
 const DAY_SECONDS: i64 = 86_400;
 
+#[path = "support/timeline_projection.rs"]
+mod timeline_projection;
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum WriteMode {
     /// `upsert_batch` initializes and maintains the `timeline.count` counters.
@@ -106,6 +109,7 @@ fn mark_source_projection_complete(
             PersistMode::SyncAll,
         )
         .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
+    timeline_projection::mark_complete(&source, source_id, 0);
     persistence_source::fjall::seal_source_generation_with_control(
         &source,
         source_id,
@@ -150,6 +154,7 @@ fn publish_source(
                 .unwrap();
         }
     }
+    timeline_projection::mark_complete(handle.source_store(), source_id, records.len() as u64);
     drop(store);
     drop(handle);
 }

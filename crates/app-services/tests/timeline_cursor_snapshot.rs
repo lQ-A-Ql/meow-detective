@@ -7,6 +7,9 @@ use rusqlite::Connection;
 use std::path::Path;
 use timeline_service::{TimelineQuery, TimelineServiceError};
 
+#[path = "support/timeline_projection.rs"]
+mod timeline_projection;
+
 fn register_source(conn: &Connection, root: &Path, case: &CaseId, id: &str) -> Connection {
     let source = DataSource {
         id: DataSourceId(id.into()),
@@ -133,6 +136,7 @@ fn publish_source(conn: &Connection, source_id: &str) {
     let store = persistence_source::detail::open_store_for_write(conn)
         .unwrap()
         .unwrap();
+    timeline_projection::mark_complete(&store, source_id, TimelineRepo::new(conn).count().unwrap());
     persistence_source::fjall::replace_source_generation(
         &store,
         source_id,
