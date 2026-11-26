@@ -1,5 +1,6 @@
 pub mod analysis_commands;
 pub mod app_update_commands;
+pub mod application_log_commands;
 pub mod artifact_commands;
 pub mod batch_commands;
 pub mod capability_commands;

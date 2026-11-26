@@ -1,11 +1,14 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
-use std::process::{Command, ExitStatus, Stdio};
+use std::process::{ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 use std::{fs, io};
 
 use thiserror::Error;
+
+mod process;
+use process::vmrun_command;
 
 // VMware may spend several seconds opening the sparse COW-backed disk before
 // `vmrun start` reports success. Startup gets its own window so a slow source
@@ -140,7 +143,7 @@ impl VmwareControl {
     }
 
     fn run_control(&self, action: &str, mode: Option<&str>) -> Result<(), VmwareError> {
-        let mut command = Command::new(&self.vmrun);
+        let mut command = vmrun_command(&self.vmrun);
         command
             .arg(action)
             .arg(&self.vmx)
@@ -180,7 +183,7 @@ pub(super) fn launch(vmx: &Path) -> Result<VmwareControl, VmwareError> {
         .parent()
         .map(|path| path.join("vmware.log"))
         .and_then(|path| fs::metadata(path).ok().map(|metadata| metadata.len()));
-    let child = Command::new(&vmrun)
+    let child = vmrun_command(&vmrun)
         .arg("start")
         .arg(&vmx)
         .arg("gui")
@@ -425,7 +428,7 @@ fn wait_for_control(
 }
 
 fn run_query(vmrun: &Path) -> Result<std::process::Output, VmwareError> {
-    let child = Command::new(vmrun)
+    let child = vmrun_command(vmrun)
         .arg("list")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

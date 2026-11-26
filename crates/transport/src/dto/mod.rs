@@ -1,4 +1,6 @@
 pub mod analysis;
+pub mod application_log;
+pub use application_log::*;
 mod app_update;
 pub mod bolt_reader;
 pub use app_update::*;

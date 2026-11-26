@@ -1,6 +1,9 @@
 macro_rules! desktop_command_handler {
     () => {
         tauri::generate_handler![
+            read_application_logs,
+            get_application_log,
+            reopen_application_log_writer,
             get_app_update_info,
             check_app_update,
             install_app_update,

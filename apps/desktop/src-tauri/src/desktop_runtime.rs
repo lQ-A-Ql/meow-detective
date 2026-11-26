@@ -1,10 +1,13 @@
 use crate::{cache_invalidation, media_protocol, state::AppState};
 use tauri::Manager;
 
-pub(crate) fn run_app(app: tauri::App) {
-    app.run(|app, event| {
+pub(crate) fn run_app(app: tauri::App, logs: infrastructure::logging::LogRuntime) {
+    app.run(move |app, event| {
         if matches!(event, tauri::RunEvent::Exit) {
             app.state::<AppState>().mcp_host.shutdown();
+            if let Err(error) = logs.shutdown() {
+                crate::application_logging::show_failure(&error.to_string());
+            }
         }
     });
 }

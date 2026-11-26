@@ -15,6 +15,7 @@ pub use source_kernel::{
 };
 
 pub mod analysis_service;
+pub mod application_log_service;
 pub mod artifact_service;
 pub mod batch_service;
 pub mod bitlocker_runtime;

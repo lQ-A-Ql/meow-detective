@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+#[tracing::instrument(skip_all, fields(case_id = %work.row.case_id, data_source_id = %work.row.data_source_id, capability = %work.row.capability))]
 pub(super) fn run(work: CapabilityWork, cancel: Arc<AtomicBool>) -> Result<(), PostImportError> {
     wait_for_imports(&cancel)?;
     let conn = source_kernel::connection::open_existing_case_db(&work.case_root.join("app.db"))?;

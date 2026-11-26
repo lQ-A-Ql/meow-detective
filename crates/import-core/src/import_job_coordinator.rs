@@ -128,6 +128,7 @@ pub struct SingleImportRequest<'a> {
     pub event_sink: Option<&'a dyn ImportEventSink>,
 }
 
+#[tracing::instrument(skip_all, fields(case_id = %request.case_id.0, job_id = %request.job_id.0))]
 pub fn run_single_import(
     request: SingleImportRequest<'_>,
 ) -> Result<SingleImportOutcome, CommandError> {

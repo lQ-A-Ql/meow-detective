@@ -12,6 +12,9 @@ pub(crate) use crate::commands::{
         list_plugin_modules, run_plugin_extraction,
     },
     app_update_commands::{check_app_update, get_app_update_info, install_app_update},
+    application_log_commands::{
+        get_application_log, read_application_logs, reopen_application_log_writer,
+    },
     artifact_commands::{
         get_artifact_by_id, get_artifact_families, get_artifact_family_counts, get_artifact_rows,
         get_artifact_rows_request,

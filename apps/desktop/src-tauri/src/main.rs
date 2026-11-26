@@ -1,3 +1,5 @@
+#![cfg_attr(windows, windows_subsystem = "windows")]
+
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
@@ -8,15 +10,5 @@ fn main() {
     if portable_updater::run_if_requested() {
         return;
     }
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .with_target(true)
-        .with_thread_ids(true)
-        .init();
-
-    tracing::info!("Meow~Detective starting");
     forensics_desktop_lib::run();
 }
