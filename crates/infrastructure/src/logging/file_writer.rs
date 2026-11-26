@@ -202,7 +202,7 @@ impl DiskWriter {
         )
         .append()
         .try_build()
-        .map_err(|error| LogError::Writer(error.to_string()))?;
+        .map_err(|error| LogError::Writer(super::fields::sanitize(&error.to_string())))?;
         Ok(Self {
             writer,
             directory,
@@ -255,7 +255,10 @@ impl DiskWriter {
         if let Some(error) = &self.failure {
             return Err(error.clone());
         }
-        let result = self.writer.flush().map_err(|error| error.to_string());
+        let result = self
+            .writer
+            .flush()
+            .map_err(|error| super::fields::sanitize(&error.to_string()));
         if let Err(error) = &result {
             self.failure = Some(error.clone());
         }
@@ -264,7 +267,7 @@ impl DiskWriter {
 
     fn reopen(&mut self) -> Result<(), String> {
         *self = Self::open(self.directory.clone(), self.limit, self.archives)
-            .map_err(|error| error.to_string())?;
+            .map_err(|error| super::fields::sanitize(&error.to_string()))?;
         Ok(())
     }
 }

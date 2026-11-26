@@ -104,7 +104,7 @@ impl LogRuntime {
             for entry in candidates {
                 if scanned == 1365
                     || records.len() == query.limit_per_level
-                    || bytes + entry.bytes > 40 * 1024
+                    || bytes + entry.bytes > 32 * 1024
                 {
                     more = true;
                     break;
@@ -117,12 +117,7 @@ impl LogRuntime {
                 }
             }
             records.sort_by_key(|record| record.sequence);
-            let gap = forward
-                && buffer.evicted > 0
-                && buffer
-                    .records
-                    .front()
-                    .is_some_and(|entry| position < entry.record.sequence.saturating_sub(1));
+            let gap = forward && position < buffer.last_evicted_sequence;
             pages.push(LogPage {
                 level,
                 records,

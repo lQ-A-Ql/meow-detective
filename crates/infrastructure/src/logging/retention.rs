@@ -10,6 +10,7 @@ pub(crate) struct LevelBuffer {
     pub records: VecDeque<RetainedRecord>,
     pub emitted: u64,
     pub evicted: u64,
+    pub last_evicted_sequence: u64,
     pub truncated: u64,
     bytes: usize,
     max_records: usize,
@@ -22,6 +23,7 @@ impl LevelBuffer {
             records: VecDeque::new(),
             emitted: 0,
             evicted: 0,
+            last_evicted_sequence: 0,
             truncated: 0,
             bytes: 0,
             max_records,
@@ -38,6 +40,7 @@ impl LevelBuffer {
             let oldest = self.records.pop_front().expect("buffer exceeds its budget");
             self.bytes -= oldest.bytes;
             self.evicted += 1;
+            self.last_evicted_sequence = oldest.record.sequence;
         }
     }
 }

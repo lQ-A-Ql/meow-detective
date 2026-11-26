@@ -1,5 +1,6 @@
 use infrastructure::logging::{LogDirection, LogFilter, LogLevel, LogRuntime};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use transport::{
     dto::*,
     paging::{decode_opaque_cursor, encode_opaque_cursor},
@@ -18,7 +19,7 @@ pub struct ApplicationLogService {
 struct LogCursor {
     session_id: String,
     level: ApplicationLogLevelDto,
-    filter: ApplicationLogFilterDto,
+    filter_digest: String,
     direction: ApplicationLogDirectionDto,
     sequence: u64,
 }
@@ -33,6 +34,7 @@ impl ApplicationLogService {
         request: ApplicationLogRequestDto,
     ) -> Result<ApplicationLogSnapshotDto, CommandError> {
         validate(&request)?;
+        let filter_digest = filter_digest(&request.filter);
         let mut positions = [None; 3];
         for value in &request.cursors {
             let cursor: LogCursor = decode_opaque_cursor(value)
@@ -43,7 +45,7 @@ impl ApplicationLogService {
                 ApplicationLogLevelDto::Error => 2,
             };
             if cursor.session_id != self.runtime.session_id()
-                || cursor.filter != request.filter
+                || cursor.filter_digest != filter_digest
                 || cursor.direction != request.direction
                 || positions[index].is_some()
             {
@@ -151,12 +153,17 @@ impl ApplicationLogService {
         encode_opaque_cursor(&LogCursor {
             session_id: self.runtime.session_id().to_owned(),
             level: mapping::level_dto(level),
-            filter: filter.clone(),
+            filter_digest: filter_digest(filter),
             direction,
             sequence,
         })
         .map_err(|_| CommandError::internal("application log cursor could not be encoded"))
     }
+}
+
+fn filter_digest(filter: &ApplicationLogFilterDto) -> String {
+    let bytes = serde_json::to_vec(filter).expect("application log filter serialization");
+    hex::encode(Sha256::digest(bytes))
 }
 
 fn validate(request: &ApplicationLogRequestDto) -> Result<(), CommandError> {

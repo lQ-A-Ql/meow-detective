@@ -101,6 +101,26 @@ fn eight_threads_publish_unique_sequences_and_forward_queries_advance() {
 }
 
 #[test]
+fn interleaved_levels_only_report_a_gap_for_unread_evicted_records() {
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = LogConfig::new(directory.path().to_owned());
+    config.records_per_level = [1; 3];
+    let (runtime, _guard) = LogRuntime::start(config).unwrap();
+    tracing::subscriber::with_default(tracing_subscriber::registry().with(runtime.layer()), || {
+        tracing::info!("previous info");
+        tracing::warn!("warning");
+        tracing::error!("error");
+        tracing::info!("current info");
+    });
+    let current = query(&runtime, LogDirection::Forward, [Some(2); 3]);
+    assert!(!current.pages[0].gap);
+    assert_eq!(current.pages[0].records[0].sequence, 4);
+    let expired = query(&runtime, LogDirection::Forward, [Some(0); 3]);
+    assert!(expired.pages[0].gap);
+    assert!(!expired.pages[1].gap);
+}
+
+#[test]
 fn retention_truncation_filtering_and_empty_incremental_pages_are_bounded() {
     let directory = tempfile::tempdir().unwrap();
     let mut config = LogConfig::new(directory.path().to_owned());
@@ -185,4 +205,48 @@ fn invalid_output_directory_fails_at_initialization_and_explicit_reopen_preserve
     let output = std::fs::read_to_string(path).unwrap();
     assert!(output.contains("before reopening"));
     assert!(output.contains("after reopening"));
+}
+
+#[test]
+#[cfg(windows)]
+fn actual_rotation_failure_is_visible_and_explicit_reopen_recovers() {
+    use std::os::windows::fs::OpenOptionsExt;
+    let directory = tempfile::tempdir().unwrap();
+    let mut config = LogConfig::new(directory.path().to_owned());
+    config.file_bytes = 8192;
+    let (runtime, _guard) = LogRuntime::start(config).unwrap();
+    let subscriber = tracing_subscriber::registry().with(runtime.layer());
+    tracing::subscriber::with_default(subscriber, || tracing::error!("before rotation"));
+    runtime.flush().unwrap();
+    let path = directory
+        .path()
+        .join(runtime.session_id())
+        .join("runtime_rCURRENT.jsonl");
+    let occupied = std::fs::OpenOptions::new()
+        .read(true)
+        .share_mode(3)
+        .open(&path)
+        .unwrap();
+    tracing::subscriber::with_default(tracing_subscriber::registry().with(runtime.layer()), || {
+        for item in 0..10 {
+            tracing::error!(item, "{}", "r".repeat(1900));
+        }
+    });
+    assert!(runtime.flush().is_err());
+    assert!(!runtime
+        .health()
+        .failure
+        .unwrap()
+        .contains(&directory.path().to_string_lossy().into_owned()));
+    assert!(runtime.health().failed_records > 0);
+    drop(occupied);
+    runtime.reopen_writer().unwrap();
+    tracing::subscriber::with_default(tracing_subscriber::registry().with(runtime.layer()), || {
+        tracing::error!("rotation recovered");
+    });
+    runtime.flush().unwrap();
+    assert!(runtime.health().failure.is_none());
+    assert!(std::fs::read_to_string(path)
+        .unwrap()
+        .contains("rotation recovered"));
 }
