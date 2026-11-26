@@ -15,7 +15,7 @@ use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 use tempfile::TempDir;
-use transport::commands::ExportScopeDto;
+use transport::commands::{ExportReportRequest, ReportScopeDto};
 #[path = "support/ntfs_catalog.rs"]
 mod ntfs_catalog;
 #[path = "support/source_connection.rs"]
@@ -336,9 +336,7 @@ fn jc2_full_pipeline() {
 
             // Phase 8: Report export
             let t_report = Instant::now();
-            let report = app_services::report::generate_html_report(
-                conn,
-                &domain::CaseMeta {
+            let report_case = domain::CaseMeta {
                     id: case_id.clone(),
                     name: "jc2-bench".to_string(),
                     number: None,
@@ -346,13 +344,12 @@ fn jc2_full_pipeline() {
                     notes: None,
                     created_at: chrono::Utc::now(),
                     updated_at: chrono::Utc::now(),
-                },
-                &tmp.path().join("reports"),
-                &ExportScopeDto::default(),
-            );
+                };
+            let request = ExportReportRequest { case_id: case_id.0.clone(), format: transport::dto::ReportFormatDto::Html, scope: ReportScopeDto::default(), data_source_id: None };
+            let report = app_services::report::export_report_for_case(app_services::report::ReportExportContext { connection: conn, case: &report_case, case_root: &active.case_root, request: &request, cancel: &std::sync::atomic::AtomicBool::new(false) });
             let report_ms = t_report.elapsed().as_millis();
             let rss_final = import_analysis::current_rss_mb();
-            let report_size_kb = report.as_ref().map(|r| r.len() / 1024).unwrap_or(0);
+            let report_size_kb = report.as_ref().ok().and_then(|report| report.file_size).unwrap_or(0) / 1024;
             println!(
                 "[BENCH-OUTPUT] scenario=report_export dataset_level=large p95_ms={report_ms} rss_mb={rss_final} report_size_kb={report_size_kb}"
             );

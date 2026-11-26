@@ -1,40 +1,41 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  exportCsvReport,
-  exportHtmlReport,
-  exportJsonReport,
-  getReportHistory,
-  getReportTemplates,
-} from '@/lib/api/reports';
-import type { ExportScope } from '@/types/models';
-
-export function useReportTemplates() {
-  return useQuery({ queryKey: ['reports', 'templates'], queryFn: getReportTemplates });
-}
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { toast } from 'sonner';
+import i18n from '@/i18n';
+import { exportReport, getReportHistory, saveReport } from '@/lib/api/reports';
+import { saveDialog } from '@/lib/platform/dialog';
+import type { ExportReportRequest, ReportHistoryItem } from '@/types/models';
 
 export function useReportHistory(caseId?: string) {
+  const exporting = useIsMutating({ mutationKey: ['reports', 'export'] });
   return useQuery({
     queryKey: ['reports', 'history', caseId ?? null],
-    queryFn: getReportHistory,
+    queryFn: () => getReportHistory(caseId!),
+    enabled: Boolean(caseId),
+    refetchInterval: (query) =>
+      exporting > 0 || query.state.data?.some((item) => item.status === 'running') ? 1000 : false,
   });
 }
 
-export type ReportExportFormat = 'html' | 'csv' | 'json';
-
 export function useExportReport() {
-  const qc = useQueryClient();
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ format, scope }: { format: ReportExportFormat; scope: ExportScope }) => {
-      if (format === 'csv') {
-        return exportCsvReport(scope);
-      }
-      if (format === 'json') {
-        return exportJsonReport(scope);
-      }
-      return exportHtmlReport(scope);
+    mutationKey: ['reports', 'export'],
+    mutationFn: (request: ExportReportRequest) => exportReport(request),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ['reports'] }),
+  });
+}
+
+export function useSaveReport() {
+  return useMutation({
+    mutationFn: async ({ caseId, report }: { caseId: string; report: ReportHistoryItem }) => {
+      const destination = await saveDialog({ defaultPath: report.fileName });
+      if (!destination) return false;
+      await saveReport({ caseId, reportId: report.id, destination, overwrite: true });
+      return true;
     },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['reports'] });
+    onSuccess: (saved) => {
+      if (saved) toast.success(i18n.t('reports.saveSuccess'));
     },
+    onError: (error: Error) => toast.error(i18n.t('reports.saveFailed'), { description: error.message }),
   });
 }

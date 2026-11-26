@@ -5,7 +5,6 @@ mod digest;
 mod files;
 mod import;
 mod platform;
-mod report;
 mod settings;
 mod timeline;
 mod validation;
@@ -34,7 +33,6 @@ pub use files::{
 };
 pub use import::{ImportDataSourceRequest, ImportSourceKindDto};
 pub use platform::ImportTargetPlatformDto;
-pub use report::ExportScopeDto;
 mod report_export;
 pub use report_export::{ExportReportRequest, ReportScopeDto, SaveReportRequest};
 pub use settings::AppSettingsDto;
@@ -47,7 +45,7 @@ pub use crate::dto::{
     ArtifactRowDto, CaseMetricsDto, CaseSummaryDto, CorrelationSnapshotDto, DataSourceSummaryDto,
     FileChildrenDto, FileEntryRowDto, FileJumpContextDto, FileRowsPageDto, FileTreeNodeDto,
     JobSnapshotDto, NestedEvidenceLineageDto, RecentCaseDto, RecentObjectDto, ReportHistoryItemDto,
-    ReportTemplateDto, SearchFileResultPageDto, SearchResultPageDto, TimelineEventDto,
-    TraceItemDto, V2GovernanceSnapshotDto, ViewerHandleDto, ViewerRangeRequestDto,
-    ViewerRangeResponseDto, WarningItemDto,
+    SearchFileResultPageDto, SearchResultPageDto, TimelineEventDto, TraceItemDto,
+    V2GovernanceSnapshotDto, ViewerHandleDto, ViewerRangeRequestDto, ViewerRangeResponseDto,
+    WarningItemDto,
 };

@@ -1,30 +1,42 @@
-/// Typed error for report generation operations.
 #[derive(Debug, thiserror::Error)]
 pub enum ReportError {
     #[error("database error: {0}")]
     Db(#[from] persistence_sqlite::DbError),
-    #[error("SQLite error: {0}")]
-    Sqlite(#[from] rusqlite::Error),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error(transparent)]
-    Resources(#[from] source_kernel::resource_budget::ResourceError),
     #[error("not found: {0}")]
     NotFound(String),
     #[error("unsupported: {0}")]
     Unsupported(String),
     #[error("{0}")]
     Other(String),
+    #[error("report export cancelled")]
+    Cancelled,
+    #[error(transparent)]
+    File(#[from] evidence_access::file_service::FileServiceError),
 }
 
 impl transport::ServiceErrorCategory for ReportError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
-            Self::Db(_) | Self::Sqlite(_) | Self::Io(_) => transport::ErrorCategory::Io,
+            Self::Db(error) => match error.category() {
+                persistence_sqlite::connection::DbErrorCategory::Io => transport::ErrorCategory::Io,
+                persistence_sqlite::connection::DbErrorCategory::Timeout => {
+                    transport::ErrorCategory::Timeout
+                }
+                persistence_sqlite::connection::DbErrorCategory::Cancelled => {
+                    transport::ErrorCategory::Cancelled
+                }
+                persistence_sqlite::connection::DbErrorCategory::Internal => {
+                    transport::ErrorCategory::Internal
+                }
+            },
+            Self::Io(_) => transport::ErrorCategory::Io,
             Self::NotFound(_) => transport::ErrorCategory::Validation,
             Self::Unsupported(_) => transport::ErrorCategory::Unsupported,
             Self::Other(_) => transport::ErrorCategory::Internal,
-            Self::Resources(error) => transport::ServiceErrorCategory::category(error),
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
+            Self::File(error) => transport::ServiceErrorCategory::category(error),
         }
     }
 }
@@ -40,81 +52,6 @@ impl From<crate::source_db::ReadySourceError> for ReportError {
             crate::source_db::ReadySourceError::UnsupportedPlatform { .. } => {
                 Self::Unsupported(error.to_string())
             }
-        }
-    }
-}
-
-impl From<crate::correlation::CorrelationError> for ReportError {
-    fn from(error: crate::correlation::CorrelationError) -> Self {
-        match error {
-            crate::correlation::CorrelationError::Db(error) => Self::Db(error),
-            crate::correlation::CorrelationError::Json(error) => Self::Other(error.to_string()),
-            crate::correlation::CorrelationError::InvalidInput(message) => Self::NotFound(message),
-            crate::correlation::CorrelationError::Unsupported(message) => {
-                Self::Unsupported(message)
-            }
-            crate::correlation::CorrelationError::Other(message) => Self::Other(message),
-            crate::correlation::CorrelationError::Cancelled => {
-                Self::Other("Correlation projection cancelled".to_string())
-            }
-        }
-    }
-}
-
-impl From<crate::governance::GovernanceError> for ReportError {
-    fn from(error: crate::governance::GovernanceError) -> Self {
-        match error {
-            crate::governance::GovernanceError::Database(error) => Self::Sqlite(error),
-            crate::governance::GovernanceError::Parse(error) => Self::Other(error.to_string()),
-            crate::governance::GovernanceError::Validation(message) => Self::NotFound(message),
-            crate::governance::GovernanceError::Unsupported(message) => Self::Unsupported(message),
-            crate::governance::GovernanceError::Internal(message) => Self::Other(message),
-        }
-    }
-}
-
-impl From<crate::artifact_service::ArtifactServiceError> for ReportError {
-    fn from(error: crate::artifact_service::ArtifactServiceError) -> Self {
-        match error {
-            crate::artifact_service::ArtifactServiceError::Db(error) => Self::Db(error),
-            crate::artifact_service::ArtifactServiceError::Io(error) => Self::Io(error),
-            crate::artifact_service::ArtifactServiceError::NotFound(message)
-            | crate::artifact_service::ArtifactServiceError::InvalidInput(message) => {
-                Self::NotFound(message)
-            }
-            crate::artifact_service::ArtifactServiceError::Unsupported(message) => {
-                Self::Unsupported(message)
-            }
-            other => Self::Other(other.to_string()),
-        }
-    }
-}
-
-impl From<crate::timeline_service::TimelineServiceError> for ReportError {
-    fn from(error: crate::timeline_service::TimelineServiceError) -> Self {
-        match error {
-            crate::timeline_service::TimelineServiceError::Storage(error) => {
-                Self::Other(error.to_string())
-            }
-            crate::timeline_service::TimelineServiceError::Db(error) => Self::Db(error),
-            crate::timeline_service::TimelineServiceError::Resources(error) => {
-                Self::Resources(error)
-            }
-            crate::timeline_service::TimelineServiceError::NotFound(message)
-            | crate::timeline_service::TimelineServiceError::InvalidInput(message) => {
-                Self::NotFound(message)
-            }
-            crate::timeline_service::TimelineServiceError::Unsupported(message) => {
-                Self::Unsupported(message)
-            }
-            crate::timeline_service::TimelineServiceError::Cancelled => {
-                Self::Other("Timeline projection cancelled".to_string())
-            }
-            crate::timeline_service::TimelineServiceError::ProjectionNotReady { .. }
-            | crate::timeline_service::TimelineServiceError::RebuildInProgress { .. } => {
-                Self::Other(error.to_string())
-            }
-            crate::timeline_service::TimelineServiceError::Other(message) => Self::Other(message),
         }
     }
 }

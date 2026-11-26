@@ -20,7 +20,6 @@ const mocks = vi.hoisted(() => ({
   getCaseOverviewSnapshot: vi.fn(),
   getV2GovernanceSnapshot: vi.fn(),
   getCorrelationSnapshot: vi.fn(),
-  generateAnalysisSummary: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -43,7 +42,6 @@ vi.mock('@/lib/api/analysis', () => ({
   getCaseOverviewSnapshot: mocks.getCaseOverviewSnapshot,
   getV2GovernanceSnapshot: mocks.getV2GovernanceSnapshot,
   getCorrelationSnapshot: mocks.getCorrelationSnapshot,
-  generateAnalysisSummary: mocks.generateAnalysisSummary,
 }));
 
 import {
@@ -55,7 +53,6 @@ import {
   useEmailExtractionSummary,
   useEvtxEventSummary,
   useEvidenceClassificationSummary,
-  useGenerateAnalysisSummary,
   useLinuxArtifactSummary,
   usePluginFamilyEntries,
   usePluginModules,
@@ -445,7 +442,6 @@ describe('analysis hooks', () => {
       clusters: [],
       leads: [],
     });
-    mocks.generateAnalysisSummary.mockResolvedValue('# 数据源分析报告');
   });
 
   it('does not call analysis APIs without an active case', async () => {
@@ -496,15 +492,6 @@ describe('analysis hooks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(mocks.getFileClassificationBoard).toHaveBeenCalledWith('ds-windows', 250);
-  });
-
-  it('exposes summary download mutation', async () => {
-    const { result } = renderHook(() => useGenerateAnalysisSummary('ds-1'), {
-      wrapper: createWrapper(),
-    });
-
-    await result.current.mutateAsync();
-    expect(mocks.generateAnalysisSummary).toHaveBeenCalledWith('ds-1');
   });
 
   it('loads registry, browser and email extraction summaries with paging defaults', async () => {

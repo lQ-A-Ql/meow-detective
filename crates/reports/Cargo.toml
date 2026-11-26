@@ -7,7 +7,6 @@ license.workspace = true
 
 [dependencies]
 serde_json.workspace = true
-chrono.workspace = true
-domain.workspace = true
 infrastructure.workspace = true
+transport.workspace = true
 

@@ -3,7 +3,7 @@ use evidence_core::LogicalFsReader;
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use tempfile::TempDir;
-use transport::commands::ExportScopeDto;
+use transport::commands::{ExportReportRequest, ReportScopeDto};
 #[path = "support/source_generation.rs"]
 mod source_generation;
 
@@ -111,14 +111,23 @@ fn full_case_lifecycle() {
 
             // Report
             let output_dir = active.case_root.join("reports");
-            let report_file = app_services::report::generate_html_report(
-                conn,
-                &active.meta,
-                &output_dir,
-                &ExportScopeDto::default(),
+            let request = ExportReportRequest {
+                case_id: active.meta.id.0.clone(),
+                format: transport::dto::ReportFormatDto::Html,
+                scope: ReportScopeDto::default(),
+                data_source_id: None,
+            };
+            let report_file = app_services::report::export_report_for_case(
+                app_services::report::ReportExportContext {
+                    connection: conn,
+                    case: &active.meta,
+                    case_root: &active.case_root,
+                    request: &request,
+                    cancel: &std::sync::atomic::AtomicBool::new(false),
+                },
             )
             .map_err(|e| persistence_sqlite::DbError::System(e.to_string()))?;
-            assert!(output_dir.join(&report_file).exists());
+            assert!(output_dir.join(&report_file.file_name).exists());
 
             // Job tracking
             let job_id = JobRepo::new(conn).create(&case_id.0, "test_job")?;

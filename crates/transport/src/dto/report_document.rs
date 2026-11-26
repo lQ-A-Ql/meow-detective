@@ -49,5 +49,6 @@ pub struct ReportDocumentDto {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub examiner: Option<String>,
     pub generated_at: String,
+    pub scope: crate::commands::ReportScopeDto,
     pub sources: Vec<ReportSourceDto>,
 }

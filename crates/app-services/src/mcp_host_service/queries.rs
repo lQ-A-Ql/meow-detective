@@ -85,14 +85,13 @@ pub fn execute_tool(
         "forensics.get_content_index_coverage" => {
             super::content_index::get_content_index_coverage(&context, arguments)
         }
-        "forensics.list_report_templates" => {
-            serde_json::to_value(crate::report::get_report_templates())
-                .map_err(McpHostServiceError::from)
-        }
-        "forensics.get_report_history" => serde_json::to_value(crate::report::get_report_history(
-            context.connection,
-            &context.case_meta.id.0,
-        ))
+        "forensics.list_report_templates" => Ok(
+            serde_json::json!([{ "id": "report-summary", "name": "结构化摘要", "formats": ["html", "csv", "json", "markdown"] }]),
+        ),
+        "forensics.get_report_history" => serde_json::to_value(
+            crate::report::get_report_history(context.connection, &context.case_meta.id.0)
+                .map_err(|error| McpHostServiceError::Invalid(error.to_string()))?,
+        )
         .map_err(McpHostServiceError::from),
         _ => Err(McpHostServiceError::InvalidInput),
     }

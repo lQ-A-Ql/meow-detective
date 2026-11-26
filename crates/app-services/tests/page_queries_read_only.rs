@@ -185,7 +185,22 @@ fn windows_analysis_queries_preserve_source_database_and_evidence() {
         analysis::get_file_classification_board(&case, root, key, &id, 10, &runtime).unwrap();
         analysis::get_source_evidence_summary(&case, root, key, &id).unwrap();
         analysis::get_source_system_info(&case, root, key, &id, &runtime).unwrap();
-        analysis::generate_source_analysis_summary(&case, root, key, &id, &runtime).unwrap();
+        let request = transport::commands::ExportReportRequest {
+            case_id: key.0.clone(),
+            format: transport::dto::ReportFormatDto::Json,
+            scope: Default::default(),
+            data_source_id: Some(id.0.clone()),
+        };
+        app_services::report::read_report_document_for_case(
+            &app_services::report::ReportExportContext {
+                connection: &case,
+                case: &active.meta,
+                case_root: root,
+                request: &request,
+                cancel: &std::sync::atomic::AtomicBool::new(false),
+            },
+        )
+        .unwrap();
         analysis::get_source_registry_summary(&case, root, key, &id, 0, 10).unwrap();
         analysis::get_source_registry_structured_summary(&case, root, key, &id).unwrap();
         analysis::get_source_browser_summary(&case, root, key, &id, 0, 10).unwrap();

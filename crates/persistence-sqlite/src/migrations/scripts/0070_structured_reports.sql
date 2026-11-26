@@ -1,0 +1,5 @@
+ALTER TABLE reports ADD COLUMN request_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE reports ADD COLUMN error_code TEXT;
+ALTER TABLE reports ADD COLUMN error_message TEXT;
+ALTER TABLE reports ADD COLUMN file_size INTEGER;
+ALTER TABLE reports ADD COLUMN sha256 TEXT;

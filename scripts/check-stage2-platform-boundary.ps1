@@ -25,7 +25,7 @@ $requiredPaths = @(
   'crates/analysis-core/src/analysis_service/candidates.rs',
   'crates/analysis-core/src/analysis_service/extraction/linux.rs',
   'crates/import-core/src/import_analysis/extractor_policy.rs',
-  'crates/app-services/src/report/source_analysis.rs',
+  'crates/app-services/src/report/document.rs',
   'crates/source-kernel/src/source_db/ready.rs',
   'crates/app-services/src/v3_governance_service/artifact_family_platform.rs'
 )
@@ -91,8 +91,7 @@ if (Test-Path -LiteralPath $analysisCommandPath -PathType Leaf) {
   foreach ($required in @(
     'require_active_case(',
     'analysis_task_jobs::run_with_outcome(',
-    'analysis_service::get_source_system_info(',
-    'analysis_service::generate_source_analysis_summary('
+    'analysis_service::get_source_system_info('
   )) {
     if (-not $analysisCommand.Contains($required)) {
       $errors.Add("analysis command is missing a thin service delegation: $required")
@@ -231,14 +230,14 @@ foreach ($relativePath in @(
   }
 }
 
-$reportSourceAnalysisPath = Join-Path $repoRoot 'crates/app-services/src/report/source_analysis.rs'
+$reportSourceAnalysisPath = Join-Path $repoRoot 'crates/app-services/src/report/document.rs'
 if (Test-Path -LiteralPath $reportSourceAnalysisPath -PathType Leaf) {
   $reportSourceAnalysis = Read-StrictUtf8 $reportSourceAnalysisPath
   foreach ($required in @(
     'source_db::ready_data_sources',
-    'source_db::open_ready_source_by_id',
-    'source.platform == DataSourcePlatform::Windows',
-    'unavailable_windows_system_info'
+    'DataSourcePlatform::parse_explicit',
+    'source_db::open_registered_fjall_source_read_only',
+    'require_projection_complete'
   )) {
     if (-not $reportSourceAnalysis.Contains($required)) {
       $errors.Add("case report analysis is missing source/platform isolation: $required")
@@ -371,15 +370,15 @@ foreach ($delegate in $aggregationDelegates) {
   }
 }
 
-foreach ($relativePath in @(
-  'crates/app-services/src/report/mod.rs',
-  'crates/app-services/src/report/csv.rs',
-  'crates/app-services/src/report/json_case.rs'
-)) {
-  $absolutePath = Join-Path $repoRoot $relativePath
-  if ((Test-Path -LiteralPath $absolutePath -PathType Leaf) -and
-      -not (Read-StrictUtf8 $absolutePath).Contains('current_governance_for_case')) {
-    $errors.Add("case-aware report uses case-DB-only governance: $relativePath")
+$reportDocument = Read-StrictUtf8 (Join-Path $repoRoot 'crates/app-services/src/report/document.rs')
+foreach ($required in @('summary_key', 'read_envelope')) {
+  if (-not $reportDocument.Contains($required)) {
+    $errors.Add("report does not read published source summaries: $required")
+  }
+}
+foreach ($forbidden in @('load_full_timeline_for_case', 'get_artifact_rows_for_case', 'collect_file_entries')) {
+  if ($reportDocument.Contains($forbidden)) {
+    $errors.Add("report summary reads raw detail rows: $forbidden")
   }
 }
 

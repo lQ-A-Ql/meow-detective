@@ -16,13 +16,11 @@ pub(super) fn run(config: &RunConfig, scenario: &str) -> serde_json::Value {
     if scenario == "timeline_filter" {
         seed_timeline(&fixture, 64);
     }
-    let output = tempfile::tempdir().unwrap();
-    let scope = transport::commands::ExportScopeDto {
-        file_system_metadata: true,
-        registry: true,
-        full_timeline: true,
-        raw_file_extraction: false,
-        overwrite: false,
+    let request = transport::commands::ExportReportRequest {
+        case_id: fixture.active.meta.id.0.clone(),
+        format: transport::dto::ReportFormatDto::Html,
+        scope: transport::commands::ReportScopeDto::default(),
+        data_source_id: None,
     };
     let workload =
         serde_json::json!({"files": config.scale.core_files, "sources": 1, "requests": 1});
@@ -70,11 +68,8 @@ pub(super) fn run(config: &RunConfig, scenario: &str) -> serde_json::Value {
                     page.items.len()
                 }
                 "report_export" => {
-                    let name = app_services::report::generate_html_report_for_case(
-                        connection, &fixture.active.meta, &fixture.active.case_root,
-                        output.path(), &scope,
-                    ).unwrap();
-                    assert!(std::fs::metadata(output.path().join(name)).unwrap().len() > 0);
+                    let report = app_services::report::export_report_for_case(app_services::report::ReportExportContext { connection, case: &fixture.active.meta, case_root: &fixture.active.case_root, request: &request, cancel: &std::sync::atomic::AtomicBool::new(false) }).unwrap();
+                    assert!(std::fs::metadata(fixture.active.case_root.join("reports").join(report.file_name)).unwrap().len() > 0);
                     1
                 }
                 _ => unreachable!(),

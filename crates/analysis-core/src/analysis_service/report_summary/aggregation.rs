@@ -1,11 +1,11 @@
-use super::fields::{category, selected, text};
+use super::fields::{category, selected, system_fields, text};
 use crate::analysis_service::AnalysisServiceError;
 use serde_json::Value;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use transport::dto::{ReportEntityDto, ReportSectionDto, ReportSourceSummaryDto};
 
-const MAX_ENTITIES: usize = 1024;
+const MAX_ENTITIES: usize = 256;
 
 #[derive(Default)]
 pub(super) struct Summary {
@@ -52,7 +52,11 @@ impl Summary {
                 identity,
                 ..Default::default()
             });
-        let (fields, partial) = selected(attrs, names);
+        let (fields, partial) = if family == "RegistryValue" {
+            system_fields(attrs)
+        } else {
+            selected(attrs, names)
+        };
         section.partial |= partial;
         entity.fields.extend(fields);
         increment(&mut entity.counts, family, 1)?;

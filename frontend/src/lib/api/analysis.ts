@@ -140,7 +140,3 @@ export async function recoverWeChatKeys(dataSourceId: string, dumpPath: string):
 export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_CORRELATION_SNAPSHOT);
 }
-
-export async function generateAnalysisSummary(dataSourceId: string): Promise<string> {
-  return apiClient.request(COMMANDS.analysis.GENERATE_ANALYSIS_SUMMARY, { request: { dataSourceId } });
-}

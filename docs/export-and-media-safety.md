@@ -35,10 +35,12 @@ V2 安全治理与发布门禁总计划见：
 
 当前实现：
 
-- `ExportScopeDto.overwrite` 默认 `false`
+- `ExportReportRequest.scope` 选择操作系统、物理设备、浏览器与邮件摘要
 - 输出目录由 case workspace 下的 `reports/` 承接
-- 导出先写临时文件，再 rename 到目标文件
-- 覆盖时需要显式 `overwrite=true`
+- 生成文件使用同目录临时文件，完成同步后通过 `persist_noclobber` 发布
+- 生成记录保存文件大小与 SHA-256，历史状态包含 running、completed、failed、cancelled
+- `SaveReportRequest` 使用当前案件内的报告标识，保存操作校验文件大小与 SHA-256
+- `SaveReportRequest.overwrite` 默认 `false`，原生保存对话框确认目标后可显式提交 `overwrite=true`
 
 要求：
 

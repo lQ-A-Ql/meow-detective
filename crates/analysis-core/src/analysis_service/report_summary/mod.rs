@@ -33,7 +33,7 @@ pub(crate) fn rebuild(
                     family,
                     cursor.as_deref(),
                     ScanDirection::Forward,
-                    256,
+                    64,
                 )
                 .map_err(|error| AnalysisServiceError::Other(error.to_string()))?;
             for record in page.records {

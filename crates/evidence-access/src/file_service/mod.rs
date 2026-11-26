@@ -41,9 +41,10 @@ pub use error::FileServiceError;
 pub use extraction::{
     extract_file_for_case_with_audit, extract_file_to_destination,
     extract_file_to_destination_for_case, extract_file_to_destination_for_case_with_bitlocker,
-    extract_file_to_destination_for_case_with_bitlocker_and_progress, record_file_extraction_audit,
-    CaseFileExtractionRequest, FileExtractionProgressCallback, FileExtractionProgressPhase,
-    FileExtractionProgressUpdate,
+    extract_file_to_destination_for_case_with_bitlocker_and_progress,
+    prepare_case_export_destination, prepare_case_managed_export_destination,
+    record_file_extraction_audit, CaseFileExtractionRequest, FileExtractionProgressCallback,
+    FileExtractionProgressPhase, FileExtractionProgressUpdate,
 };
 pub use file_graph::populate_file_graph_for_data_source;
 pub use metadata::preview_sessions::{

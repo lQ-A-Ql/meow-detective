@@ -133,12 +133,9 @@ export const COMMANDS = {
     GET_ARTIFACT_FAMILY_COUNTS: 'get_artifact_family_counts',
   },
   reports: {
-    GET_REPORT_TEMPLATES: 'get_report_templates',
     GET_REPORT_HISTORY: 'get_report_history',
-    EXPORT_HTML_REPORT: 'export_html_report',
-    EXPORT_CSV_REPORT: 'export_csv_report',
-    EXPORT_JSON_REPORT: 'export_json_report',
-    EXPORT_CSV_CORRELATION_REPORT: 'export_csv_correlation_report',
+    EXPORT_REPORT: 'export_report',
+    SAVE_REPORT: 'save_report',
   },
   graph: {
     GET_GRAPH_SNAPSHOT: 'get_graph_snapshot',
@@ -171,7 +168,6 @@ export const COMMANDS = {
     GET_V3_GOVERNANCE_SNAPSHOT: 'get_v3_governance_snapshot',
     GET_CASE_OVERVIEW_SNAPSHOT: 'get_case_overview_snapshot',
     GET_CORRELATION_SNAPSHOT: 'get_correlation_snapshot',
-    GENERATE_ANALYSIS_SUMMARY: 'generate_analysis_summary',
     LIST_PLUGIN_MODULES: 'list_plugin_modules',
     GET_PLUGIN_FAMILY_ENTRIES: 'get_plugin_family_entries',
     LIST_PLUGIN_ACTIONS: 'list_plugin_actions',

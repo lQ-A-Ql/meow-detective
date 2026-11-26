@@ -322,7 +322,7 @@ fn extraction_analysis_tools() -> Vec<McpHostToolDto> {
         ),
         (
             "forensics.get_analysis_report",
-            "生成指定数据源的只读 Markdown 分析摘要。",
+            "读取指定数据源的操作系统、物理设备、浏览器及邮件结构化摘要。",
             source_id(),
             vec!["dataSourceId"],
         ),

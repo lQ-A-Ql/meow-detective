@@ -1,11 +1,11 @@
 use transport::commands::{
-    AppSettingsDto, ClassifyFilesRequest, ExportDeletedRecoveryRequest, ExportScopeDto,
-    ExtractFileRequest, FileSortDirectionDto, FileSortKeyDto, GetArtifactByIdRequest,
-    GetArtifactRowsRequest, GetEvtxEventSummaryRequest, GetFileChildrenRequest,
-    GetFileJumpContextRequest, GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest,
-    GetTimelineFacetsRequest, GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto,
-    ImportTargetPlatformDto, ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest,
-    RebuildTimelineProjectionRequest, RunDeletedRecoveryRequest,
+    AppSettingsDto, ClassifyFilesRequest, ExportDeletedRecoveryRequest, ExtractFileRequest,
+    FileSortDirectionDto, FileSortKeyDto, GetArtifactByIdRequest, GetArtifactRowsRequest,
+    GetEvtxEventSummaryRequest, GetFileChildrenRequest, GetFileJumpContextRequest,
+    GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest, GetTimelineFacetsRequest,
+    GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
+    ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest,
+    RebuildTimelineProjectionRequest, ReportScopeDto, RunDeletedRecoveryRequest,
     SearchDeletedRecoveriesByHashRequest, SearchFilesRequest,
 };
 use transport::dto::{EvtxEventViewDto, LocalDiskDto};
@@ -301,14 +301,12 @@ fn app_settings_rejects_unknown_import_analysis_mode() {
 }
 
 #[test]
-fn export_scope_defaults_enable_existing_sections_only() {
-    let scope: ExportScopeDto = serde_json::from_str("{}").unwrap();
-
-    assert!(scope.file_system_metadata);
-    assert!(scope.registry);
-    assert!(scope.full_timeline);
-    assert!(!scope.raw_file_extraction);
-    assert!(!scope.overwrite);
+fn report_scope_defaults_include_structured_sections() {
+    let scope = ReportScopeDto::default();
+    assert!(scope.operating_system);
+    assert!(scope.hardware);
+    assert!(scope.browsers);
+    assert!(scope.email);
 }
 
 #[test]

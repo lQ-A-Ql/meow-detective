@@ -1,35 +1,15 @@
 import { COMMANDS } from './commands';
 import { apiClient } from './client';
-import type { ExportOptions, ExportScope, ReportHistoryItem, ReportTemplate } from '@/types/models';
+import type { ExportReportRequest, ReportHistoryItem, SaveReportRequest } from '@/types/models';
 
-export async function getReportTemplates(): Promise<ReportTemplate[]> {
-  return apiClient.request(COMMANDS.reports.GET_REPORT_TEMPLATES);
+export function getReportHistory(caseId: string): Promise<ReportHistoryItem[]> {
+  return apiClient.request(COMMANDS.reports.GET_REPORT_HISTORY, { caseId });
 }
 
-export async function getReportHistory(): Promise<ReportHistoryItem[]> {
-  return apiClient.request(COMMANDS.reports.GET_REPORT_HISTORY);
+export function exportReport(request: ExportReportRequest): Promise<ReportHistoryItem> {
+  return apiClient.request(COMMANDS.reports.EXPORT_REPORT, { request });
 }
 
-export async function exportHtmlReport(scope?: ExportScope, options?: ExportOptions): Promise<string> {
-  return apiClient.request(COMMANDS.reports.EXPORT_HTML_REPORT, {
-    scope: scope ? { ...scope, overwrite: options?.overwrite ?? false } : undefined,
-  });
-}
-
-export async function exportCsvReport(scope?: ExportScope, options?: ExportOptions): Promise<string> {
-  return apiClient.request(COMMANDS.reports.EXPORT_CSV_REPORT, {
-    scope: scope ? { ...scope, overwrite: options?.overwrite ?? false } : undefined,
-  });
-}
-
-export async function exportJsonReport(scope?: ExportScope, options?: ExportOptions): Promise<string> {
-  return apiClient.request(COMMANDS.reports.EXPORT_JSON_REPORT, {
-    scope: scope ? { ...scope, overwrite: options?.overwrite ?? false } : undefined,
-  });
-}
-
-export async function exportCsvCorrelationReport(scope?: ExportScope, options?: ExportOptions): Promise<string> {
-  return apiClient.request(COMMANDS.reports.EXPORT_CSV_CORRELATION_REPORT, {
-    scope: scope ? { ...scope, overwrite: options?.overwrite ?? false } : undefined,
-  });
+export function saveReport(request: SaveReportRequest): Promise<void> {
+  return apiClient.request(COMMANDS.reports.SAVE_REPORT, { request });
 }

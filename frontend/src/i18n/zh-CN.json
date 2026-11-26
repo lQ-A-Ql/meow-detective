@@ -666,30 +666,24 @@
   },
   "reports": {
     "evidenceHash": "证据哈希",
-    "template": "选择模板",
     "runningSummary": "运行中 {{running}} / 已完成 {{completed}}",
     "scope": "导出范围",
-    "scopeOptions": {
-      "fileSystemMetadata": "包含文件系统元数据",
-      "registry": "包含注册表项",
-      "fullTimeline": "包含完整时间线",
-      "rawFiles": "包含原始文件提取（会增加文件大小）"
-    },
+    "sections": { "operatingSystem": "操作系统", "hardware": "物理设备", "browsers": "浏览器", "email": "邮件" },
+    "formats": { "html": "HTML", "csv": "CSV", "json": "JSON", "markdown": "Markdown" },
+    "status": { "running": "生成中", "completed": "已完成", "failed": "生成失败", "cancelled": "已取消" },
+    "retry": "重新生成",
+    "saveSuccess": "报告保存成功",
+    "saveFailed": "报告保存失败",
+    "historyFailed": "导出记录加载失败",
     "format": "格式",
-    "summaryTitle": "导出摘要",
-    "summaryDescription": "当前模板将生成案件执行摘要、关键时间线与核心痕迹清单。",
-    "expectedOutput": {
-      "raw": "预计产物: 报告 + 原始文件批量导出清单 + SHA256SUMS",
-      "report": "预计产物: 报告主体文件"
-    },
+    "summaryTitle": "结构化报告",
     "generating": "生成中...",
     "generate": "生成报告",
     "recent": "最近导出",
     "recordCount": "{{count}} 条记录",
     "exportSuccess": "报告生成成功",
     "exportFailed": "报告生成失败",
-    "generatedBy": "由 {{author}} 生成于 {{time}}",
-    "exportQueueProgress": "导出队列处理中，正在写入时间线与附件章节。"
+    "generatedBy": "由 {{author}} 生成于 {{time}}"
   },
   "fileBrowser": {
     "title": "文件浏览控制",
@@ -3187,7 +3181,7 @@
     },
     "report": {
       "title": "生成分析报告",
-      "download": "下载 Markdown 报告"
+      "download": "导出报告"
     },
     "subcategory": {
       "fileName": "文件名",

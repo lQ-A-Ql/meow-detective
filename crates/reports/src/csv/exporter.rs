@@ -1,73 +1,30 @@
 use std::io::{self, Write};
 
-/// Sanitize a CSV cell value to prevent formula injection.
-///
-/// Prefixes cells starting with =, +, -, @ with a tab character
-/// to prevent spreadsheet applications from interpreting them as formulas.
-fn sanitize_csv_cell(s: &str) -> String {
-    if let Some(first) = s.chars().next() {
-        if matches!(first, '=' | '+' | '-' | '@') {
-            return format!("\t{}", s);
-        }
-    }
-    s.to_string()
-}
-
 pub struct CsvExporter;
 
 impl CsvExporter {
-    pub fn export_artifact_headers(writer: &mut impl Write, headers: &[&str]) -> io::Result<()> {
-        writeln!(writer, "{}", headers.join(","))
-    }
-
-    pub fn export_artifact_row(writer: &mut impl Write, row: &[String]) -> io::Result<()> {
-        let escaped: Vec<String> = row
-            .iter()
-            .map(|cell| format!("\"{}\"", sanitize_csv_cell(cell).replace('"', "\"\"")))
-            .collect();
-        writeln!(writer, "{}", escaped.join(","))
-    }
-
-    pub fn export_artifacts(
+    pub fn export_rows(
         writer: &mut impl Write,
         headers: &[&str],
         rows: &[Vec<String>],
     ) -> io::Result<()> {
         writeln!(writer, "{}", headers.join(","))?;
         for row in rows {
-            let escaped: Vec<String> = row
+            let escaped = row
                 .iter()
-                .map(|c| {
-                    let sanitized = sanitize_csv_cell(c);
-                    format!("\"{}\"", sanitized.replace('"', "\"\""))
-                })
-                .collect();
+                .map(|cell| format!("\"{}\"", sanitize_csv_cell(cell).replace('"', "\"\"")))
+                .collect::<Vec<_>>();
             writeln!(writer, "{}", escaped.join(","))?;
         }
         Ok(())
     }
+}
 
-    /// Export correlation leads as CSV rows.
-    ///
-    /// Each row must have exactly 9 columns:
-    /// `lead_id`, `title`, `confidence`, `families`, `primary_file_path`,
-    /// `supporting_node_count`, `match_signals_count`, `provenance_sources`, `caveats`
-    pub fn export_correlation_leads(
-        writer: &mut impl Write,
-        rows: &[Vec<String>],
-    ) -> io::Result<()> {
-        let headers = [
-            "lead_id",
-            "title",
-            "confidence",
-            "families",
-            "primary_file_path",
-            "supporting_node_count",
-            "match_signals_count",
-            "provenance_sources",
-            "caveats",
-        ];
-        Self::export_artifacts(writer, &headers, rows)
+fn sanitize_csv_cell(value: &str) -> String {
+    if value.starts_with(['=', '+', '-', '@']) {
+        format!("\t{value}")
+    } else {
+        value.to_owned()
     }
 }
 

@@ -10,10 +10,9 @@ mod support;
 
 pub use classification::get_file_classification_board;
 pub use extraction::{
-    generate_analysis_summary, get_browser_history_summary, get_email_extraction_summary,
-    get_evtx_event_summary, get_linux_artifact_summary, get_plugin_family_entries,
-    get_registry_extraction_summary, get_registry_structured_summary, list_plugin_modules,
-    run_plugin_extraction,
+    get_browser_history_summary, get_email_extraction_summary, get_evtx_event_summary,
+    get_linux_artifact_summary, get_plugin_family_entries, get_registry_extraction_summary,
+    get_registry_structured_summary, list_plugin_modules, run_plugin_extraction,
 };
 pub use governance::{
     get_case_overview_snapshot, get_correlation_snapshot, get_v2_governance_snapshot,

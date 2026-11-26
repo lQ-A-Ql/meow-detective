@@ -8,7 +8,6 @@ mod generation_gc;
 mod queries;
 mod runtime;
 mod source;
-mod summary;
 mod system_info;
 
 pub use android::{
@@ -34,5 +33,4 @@ pub use queries::{
 };
 pub use runtime::AnalysisSourceReadRuntime;
 pub use source::{open_ready_analysis_source, AnalysisSource};
-pub use summary::generate_source_analysis_summary;
 pub use system_info::get_source_system_info;

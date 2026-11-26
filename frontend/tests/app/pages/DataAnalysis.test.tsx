@@ -22,7 +22,6 @@ const mocks = vi.hoisted(() => ({
   androidPackageSummary: vi.fn(),
   pluginModules: vi.fn(),
   classifications: vi.fn(),
-  summaryMutation: vi.fn(),
 }));
 
 vi.mock('@/features/case/hooks', () => ({
@@ -43,7 +42,6 @@ vi.mock('@/features/analysis/hooks', () => ({
   useAndroidPackageSummary: mocks.androidPackageSummary,
   usePluginModules: mocks.pluginModules,
   useFileClassificationBoard: mocks.classifications,
-  useGenerateAnalysisSummary: mocks.summaryMutation,
 }));
 
 function renderPage() {
@@ -72,14 +70,6 @@ function queryState(overrides: Record<string, unknown> = {}) {
     refetch: vi.fn(),
     ...overrides,
   };
-}
-
-function deferred<T>() {
-  let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
-    resolve = resolvePromise;
-  });
-  return { promise, resolve };
 }
 
 const windowsDataSource: DataSourceSummary = {
@@ -562,18 +552,7 @@ describe('DataAnalysis page', () => {
         },
       }),
     );
-    mocks.summaryMutation.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync: vi.fn().mockResolvedValue('# 数据源分析报告'),
-      reset: vi.fn(),
-    });
     mocks.pluginModules.mockReturnValue(queryState({ data: [] }));
-
-    vi.stubGlobal('URL', {
-      createObjectURL: vi.fn(() => 'blob:analysis'),
-      revokeObjectURL: vi.fn(),
-    });
   });
 
   it('shows empty state and does not render errors when no case is active', () => {
@@ -821,85 +800,6 @@ describe('DataAnalysis page', () => {
     expect(useAnalysisStore.getState().selectedDataSourceId).toBe('ds-linux');
   });
 
-  it('prevents data-source switching while the summary mutation is pending', async () => {
-    const pendingMutation = {
-      data: undefined,
-      error: null,
-      isPending: true,
-      mutateAsync: vi.fn(),
-      reset: vi.fn(),
-    };
-    mocks.summaryMutation.mockReturnValue(pendingMutation);
-    mocks.dataSources.mockReturnValue(
-      queryState({
-        data: [windowsDataSource, linuxDataSource],
-      }),
-    );
-
-    renderPage();
-    await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
-
-    const linuxSelector = screen.getByLabelText('Linux Server');
-    expect(linuxSelector).toBeDisabled();
-    fireEvent.click(linuxSelector);
-    expect(useAnalysisStore.getState().selectedDataSourceId).toBe('ds-win');
-    expect(screen.queryByText('Linux 痕迹分析')).toBeNull();
-  });
-
-  it('resets source-bound mutation state when switching data sources', async () => {
-    const summaryReset = vi.fn();
-    mocks.summaryMutation.mockReturnValue({
-      data: 'old report',
-      error: new Error('old summary error'),
-      isPending: false,
-      mutateAsync: vi.fn(),
-      reset: summaryReset,
-    });
-    mocks.dataSources.mockReturnValue(
-      queryState({
-        data: [windowsDataSource, linuxDataSource],
-      }),
-    );
-
-    renderPage();
-    await waitFor(() => expect(screen.getByLabelText('Windows Evidence')).toBeDefined());
-    summaryReset.mockClear();
-
-    fireEvent.click(screen.getByLabelText('Linux Server'));
-    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-    expect(summaryReset).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not download a summary produced for an obsolete source generation', async () => {
-    const summary = deferred<string>();
-    const mutateAsync = vi.fn(() => summary.promise);
-    mocks.summaryMutation.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-    mocks.dataSources.mockReturnValue(
-      queryState({
-        data: [windowsDataSource, linuxDataSource],
-      }),
-    );
-
-    renderPage();
-    fireEvent.click(screen.getByLabelText('Windows Evidence / 报告'));
-    fireEvent.click(await screen.findByRole('button', { name: /下载 Markdown 报告/ }));
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-
-    act(() => useAnalysisStore.getState().setSelectedDataSourceId('ds-linux'));
-    await waitFor(() => expect(screen.getByText('Linux 痕迹分析')).toBeDefined());
-    await act(async () => {
-      summary.resolve('# obsolete report');
-      await summary.promise;
-    });
-
-    expect(URL.createObjectURL).not.toHaveBeenCalled();
-  });
-
   it('refreshes only Windows queries for a persisted Windows source', async () => {
     const systemRefetch = vi.fn().mockResolvedValue(undefined);
     const evidenceRefetch = vi.fn().mockResolvedValue(undefined);
@@ -1037,33 +937,5 @@ describe('DataAnalysis page', () => {
     expect(screen.getAllByText('doc.pdf').length).toBeGreaterThan(0);
     expect(screen.getByText('PDF')).toBeDefined();
     expect(screen.getByText('魔数')).toBeDefined();
-  });
-
-  it('downloads markdown report through summary mutation', async () => {
-    const click = vi.fn();
-    const originalCreateElement = document.createElement.bind(document);
-    vi.spyOn(document, 'createElement').mockImplementation((tagName) => {
-      const element = originalCreateElement(tagName);
-      if (tagName === 'a') {
-        element.click = click;
-      }
-      return element;
-    });
-    const mutateAsync = vi.fn().mockResolvedValue('# 数据源分析报告');
-    mocks.summaryMutation.mockReturnValue({
-      error: null,
-      isPending: false,
-      mutateAsync,
-      reset: vi.fn(),
-    });
-
-    renderPage();
-    fireEvent.click(screen.getByLabelText('Windows Evidence / 报告'));
-    await waitFor(() => expect(screen.getByRole('button', { name: /下载 Markdown 报告/ })).toBeDefined());
-    fireEvent.click(screen.getByRole('button', { name: /下载 Markdown 报告/ }));
-
-    await waitFor(() => expect(mutateAsync).toHaveBeenCalledTimes(1));
-    expect(URL.createObjectURL).toHaveBeenCalled();
-    expect(click).toHaveBeenCalledTimes(1);
   });
 });

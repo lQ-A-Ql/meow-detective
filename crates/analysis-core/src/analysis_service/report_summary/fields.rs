@@ -69,11 +69,9 @@ pub(super) fn category(
     attrs: &Value,
 ) -> Option<(usize, String, &'static [&'static str])> {
     Some(match family {
-        "RegistryValue" if SYSTEM_FIELDS.contains(&text(attrs, "field")) => (
-            0,
-            format!("{}:{}", text(attrs, "hivePath"), text(attrs, "field")),
-            &["field", "data", "hivePath", "keyPath", "valueName"],
-        ),
+        "RegistryValue" if SYSTEM_FIELDS.contains(&text(attrs, "field")) => {
+            (0, text(attrs, "hivePath").to_owned(), &[])
+        }
         "RegistryHardwareDevice" => (
             1,
             format!("{}:{}", text(attrs, "kind"), text(attrs, "deviceId")),
@@ -110,6 +108,18 @@ pub(super) fn category(
             ACCOUNT_FIELDS,
         ),
         "EmailMessage" => (3, email_container(attrs), &["mailClient", "containerPath"]),
+        "LinuxSystemConfig"
+            if text(attrs, "configKind") == "textConfig"
+                && text(attrs, "sourcePath")
+                    .replace('\\', "/")
+                    .ends_with("/etc/hostname") =>
+        {
+            (
+                0,
+                format!("linux:{}", text(attrs, "sourcePath")),
+                &["line", "sourcePath"],
+            )
+        }
         "LinuxSystemConfig" if matches!(text(attrs, "configKind"), "osRelease" | "hostname") => (
             0,
             format!("linux:{}", text(attrs, "sourcePath")),
@@ -167,4 +177,12 @@ pub(super) fn selected(attrs: &Value, names: &[&str]) -> (BTreeMap<String, Strin
         }
     }
     (fields, partial)
+}
+
+pub(super) fn system_fields(attrs: &Value) -> (BTreeMap<String, String>, bool) {
+    let field = text(attrs, "field");
+    selected(
+        &serde_json::json!({field: text(attrs, "data"), "hivePath": text(attrs, "hivePath")}),
+        &[field, "hivePath"],
+    )
 }

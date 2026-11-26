@@ -489,18 +489,15 @@ fn system_info_is_not_fabricated_without_parsers() {
 }
 
 #[test]
-fn summary_does_not_emit_fake_default_facts() {
+fn missing_system_info_preserves_absent_fields() {
     let (conn, _tmp, _ds_id) = setup_case_db();
     let info =
         extract_system_info_for_case(&conn, |_file_id, _max_bytes| -> Result<Vec<u8>, String> {
             Err("unexpected read".to_string())
         });
-    let summary = generate_analysis_summary(&info, &[]);
-
-    assert!(summary.contains("未解析"));
-    assert!(!summary.contains("FORENSICS-PC"));
-    assert!(!summary.contains("Windows 10"));
-    assert!(!summary.contains("19045"));
+    assert!(info.computer_name.is_none());
+    assert!(info.os_version.is_none());
+    assert!(info.build_number.is_none());
 }
 
 #[test]
@@ -631,11 +628,6 @@ fn registry_hive_fields_are_parsed_with_field_provenance() {
             && item.status == AnalysisParseStatusDto::Parsed
             && item.data_source_id == ds_id.0
     }));
-
-    let summary = generate_analysis_summary(&info, &[]);
-    assert!(summary.contains(registry::SYSTEM_COMPUTER_NAME));
-    assert!(summary.contains("Forensics Fixture OS 24H2"));
-    assert!(!summary.contains("FORENSICS-PC"));
 }
 
 #[test]

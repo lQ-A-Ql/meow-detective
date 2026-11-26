@@ -17,7 +17,6 @@ mod file_classification_taxonomy;
 mod platforms;
 mod provenance;
 pub mod report_summary;
-mod summary;
 mod system_info;
 mod system_info_candidates;
 mod use_cases;
@@ -49,20 +48,19 @@ pub use platforms::{
     resolve_data_source_platform, select_evidence_scan_categories, validate_analysis_categories,
     validate_data_source_analysis_categories,
 };
-pub use summary::generate_analysis_summary;
 pub use system_info::extract_system_info_for_case;
 mod system_info_boot;
 pub use use_cases::run_source_analysis_extraction_execution_with_cancel;
 pub use use_cases::run_source_analysis_extraction_execution_with_progress_and_cancel;
 pub use use_cases::{
-    classify_source_files, generate_source_analysis_summary, get_file_classification_board,
-    get_source_android_device_info, get_source_android_package_summary, get_source_browser_summary,
-    get_source_email_summary, get_source_evidence_summary, get_source_evtx_summary,
-    get_source_linux_summary, get_source_linux_system_config_page,
-    get_source_plugin_family_entries, get_source_plugin_modules,
-    get_source_registry_structured_summary, get_source_registry_summary, get_source_system_info,
-    materialize_source_linux_summary, open_ready_analysis_source, run_source_analysis_extraction,
-    run_source_analysis_extraction_with_cancel, run_source_analysis_extraction_with_progress,
+    classify_source_files, get_file_classification_board, get_source_android_device_info,
+    get_source_android_package_summary, get_source_browser_summary, get_source_email_summary,
+    get_source_evidence_summary, get_source_evtx_summary, get_source_linux_summary,
+    get_source_linux_system_config_page, get_source_plugin_family_entries,
+    get_source_plugin_modules, get_source_registry_structured_summary, get_source_registry_summary,
+    get_source_system_info, materialize_source_linux_summary, open_ready_analysis_source,
+    run_source_analysis_extraction, run_source_analysis_extraction_with_cancel,
+    run_source_analysis_extraction_with_progress,
     run_source_analysis_extraction_with_progress_and_cancel, run_source_android_analysis,
     run_source_android_analysis_with_cancel, AnalysisExtractionProgressContext, AnalysisSource,
     AnalysisSourceReadRuntime,

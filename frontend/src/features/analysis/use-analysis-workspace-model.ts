@@ -9,7 +9,6 @@ import {
   useEmailExtractionSummary,
   useEvtxEventSummary,
   useEvidenceClassificationSummary,
-  useGenerateAnalysisSummary,
   useLinuxArtifactSummary,
   usePluginModules,
   useRegistryExtractionSummary,
@@ -26,6 +25,8 @@ import {
 } from '@/features/analysis/types';
 import { useCurrentCase, useDataSources } from '@/features/case/hooks';
 import { useCapabilityMatrix, useSourceCapability } from '@/features/capability/hooks';
+import { useExportReport, useSaveReport } from '@/features/reports/hooks';
+import { DEFAULT_REPORT_SCOPE } from '@/features/reports/report-config';
 import { selectAnalysisCandidates } from '@/features/analysis/capability-filter';
 import { useDeletedRecoveryModel } from '@/features/recovery/hooks';
 import { subscribeToEvent } from '@/lib/events/subscribers';
@@ -72,8 +73,10 @@ export function useAnalysisWorkspaceModel() {
   const androidPackages = useAndroidPackageSummary({ source: selectedDataSource, limit: 100 });
   const pluginModulesQuery = usePluginModules(selectedDataSource);
   const classificationBoard = useFileClassificationBoard(selectedDataSource, 300);
-  const summaryMutation = useGenerateAnalysisSummary(selectedDataSource?.id);
+  const summaryMutation = useExportReport();
+  const saveReportMutation = useSaveReport();
   const resetSummaryMutation = summaryMutation.reset;
+  const resetSaveReportMutation = saveReportMutation.reset;
 
   const extractionProgress = useAnalysisStore((state) => state.extractionProgress);
   const extractionRunning = useAnalysisStore((state) => state.extractionRunning);
@@ -95,7 +98,11 @@ export function useAnalysisWorkspaceModel() {
   );
 
   const analysisMutationPending =
-    summaryMutation.isPending || deletedRecovery.scanning || deletedRecovery.reading || deletedRecovery.exporting;
+    summaryMutation.isPending ||
+    saveReportMutation.isPending ||
+    deletedRecovery.scanning ||
+    deletedRecovery.reading ||
+    deletedRecovery.exporting;
 
   const labeledExtractionProgress = useMemo(() => labeledProgress(extractionProgress, t), [extractionProgress, t]);
   const windowsNodeCounts = useMemo(
@@ -147,6 +154,7 @@ export function useAnalysisWorkspaceModel() {
     eventLogSummary.error ??
     classificationBoard.error ??
     summaryMutation.error ??
+    saveReportMutation.error ??
     analysisRefreshError;
   const linuxError = currentCase.error ?? linuxSummary.error ?? analysisRefreshError;
   const androidError = currentCase.error ?? androidDeviceInfo.error ?? androidPackages.error ?? analysisRefreshError;
@@ -156,9 +164,17 @@ export function useAnalysisWorkspaceModel() {
       setAnalysisRefreshError(undefined);
       resetExtractionProgress();
       resetSummaryMutation();
+      resetSaveReportMutation();
       setExtractionRunning(false);
     }
-  }, [resetExtractionProgress, resetSummaryMutation, selectedSourceContextKey, setExtractionRunning, sourceEpoch]);
+  }, [
+    resetExtractionProgress,
+    resetSummaryMutation,
+    resetSaveReportMutation,
+    selectedSourceContextKey,
+    setExtractionRunning,
+    sourceEpoch,
+  ]);
 
   useEffect(() => {
     if (!readyDataSources.length) {
@@ -315,7 +331,7 @@ export function useAnalysisWorkspaceModel() {
   }
 
   async function downloadSummary() {
-    if (!selectedDataSource || selectedDataSource.platform !== 'windows') {
+    if (!currentCase.data || !selectedDataSource || selectedDataSource.platform !== 'windows') {
       return;
     }
     const operation = sourceEpoch.begin(selectedSourceContextKey);
@@ -323,17 +339,16 @@ export function useAnalysisWorkspaceModel() {
       return;
     }
     try {
-      const summary = await summaryMutation.mutateAsync();
+      const report = await summaryMutation.mutateAsync({
+        caseId: currentCase.data.id,
+        format: 'html',
+        scope: DEFAULT_REPORT_SCOPE,
+        dataSourceId: selectedDataSource.id,
+      });
       if (!sourceEpoch.isCurrent(operation)) {
         return;
       }
-      const blob = new Blob([summary], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'analysis-report.md';
-      link.click();
-      URL.revokeObjectURL(url);
+      await saveReportMutation.mutateAsync({ caseId: currentCase.data.id, report });
     } finally {
       sourceEpoch.finish(operation);
     }
@@ -371,7 +386,7 @@ export function useAnalysisWorkspaceModel() {
     eventLogView,
     eventLogLoadContextKey: selectedSourceContextKey ?? '',
     classificationBoard,
-    summaryPending: summaryMutation.isPending,
+    summaryPending: summaryMutation.isPending || saveReportMutation.isPending,
     linuxSummary: linuxSummary.data,
     linuxSummaryLoading: linuxSummary.isLoading,
     linuxSummaryHasMore: Boolean(linuxSummary.hasNextPage),

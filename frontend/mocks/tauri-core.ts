@@ -416,10 +416,6 @@ export async function invoke<T>(command: string, payload?: MockCommandPayload): 
       return analysisData.correlationSnapshot as T;
     case 'get_infrastructure_graph':
       return platformData.infrastructureGraph as T;
-    case 'get_report_templates':
-      return platformData.reportTemplates as T;
-    case 'get_report_history':
-      return platformData.reportHistory as T;
     case 'open_file_handle_request': {
       const request = (payload?.request ?? payload) as { fileId?: string } | undefined;
       const file = (tree.files as { id: string; name: string; size?: number }[]).find(

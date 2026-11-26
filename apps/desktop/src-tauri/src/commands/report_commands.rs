@@ -1,148 +1,91 @@
-use tauri::State;
+use super::command_support::{get_case_read_connection, require_active_case};
+use crate::{
+    analysis_task_jobs::{self, AnalysisTaskOutcome, AnalysisTaskRequest},
+    state::AppState,
+};
+use tauri::{AppHandle, State};
 use transport::{
-    commands::ExportScopeDto,
-    dto::{ReportHistoryItemDto, ReportTemplateDto},
+    commands::{ExportReportRequest, SaveReportRequest},
+    dto::ReportHistoryItemDto,
     CommandError,
 };
 
-use super::command_support::{get_case_connection, get_case_read_connection, require_active_case};
-use crate::state::AppState;
-
-/// Get available report templates (static data, no DB access).
-#[tauri::command]
-pub fn get_report_templates() -> Result<Vec<ReportTemplateDto>, CommandError> {
-    Ok(app_services::report::get_report_templates())
-}
-
-/// Get report generation history from database.
 #[tauri::command]
 pub async fn get_report_history(
     state: State<'_, AppState>,
+    case_id: String,
 ) -> Result<Vec<ReportHistoryItemDto>, CommandError> {
-    let app_state = state.inner().clone();
+    let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let active = require_active_case(&app_state)?;
-        let conn = get_case_read_connection(&app_state)?;
-        Ok(app_services::report::get_report_history(
-            &conn,
-            &active.case_id,
-        ))
+        let active = require_active_case(&state)?;
+        if active.case_id != case_id {
+            return Err(CommandError::conflict("案件已经切换"));
+        }
+        let connection = get_case_read_connection(&state)?;
+        app_services::report::get_report_history(&connection, &case_id)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
 }
 
-/// Export HTML report for the current case.
 #[tauri::command]
-pub async fn export_html_report(
+pub async fn export_report(
+    app: AppHandle,
     state: State<'_, AppState>,
-    scope: Option<ExportScopeDto>,
-) -> Result<String, CommandError> {
-    let scope = scope.unwrap_or_default();
-    let app_state = state.inner().clone();
+    request: ExportReportRequest,
+) -> Result<ReportHistoryItemDto, CommandError> {
+    let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let active = require_active_case(&app_state)?;
-        let output_dir = active.case_root.join("reports");
-        let conn = get_case_connection(&app_state)?;
-        let bitlocker = app_services::report::BitLockerReportContext::new(
-            app_services::bitlocker_service::BitLockerRuntimeContext::new(
-                &app_state.preview_runtime,
-                &app_state.bitlocker_runtime,
-                app_state.bitlocker_key_store.as_ref(),
-            ),
-        );
-        app_services::report::generate_html_report_for_case_with_bitlocker(
-            &conn,
-            &active.meta,
-            &active.case_root,
-            &output_dir,
-            &scope,
-            bitlocker,
+        let active = require_active_case(&state)?;
+        if request.case_id != active.case_id {
+            return Err(CommandError::conflict("案件已经切换"));
+        }
+        let case_id = active.case_id.clone();
+        let case_root = active.case_root.clone();
+        let source_id = request.data_source_id.clone();
+        analysis_task_jobs::run_with_outcome(
+            &state,
+            &app,
+            AnalysisTaskRequest {
+                case_id: &case_id,
+                case_root: &case_root,
+                data_source_id: source_id.as_deref(),
+                kind: "Report export",
+            },
+            move |connection, cancel| {
+                let result = app_services::report::export_report_for_case(
+                    app_services::report::ReportExportContext {
+                        connection,
+                        case: &active.meta,
+                        case_root: &active.case_root,
+                        request: &request,
+                        cancel: &cancel,
+                    },
+                )
+                .map_err(CommandError::from_typed_service_error)?;
+                Ok(AnalysisTaskOutcome::with_counts(result, 0, 0))
+            },
         )
-        .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?
 }
 
-/// Export CSV report for artifacts.
 #[tauri::command]
-pub async fn export_csv_report(
+pub async fn save_report(
     state: State<'_, AppState>,
-    scope: Option<ExportScopeDto>,
-) -> Result<String, CommandError> {
-    let scope = scope.unwrap_or_default();
-    let app_state = state.inner().clone();
+    request: SaveReportRequest,
+) -> Result<(), CommandError> {
+    let state = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        let active = require_active_case(&app_state)?;
-        let output_dir = active.case_root.join("reports");
-        let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_csv_artifacts_for_case(
-            &conn,
-            &active.meta,
-            &active.case_root,
-            &output_dir,
-            &scope,
-        )
-        .map_err(CommandError::from_typed_service_error)
-    })
-    .await
-    .map_err(CommandError::from_join_error)?
-}
-
-/// Export CSV correlation report.
-#[tauri::command]
-pub async fn export_csv_correlation_report(
-    state: State<'_, AppState>,
-    scope: Option<ExportScopeDto>,
-) -> Result<String, CommandError> {
-    let scope = scope.unwrap_or_default();
-    let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let active = require_active_case(&app_state)?;
-        let output_dir = active.case_root.join("reports");
-        let conn = get_case_connection(&app_state)?;
-        app_services::report::generate_csv_correlation_for_case(
-            &conn,
-            &active.meta,
-            &active.case_root,
-            &output_dir,
-            &scope,
-        )
-        .map_err(CommandError::from_typed_service_error)
-    })
-    .await
-    .map_err(CommandError::from_join_error)?
-}
-
-/// Export JSON report.
-#[tauri::command]
-pub async fn export_json_report(
-    state: State<'_, AppState>,
-    scope: Option<ExportScopeDto>,
-) -> Result<String, CommandError> {
-    let scope = scope.unwrap_or_default();
-    let app_state = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || {
-        let active = require_active_case(&app_state)?;
-        let output_dir = active.case_root.join("reports");
-        let conn = get_case_connection(&app_state)?;
-        let bitlocker = app_services::report::BitLockerReportContext::new(
-            app_services::bitlocker_service::BitLockerRuntimeContext::new(
-                &app_state.preview_runtime,
-                &app_state.bitlocker_runtime,
-                app_state.bitlocker_key_store.as_ref(),
-            ),
-        );
-        app_services::report::generate_json_export_for_case_with_bitlocker(
-            &conn,
-            &active.meta,
-            &active.case_root,
-            &output_dir,
-            &scope,
-            bitlocker,
-        )
-        .map_err(CommandError::from_typed_service_error)
+        let active = require_active_case(&state)?;
+        if request.case_id != active.case_id {
+            return Err(CommandError::conflict("案件已经切换"));
+        }
+        let connection = get_case_read_connection(&state)?;
+        app_services::report::save_report_for_case(&connection, &active.case_root, &request)
+            .map_err(CommandError::from_typed_service_error)
     })
     .await
     .map_err(CommandError::from_join_error)?

@@ -50,6 +50,8 @@ pub enum McpHostServiceError {
     DataSource(#[from] crate::file_service::FileServiceError),
     #[error("读取分析数据失败")]
     Analysis(#[source] crate::analysis_service::AnalysisServiceError),
+    #[error("读取报告摘要失败")]
+    Report(#[from] crate::report::ReportError),
     #[error("registry browser request failed: {0}")]
     Registry(#[from] crate::registry_browser_service::RegistryBrowserError),
     #[error("读取数据源 {data_source_id} 失败：{source}")]
@@ -97,6 +99,7 @@ impl transport::ServiceErrorCategory for McpHostServiceError {
             Self::File(error) => error.category(),
             Self::FileRead { source, .. } => source.category(),
             Self::Analysis(error) => error.category(),
+            Self::Report(error) => error.category(),
             Self::Registry(error) => error.category(),
             Self::SourceRead { source, .. } => source.category(),
             Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,

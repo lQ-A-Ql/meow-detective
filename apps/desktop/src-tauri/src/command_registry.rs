@@ -2,14 +2,14 @@
 
 pub(crate) use crate::commands::{
     analysis_commands::{
-        generate_analysis_summary, get_android_device_info, get_android_package_summary,
-        get_browser_history_summary, get_case_overview_snapshot, get_correlation_snapshot,
-        get_email_extraction_summary, get_evidence_classification_summary, get_evtx_event_summary,
-        get_file_classification_board, get_kubernetes_cluster_summary, get_linux_artifact_summary,
-        get_linux_evidence_events, get_linux_evidence_set_summary, get_plugin_family_entries,
-        get_registry_extraction_summary, get_registry_structured_summary, get_system_info,
-        get_v2_governance_snapshot, get_v3_governance_snapshot, list_linux_evidence_sets,
-        list_plugin_modules, run_plugin_extraction,
+        get_android_device_info, get_android_package_summary, get_browser_history_summary,
+        get_case_overview_snapshot, get_correlation_snapshot, get_email_extraction_summary,
+        get_evidence_classification_summary, get_evtx_event_summary, get_file_classification_board,
+        get_kubernetes_cluster_summary, get_linux_artifact_summary, get_linux_evidence_events,
+        get_linux_evidence_set_summary, get_plugin_family_entries, get_registry_extraction_summary,
+        get_registry_structured_summary, get_system_info, get_v2_governance_snapshot,
+        get_v3_governance_snapshot, list_linux_evidence_sets, list_plugin_modules,
+        run_plugin_extraction,
     },
     app_update_commands::{check_app_update, get_app_update_info, install_app_update},
     application_log_commands::{
@@ -84,10 +84,7 @@ pub(crate) use crate::commands::{
         locate_registry_search_hit, open_registry_hive, read_registry_value_range,
         resolve_registry_key, search_registry_hive,
     },
-    report_commands::{
-        export_csv_correlation_report, export_csv_report, export_html_report, export_json_report,
-        get_report_history, get_report_templates,
-    },
+    report_commands::{export_report, get_report_history, save_report},
     rule_pack_commands::{list_loaded_rule_packs, load_rule_pack, validate_rule_pack},
     search_commands::search_files_request,
     settings_commands::{get_app_settings, save_app_settings},

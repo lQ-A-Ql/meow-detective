@@ -5668,10 +5668,9 @@ checksum = "cadadef317c2f20755a64d7fdc48f9e7178ee6b0e1f7fce33fa60f1d68a276e6"
 name = "reports"
 version = "0.1.1"
 dependencies = [
- "chrono",
- "domain",
  "infrastructure",
  "serde_json",
+ "transport",
 ]
 
 [[package]]

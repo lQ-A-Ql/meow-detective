@@ -44,7 +44,7 @@ fn registry_fixture_projection_uses_extracted_system_fields() {
     assert_eq!(summary.operating_system.record_count, 6);
     assert!(summary.operating_system.entities.iter().any(|entity| entity
         .fields
-        .get("data")
+        .get("productName")
         .is_some_and(|value| value == "Forensics Fixture OS")));
     assert_eq!(summary.hardware.record_count, 0);
     assert_eq!(summary.browsers.record_count, 0);

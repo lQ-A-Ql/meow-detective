@@ -4,4 +4,3 @@ crates/artifacts-linux/src/wtmp.rs,parse_wtmp,3ed8803e609dce7edbf2a6ebca659cb015
 crates/fs-exfat/src/boot.rs,parse,4e91ac5f63477fb3419cae454a2b12b58148fe2b0fb1dc8ab67fe422b922e345,1,124
 crates/fs-ntfs/src/logfile.rs,extract_page_records,1c6fa86b47ee8fcc8e4cc90448a0011759a4f78f04b610ac373cd978e09ce5ac,1,141
 crates/fs-ntfs/src/mft_scanner.rs,parse_mft_record,8baffee0c237c7e4fe643d44a7184e27fbe566d5e1acf010306cecfae0567478,1,146
-crates/reports/src/html/exporter.rs,export_with_structured_sections,3282ebcc916c9fc98bc36a11ea71e0deaf305ddc20245a6d2aaa956a9cd15459,1,138

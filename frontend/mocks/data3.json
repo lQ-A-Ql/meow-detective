@@ -281,62 +281,6 @@
     ],
     "networkDiagnostics": ["1 个连接来自未登记资产，已标记为待确认。"]
   },
-  "reportTemplates": [
-    {
-      "id": "template-full",
-      "name": "全量取证报告",
-      "description": "案件概览、数据源、时间线、痕迹与图谱的完整报告"
-    },
-    {
-      "id": "template-timeline",
-      "name": "时间线专项报告",
-      "description": "仅导出时间线事件与筛选条件"
-    },
-    {
-      "id": "template-artifacts",
-      "name": "痕迹专项报告",
-      "description": "按痕迹家族导出的证据清单"
-    },
-    {
-      "id": "template-correlation",
-      "name": "关联分析报告",
-      "description": "线索、聚类与家族覆盖矩阵"
-    }
-  ],
-  "reportHistory": [
-    {
-      "id": "report-001",
-      "fileName": "case-2026-MOCK-001-full.html",
-      "createdBy": "Meow Lab",
-      "createdAt": "2026-10-10T06:30:00.000Z",
-      "status": "completed",
-      "progress": 100
-    },
-    {
-      "id": "report-002",
-      "fileName": "case-2026-MOCK-001-timeline.csv",
-      "createdBy": "Meow Lab",
-      "createdAt": "2026-10-10T05:00:00.000Z",
-      "status": "completed",
-      "progress": 100
-    },
-    {
-      "id": "report-003",
-      "fileName": "case-2026-MOCK-001-artifacts.json",
-      "createdBy": "analyst",
-      "createdAt": "2026-10-10T03:40:00.000Z",
-      "status": "completed",
-      "progress": 100
-    },
-    {
-      "id": "report-004",
-      "fileName": "case-2026-MOCK-001-correlation.csv",
-      "createdBy": "analyst",
-      "createdAt": "2026-10-10T07:54:00.000Z",
-      "status": "running",
-      "progress": 42
-    }
-  ],
   "traceItems": [
     {
       "id": "trace-001",

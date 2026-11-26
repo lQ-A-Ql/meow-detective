@@ -3,7 +3,6 @@ import { apiClient } from '@/lib/api/client';
 import { COMMANDS } from '@/lib/api/commands';
 import {
   getFileClassificationBoard,
-  generateAnalysisSummary,
   getBrowserHistorySummary,
   getCaseOverviewSnapshot,
   getCorrelationSnapshot,
@@ -146,14 +145,5 @@ describe('analysis API', () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getCorrelationSnapshot();
     expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_CORRELATION_SNAPSHOT);
-  });
-
-  it('generateAnalysisSummary calls the correct command', async () => {
-    requestMock.mockResolvedValueOnce('summary text' as never);
-    const result = await generateAnalysisSummary('ds-1');
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GENERATE_ANALYSIS_SUMMARY, {
-      request: { dataSourceId: 'ds-1' },
-    });
-    expect(result).toBe('summary text');
   });
 });

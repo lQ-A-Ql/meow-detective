@@ -83,6 +83,11 @@ fn governance_snapshot_aggregates_runtime_signals() {
             status: "completed".to_string(),
             progress: Some(100),
             created_at: Utc::now().to_rfc3339(),
+            request_json: serde_json::json!({"caseId":"case-1","format":"json","scope":{"operatingSystem":true,"hardware":true,"browsers":true,"email":true}}).to_string(),
+            error_code: None,
+            error_message: None,
+            file_size: None,
+            sha256: None,
         })
         .unwrap();
     AuditRepo::new(&conn)

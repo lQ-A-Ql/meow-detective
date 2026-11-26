@@ -9,6 +9,7 @@ use super::arguments::{parse_arguments, validate_arguments};
 use super::{McpHostQueryContext, McpHostServiceError};
 use crate::analysis_service::{AnalysisSourceReadRuntime, MAX_SAMPLE_SIZE};
 mod case;
+mod report;
 
 use case::{case_overview, correlation_snapshot, provenance_chain, query_graph};
 
@@ -135,18 +136,7 @@ fn execute_summary_tool(
             );
             to_value(result)
         }
-        "forensics.get_analysis_report" => {
-            let request = source_request(arguments)?;
-            let source_id = DataSourceId(request.data_source_id);
-            let result = crate::analysis_service::generate_source_analysis_summary(
-                context.query.connection,
-                context.query.case_root,
-                &context.query.case_meta.id,
-                &source_id,
-                context.runtime,
-            );
-            to_value(result)
-        }
+        "forensics.get_analysis_report" => report::execute(context, arguments),
         _ => Err(McpHostServiceError::InvalidInput),
     }
 }

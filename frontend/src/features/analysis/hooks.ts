@@ -1,6 +1,5 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
-  generateAnalysisSummary,
   getBrowserHistorySummary,
   getCorrelationSnapshot,
   getEmailExtractionSummary,
@@ -395,12 +394,6 @@ export function useRunPluginExtraction() {
   return useMutation({
     mutationFn: (request: PluginExtractionRequest) => runPluginExtraction(request),
     onSuccess: (_data, variables) => refreshPluginQueries(qc, currentCase.data?.id ?? null, variables),
-  });
-}
-
-export function useGenerateAnalysisSummary(dataSourceId?: string) {
-  return useMutation({
-    mutationFn: () => generateAnalysisSummary(dataSourceId ?? ''),
   });
 }
 

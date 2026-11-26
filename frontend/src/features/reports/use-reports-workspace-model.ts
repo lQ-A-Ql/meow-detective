@@ -1,90 +1,66 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useState } from 'react';
 import { toast } from 'sonner';
-import { useCurrentCase, useDataSources } from '@/features/case/hooks';
-import {
-  deriveEvidenceHashStatus,
-  getEvidenceHashCaveatText,
-  getEvidenceHashStatusLabel,
-  useImportEventState,
-} from '@/features/jobs/import-event-state';
-import {
-  useExportReport,
-  useReportHistory,
-  useReportTemplates,
-  type ReportExportFormat,
-} from '@/features/reports/hooks';
-import type { ExportScope } from '@/types/models';
 import i18n from '@/i18n';
+import { useCurrentCase } from '@/features/case/hooks';
+import { useExportReport, useReportHistory, useSaveReport } from './hooks';
+import { DEFAULT_REPORT_SCOPE, REPORT_FORMATS } from './report-config';
+import type { ExportReportRequest, ReportFormat, ReportHistoryItem, ReportScope } from '@/types/models';
 
-const REPORT_EXPORT_FORMATS: readonly ReportExportFormat[] = ['html', 'csv', 'json'];
-
-function isReportExportFormat(value: string): value is ReportExportFormat {
-  return REPORT_EXPORT_FORMATS.includes(value as ReportExportFormat);
-}
-
-/** Owns report queries, export scope state, and export feedback. */
 export function useReportsWorkspaceModel() {
-  const templatesQuery = useReportTemplates();
   const currentCase = useCurrentCase();
-  const historyQuery = useReportHistory(currentCase.data?.id);
-  const dataSourcesQuery = useDataSources();
-  const importSignals = useImportEventState(currentCase.data?.id);
+  const caseId = currentCase.data?.id;
+  const historyQuery = useReportHistory(caseId);
   const exportMutation = useExportReport();
-  const [selectedFormat, setSelectedFormat] = useState<ReportExportFormat>('html');
-  const [exportScope, setExportScope] = useState<ExportScope>({
-    fileSystemMetadata: true,
-    registry: true,
-    fullTimeline: true,
-    rawFileExtraction: false,
-  });
-  const history = historyQuery.data;
-  const runningCount = useMemo(
-    () => (Array.isArray(history) ? history.filter((entry) => entry.status === 'running').length : 0),
-    [history],
+  const saveMutation = useSaveReport();
+  const [selectedFormat, setSelectedFormat] = useState<ReportFormat>('html');
+  const [exportScope, setExportScope] = useState<ReportScope>(DEFAULT_REPORT_SCOPE);
+  const history = historyQuery.data ?? [];
+  const runningCount = history.filter((item) => item.status === 'running').length;
+  const completedCount = history.filter((item) => item.status === 'completed').length;
+  const downloadReport = useCallback(
+    (report: ReportHistoryItem) => {
+      if (caseId) saveMutation.mutate({ caseId, report });
+    },
+    [caseId, saveMutation],
   );
-  const completedCount = useMemo(
-    () => (Array.isArray(history) ? history.filter((entry) => entry.status === 'completed').length : 0),
-    [history],
+  const generate = useCallback(
+    (request: ExportReportRequest) => {
+      exportMutation.mutate(request, {
+        onSuccess: downloadReport,
+        onError: (error: Error) => toast.error(i18n.t('reports.exportFailed'), { description: error.message }),
+      });
+    },
+    [downloadReport, exportMutation],
   );
-  const evidenceHashStatus = useMemo(
-    () => deriveEvidenceHashStatus(importSignals.partialResults, dataSourcesQuery.data ?? []),
-    [dataSourcesQuery.data, importSignals.partialResults],
+  const runExport = useCallback(() => {
+    if (caseId) generate({ caseId, format: selectedFormat, scope: exportScope });
+  }, [caseId, exportScope, generate, selectedFormat]);
+  const retryReport = useCallback(
+    (report: ReportHistoryItem) => {
+      if (caseId) generate({ ...report.request, caseId });
+    },
+    [caseId, generate],
   );
   const selectFormat = useCallback((value: string) => {
-    if (isReportExportFormat(value)) {
-      setSelectedFormat(value);
-    }
+    if (REPORT_FORMATS.includes(value as ReportFormat)) setSelectedFormat(value as ReportFormat);
   }, []);
-  const setScopeOption = useCallback((option: keyof ExportScope, checked: boolean) => {
+  const setScopeOption = useCallback((option: keyof ReportScope, checked: boolean) => {
     setExportScope((current) => ({ ...current, [option]: checked }));
   }, []);
-  const runExport = useCallback(() => {
-    exportMutation.mutate(
-      { format: selectedFormat, scope: exportScope },
-      {
-        onSuccess: (outputPath) => {
-          toast.success(i18n.t('reports.exportSuccess'), { description: outputPath });
-        },
-        onError: (error: Error) => {
-          toast.error(i18n.t('reports.exportFailed'), { description: error.message });
-        },
-      },
-    );
-  }, [exportMutation, exportScope, selectedFormat]);
-
   return {
     completedCount,
-    evidenceHashCaveat: evidenceHashStatus ? getEvidenceHashCaveatText(evidenceHashStatus) : undefined,
-    evidenceHashLabel: evidenceHashStatus ? getEvidenceHashStatusLabel(evidenceHashStatus) : undefined,
-    exportPending: exportMutation.isPending,
-    exportScope,
-    history,
-    reportTemplates: templatesQuery.data,
     runningCount,
-    runExport,
-    selectFormat,
+    history,
+    exportScope,
     selectedFormat,
+    selectFormat,
     setScopeOption,
+    runExport,
+    downloadReport,
+    retryReport,
+    historyError: historyQuery.error,
+    exportPending: exportMutation.isPending || !caseId,
+    savePending: saveMutation.isPending,
   };
 }
 

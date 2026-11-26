@@ -101,7 +101,6 @@ $policies = [ordered]@{
     "get_case_overview_snapshot",
     "get_correlation_snapshot"
   )
-  "analysis_commands/extraction/report.rs" = @("generate_analysis_summary")
   "infrastructure_commands.rs" = @("get_infrastructure_graph")
   "graph_commands.rs" = @(
     "get_graph_snapshot",
