@@ -1,0 +1,28 @@
+/dev/md/forensic-lvm-md-3540:
+           Version : 1.2
+     Creation Time : Fri Nov 27 02:12:27 2026
+        Raid Level : raid0
+        Array Size : 14336 (14.00 MiB 14.68 MB)
+      Raid Devices : 2
+     Total Devices : 2
+       Persistence : Superblock is persistent
+
+       Update Time : Fri Nov 27 02:12:27 2026
+             State : clean
+    Active Devices : 2
+   Working Devices : 2
+    Failed Devices : 0
+     Spare Devices : 0
+
+            Layout : original
+        Chunk Size : 4K
+
+Consistency Policy : none
+
+              Name : forensic-fixture:lvm-md-ext4
+              UUID : cf6b5f8b:59607559:14b93879:c91c5306
+            Events : 0
+
+    Number   Major   Minor   RaidDevice State
+       0     254        0        0      active sync   /dev/dm-0
+       1     254        1        1      active sync   /dev/dm-1

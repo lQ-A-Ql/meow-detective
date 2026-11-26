@@ -9,16 +9,25 @@ use persistence_source::repositories::file_repo::FileRepo;
 
 #[test]
 fn native_md_ext4_catalog_publishes_and_previews_through_file_identity() {
-    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../testdata/fixtures/public-small/mdraid");
+    exercise_native_catalog("mdraid/raid0-ext4", "member");
+}
+
+#[test]
+fn native_multi_pv_lvm_md_ext4_catalog_publishes_and_previews_through_file_identity() {
+    exercise_native_catalog("lvm-native/mdraid-ext4", "pv");
+}
+
+fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
+    let fixtures =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/fixtures/public-small");
     let workspace = tempfile::tempdir().unwrap();
     let mut paths = Vec::new();
     for index in 0..2 {
         let path = workspace.path().join(format!("member-{index}.raw"));
         let compressed = File::open(
             fixtures
-                .join("raid0-ext4")
-                .join(format!("member-{index}.raw.gz")),
+                .join(fixture)
+                .join(format!("{member_prefix}-{index}.raw.gz")),
         )
         .unwrap();
         std::io::copy(
@@ -36,8 +45,7 @@ fn native_md_ext4_catalog_publishes_and_previews_through_file_identity() {
             source_kind: &kind,
         })
         .collect::<Vec<_>>();
-    let plans =
-        cluster_service::discover_linux_evidence_set_mdraid(workspace.path(), &members).unwrap();
+    let plans = cluster_service::discover_linux_evidence_set_mdraid(&members).unwrap();
     let case = case_service::create_case(workspace.path(), "Native MD filesystem", None).unwrap();
     let connection = case.connection().unwrap();
     let source = cluster_service::materialize_mdraid_array(
@@ -74,7 +82,7 @@ fn native_md_ext4_catalog_publishes_and_previews_through_file_identity() {
         .find_by_partition_and_path(&source.id, 1, "evidence.bin")
         .unwrap()
         .unwrap();
-    let expected = std::fs::read(fixtures.join("oracle.bin")).unwrap();
+    let expected = std::fs::read(fixtures.join("mdraid/oracle.bin")).unwrap();
     let preview = file_service::FileHeaderReadCache::new(case.meta.id.0.clone())
         .read_file_header_by_id(&source_connection, &file.id, 1024)
         .unwrap();
@@ -133,8 +141,7 @@ fn native_md_ext4_catalog_publishes_and_previews_through_file_identity() {
         &source.id,
     )
     .is_err());
-    let updated =
-        cluster_service::discover_linux_evidence_set_mdraid(workspace.path(), &members).unwrap();
+    let updated = cluster_service::discover_linux_evidence_set_mdraid(&members).unwrap();
     let replacement = cluster_service::materialize_mdraid_array(
         &connection,
         &case.case_root,

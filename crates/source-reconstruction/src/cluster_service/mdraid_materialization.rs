@@ -161,7 +161,7 @@ pub fn materialize_linux_evidence_set_mdraid_with_cancel(
             source_kind: &member.source_kind,
         })
         .collect::<Vec<_>>();
-    discover_linux_evidence_set_mdraid(&plan.root_path, &members)?
+    discover_linux_evidence_set_mdraid(&members)?
         .iter()
         .map(|array| materialize_mdraid_array_with_cancel(conn, case_root, case_id, array, cancel))
         .collect()

@@ -31,6 +31,9 @@ pub enum LvmError {
     #[error("fatal metadata parse error at line {line}: {message}")]
     FatalMetadataParseError { line: usize, message: String },
 
+    #[error("conflicting committed metadata for volume group '{vg_uuid}' at sequence {seqno}")]
+    ConflictingMetadata { vg_uuid: String, seqno: u64 },
+
     /// Unsupported segment type (striped, raid, thin, etc.).
     #[error("unsupported segment type '{seg_type}' in logical volume '{lv_name}'")]
     UnsupportedSegment { lv_name: String, seg_type: String },

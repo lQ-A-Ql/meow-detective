@@ -139,7 +139,7 @@ fn discover_plan_arrays(
             source_kind: &member.source_kind,
         })
         .collect::<Vec<_>>();
-    discover_linux_evidence_set_mdraid(&plan.root_path, &members).expect("discover MD RAID arrays")
+    discover_linux_evidence_set_mdraid(&members).expect("discover MD RAID arrays")
 }
 
 fn build_synthetic_lvm_pv(

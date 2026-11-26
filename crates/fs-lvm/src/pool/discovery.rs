@@ -95,7 +95,7 @@ fn discover_physical_volumes(
 }
 
 fn select_volume_group(entries: &[DiscoveredPv]) -> Result<(VolumeGroup, Vec<String>)> {
-    let mut selected: Option<VolumeGroup> = None;
+    let mut metadata_candidates = Vec::new();
     let mut candidates: Vec<VolumeGroupIdentity> = Vec::new();
     let mut first_fatal_error = None;
     for entry in entries {
@@ -121,17 +121,12 @@ fn select_volume_group(entries: &[DiscoveredPv]) -> Result<(VolumeGroup, Vec<Str
             Err(error) => return Err(error),
         };
         remember_identity(&mut candidates, &candidate);
-        if selected
-            .as_ref()
-            .is_none_or(|current| candidate.seqno > current.seqno)
-        {
-            selected = Some(candidate);
-        }
+        metadata_candidates.push(candidate);
     }
-    match selected {
+    match metadata::select_committed_metadata(&metadata_candidates)? {
         Some(volume_group) => {
-            let warnings = multi_vg_warnings(&candidates, &volume_group);
-            Ok((volume_group, warnings))
+            let warnings = multi_vg_warnings(&candidates, volume_group);
+            Ok((volume_group.clone(), warnings))
         }
         None => match first_fatal_error {
             Some(error) => Err(error),

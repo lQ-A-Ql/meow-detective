@@ -311,11 +311,26 @@ fn validate_plan_shape(plan: &MdRaidArrayPlan) -> Result<(), MdRaidPlanError> {
     }
     let mut slots = std::collections::BTreeSet::new();
     for member in &plan.members {
+        let metadata = &member.superblock;
+        if metadata.array_uuid != plan.array_uuid
+            || metadata.level != plan.level
+            || metadata.layout != plan.layout
+            || metadata.chunk_sectors != plan.chunk_sectors
+            || metadata.raid_disks != plan.raid_disks
+        {
+            return Err(fs_lvm::mdraid::MdRaidError::MetadataConflict(
+                "MD RAID plan geometry differs from its member metadata".to_string(),
+            )
+            .into());
+        }
         let slot = member.superblock.slot_index().ok_or_else(|| {
             MdRaidPlanError::MdRaid(fs_lvm::mdraid::MdRaidError::MetadataConflict(
                 "member has no active MD RAID slot".into(),
             ))
         })?;
+        if slot >= plan.raid_disks {
+            return Err(fs_lvm::mdraid::MdRaidError::InvalidDeviceCount.into());
+        }
         if !slots.insert(slot) {
             return Err(MdRaidPlanError::MdRaid(
                 fs_lvm::mdraid::MdRaidError::MetadataConflict(format!(

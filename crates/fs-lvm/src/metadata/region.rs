@@ -36,19 +36,12 @@ pub fn parse_metadata_from_regions<R: Read + Seek + ?Sized>(
     mda_regions: &[DataRegion],
     pv_offset: u64,
 ) -> Result<VolumeGroup> {
-    let mut best_vg: Option<VolumeGroup> = None;
+    let mut candidates = Vec::new();
     let mut first_fatal_error: Option<LvmError> = None;
 
     for mda_region in mda_regions {
         match parse_metadata_region(reader, mda_region, pv_offset) {
-            Ok(Some(vg)) => {
-                if best_vg
-                    .as_ref()
-                    .is_none_or(|current| vg.seqno > current.seqno)
-                {
-                    best_vg = Some(vg);
-                }
-            }
+            Ok(Some(vg)) => candidates.push(vg),
             Ok(None) | Err(MetadataRegionError::Recoverable(_)) => continue,
             Err(MetadataRegionError::Fatal(error)) => {
                 if first_fatal_error.is_none() {
@@ -58,8 +51,8 @@ pub fn parse_metadata_from_regions<R: Read + Seek + ?Sized>(
         }
     }
 
-    if let Some(vg) = best_vg {
-        return Ok(vg);
+    if let Some(vg) = super::select_committed_metadata(&candidates)? {
+        return Ok(vg.clone());
     }
     if let Some(error) = first_fatal_error {
         return Err(error);

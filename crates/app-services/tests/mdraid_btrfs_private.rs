@@ -21,7 +21,7 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
             source_kind: &member.source_kind,
         })
         .collect::<Vec<_>>();
-    let array = discover_linux_evidence_set_mdraid(&plan.root_path, &members)
+    let array = discover_linux_evidence_set_mdraid(&members)
         .expect("discover MD RAID")
         .into_iter()
         .find(|array| array.name == "mac:0")

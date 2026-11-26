@@ -37,8 +37,11 @@ fn native_md_ext4_uses_shared_filesystem_discovery_and_bounded_reads() {
             source_kind: &kind,
         })
         .collect::<Vec<_>>();
-    let plans = discover_linux_evidence_set_mdraid(workspace.path(), &members).unwrap();
+    let plans = discover_linux_evidence_set_mdraid(&members).unwrap();
     assert_eq!(plans.len(), 1);
+    let mut changed_plan = plans[0].clone();
+    changed_plan.layout += 1;
+    assert!(open_mdraid_reader(&changed_plan).is_err());
     let descriptor = write_mdraid_descriptor(workspace.path(), &plans[0]).unwrap();
     let probe = probe_mdraid_filesystems(&descriptor).unwrap();
     assert_eq!(probe.candidates.len(), 1);
@@ -73,4 +76,61 @@ fn native_md_ext4_uses_shared_filesystem_discovery_and_bounded_reads() {
     changed.write_all(b"x").unwrap();
     changed.sync_all().unwrap();
     assert!(open_mdraid_reader(&plans[0]).is_err());
+}
+
+#[test]
+fn native_lvm_members_include_a_pv_without_metadata_and_preserve_file_bytes() {
+    let root =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/fixtures/public-small");
+    let fixture = root.join("lvm-native/mdraid-ext4");
+    let workspace = tempfile::tempdir().unwrap();
+    let mut paths = Vec::new();
+    for index in 0..2 {
+        let path = workspace.path().join(format!("pv-{index}.raw"));
+        std::io::copy(
+            &mut flate2::read::GzDecoder::new(
+                File::open(fixture.join(format!("pv-{index}.raw.gz"))).unwrap(),
+            ),
+            &mut File::create(&path).unwrap(),
+        )
+        .unwrap();
+        paths.push(path);
+    }
+    let mut metadata_free =
+        evidence_access::datasource_service::open_evidence_reader(&paths[1], &DataSourceKind::Raw)
+            .unwrap();
+    let label = fs_lvm::label::parse_pv_label(&mut metadata_free, 0).unwrap();
+    assert!(label.metadata_areas.is_empty());
+    let kind = DataSourceKind::Raw;
+    let members = paths
+        .iter()
+        .map(|path| MdRaidDiscoveryMember {
+            source_path: path,
+            source_kind: &kind,
+        })
+        .collect::<Vec<_>>();
+    let plans = discover_linux_evidence_set_mdraid(&members).unwrap();
+    assert_eq!(plans.len(), 1);
+    assert_eq!(plans[0].members.len(), 2);
+    assert!(plans[0].members.iter().all(|member| matches!(
+        &member.origin,
+        evidence_access::mdraid::MdRaidMemberOrigin::Lvm { identity, .. }
+            if identity.pv_sources.len() == 2
+                && identity.pv_sources[0].source_path != identity.pv_sources[1].source_path
+    )));
+    assert_eq!(
+        open_mdraid_reader(&plans[0]).unwrap().logical_size(),
+        14 * 1024 * 1024
+    );
+    let descriptor = write_mdraid_descriptor(workspace.path(), &plans[0]).unwrap();
+    let probe = probe_mdraid_filesystems(&descriptor).unwrap();
+    assert_eq!(probe.candidates.len(), 1);
+    let filesystem = open_mdraid_filesystem(&descriptor, &probe.candidates[0]).unwrap();
+    let expected = std::fs::read(root.join("mdraid/oracle.bin")).unwrap();
+    assert_eq!(
+        filesystem
+            .read_file_range("evidence.bin", 0, expected.len())
+            .unwrap(),
+        expected
+    );
 }

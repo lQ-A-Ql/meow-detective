@@ -10,24 +10,26 @@ pub struct MdRaidDiscoveryMember<'a> {
     pub source_kind: &'a DataSourceKind,
 }
 
+#[derive(Clone)]
 struct PvEvidence {
     source: LvmPhysicalVolumeSource,
     label: fs_lvm::LvmLabel,
-    volume_group: fs_lvm::VolumeGroup,
+    volume_group: Option<fs_lvm::VolumeGroup>,
 }
 
 pub fn discover_linux_evidence_set_mdraid(
-    _root_path: &std::path::Path,
     members: &[MdRaidDiscoveryMember<'_>],
 ) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
     let mut arrays = BTreeMap::new();
+    let mut pvs = Vec::new();
     for member in members {
         let mut reader =
             datasource_service::open_evidence_reader(member.source_path, member.source_kind)?;
         let probe = datasource_service::detect_image_filesystem(&mut reader)?;
         discover_direct_member(member.source_path, member.source_kind, &probe, &mut arrays)?;
+        collect_pvs(member, &probe, &mut reader, &mut pvs)?;
     }
-    merge_lvm_arrays(members, &mut arrays)?;
+    merge_lvm_arrays(pvs, &mut arrays)?;
     let mut plans = arrays.into_values().collect::<Vec<_>>();
     for array in &mut plans {
         array.source_snapshot = capture_array_sources(array)?;
@@ -101,18 +103,37 @@ pub(super) fn capture_array_sources(
 }
 
 fn merge_lvm_arrays(
-    members: &[MdRaidDiscoveryMember<'_>],
+    pvs: Vec<PvEvidence>,
     arrays: &mut BTreeMap<[u8; 16], MdRaidArrayPlan>,
 ) -> Result<(), MdRaidPlanError> {
-    let pvs = collect_pvs(members)?;
     let mut groups = BTreeMap::<String, Vec<PvEvidence>>::new();
+    let mut without_metadata = Vec::new();
     for pv in pvs {
+        let Some(volume_group) = &pv.volume_group else {
+            without_metadata.push(pv);
+            continue;
+        };
         groups
-            .entry(normalized_vg_key(&pv.volume_group))
+            .entry(normalized_vg_key(volume_group))
             .or_default()
             .push(pv);
     }
-    for evidence in groups.into_values() {
+    for mut evidence in groups.into_values() {
+        let volume_group = fs_lvm::metadata::select_committed_metadata(
+            evidence.iter().filter_map(|pv| pv.volume_group.as_ref()),
+        )?
+        .ok_or_else(|| std::io::Error::other("committed LVM metadata is missing"))?;
+        let members = without_metadata
+            .iter()
+            .filter(|pv| {
+                volume_group
+                    .physical_volumes
+                    .iter()
+                    .any(|member| same_uuid(&pv.label.pv_uuid, &member.uuid))
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        evidence.extend(members);
         let Some(pool) = open_complete_pool(&evidence)? else {
             continue;
         };
@@ -155,35 +176,31 @@ fn merge_lvm_arrays(
     Ok(())
 }
 
-fn collect_pvs(members: &[MdRaidDiscoveryMember<'_>]) -> Result<Vec<PvEvidence>, MdRaidPlanError> {
-    let mut pvs = Vec::new();
-    for member in members {
-        let mut reader =
-            datasource_service::open_evidence_reader(member.source_path, member.source_kind)?;
-        let probe = datasource_service::detect_image_filesystem(&mut reader)?;
-        for candidate in probe
-            .candidates
-            .iter()
-            .filter(|candidate| candidate.kind == datasource_service::ImageFilesystemKind::LvmPool)
-        {
-            let mut source_reader =
-                datasource_service::open_evidence_reader(member.source_path, member.source_kind)?;
-            if let Some(evidence) = inspect_pv(
-                &mut source_reader,
-                member.source_path,
-                member.source_kind,
-                candidate.offset,
-            )? {
-                if !pvs.iter().any(|known: &PvEvidence| {
-                    known.source.offset == evidence.source.offset
-                        && known.source.source_path == evidence.source.source_path
-                }) {
-                    pvs.push(evidence);
-                }
-            }
+fn collect_pvs(
+    member: &MdRaidDiscoveryMember<'_>,
+    probe: &datasource_service::ImageFilesystemProbe,
+    reader: &mut Box<dyn evidence_core::EvidenceReader>,
+    pvs: &mut Vec<PvEvidence>,
+) -> Result<(), MdRaidPlanError> {
+    for candidate in probe
+        .candidates
+        .iter()
+        .filter(|candidate| candidate.kind == datasource_service::ImageFilesystemKind::LvmPool)
+    {
+        let evidence = inspect_pv(
+            reader,
+            member.source_path,
+            member.source_kind,
+            candidate.offset,
+        )?;
+        if !pvs.iter().any(|known: &PvEvidence| {
+            known.source.offset == evidence.source.offset
+                && known.source.source_path == evidence.source.source_path
+        }) {
+            pvs.push(evidence);
         }
     }
-    Ok(pvs)
+    Ok(())
 }
 
 fn discover_direct_member(
@@ -250,14 +267,18 @@ fn inspect_pv(
     source_path: &std::path::Path,
     source_kind: &DataSourceKind,
     offset: u64,
-) -> Result<Option<PvEvidence>, MdRaidPlanError> {
+) -> Result<PvEvidence, MdRaidPlanError> {
     let label = fs_lvm::label::parse_pv_label(reader, offset)?;
-    if label.metadata_areas.is_empty() {
-        return Ok(None);
-    }
-    let volume_group =
-        fs_lvm::metadata::parse_metadata_from_regions(reader, &label.metadata_areas, offset)?;
-    Ok(Some(PvEvidence {
+    let volume_group = if label.metadata_areas.is_empty() {
+        None
+    } else {
+        Some(fs_lvm::metadata::parse_metadata_from_regions(
+            reader,
+            &label.metadata_areas,
+            offset,
+        )?)
+    };
+    Ok(PvEvidence {
         source: LvmPhysicalVolumeSource {
             source_path: source_path.to_string_lossy().into_owned(),
             source_kind: Some(source_kind.clone()),
@@ -267,14 +288,15 @@ fn inspect_pv(
         },
         label,
         volume_group,
-    }))
+    })
 }
 
 fn open_complete_pool(evidence: &[PvEvidence]) -> Result<Option<fs_lvm::LvmPool>, MdRaidPlanError> {
-    let Some(volume_group) = evidence
-        .iter()
-        .max_by_key(|item| item.volume_group.seqno)
-        .map(|item| &item.volume_group)
+    let Some(volume_group) = fs_lvm::metadata::select_committed_metadata(
+        evidence
+            .iter()
+            .filter_map(|item| item.volume_group.as_ref()),
+    )?
     else {
         return Ok(None);
     };

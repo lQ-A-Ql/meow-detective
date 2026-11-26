@@ -1,5 +1,5 @@
 /// Parsed volume group metadata.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VolumeGroup {
     pub name: String,
     pub id: String,
@@ -11,7 +11,7 @@ pub struct VolumeGroup {
     pub logical_volumes: Vec<LvMeta>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PvMeta {
     pub name: String,
     pub uuid: String,
@@ -20,7 +20,7 @@ pub struct PvMeta {
     pub pe_count: u64,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LvMeta {
     pub name: String,
     pub uuid: String,
@@ -102,7 +102,7 @@ impl LvMeta {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SegmentMeta {
     pub start_extent: u64,
     pub extent_count: u64,
@@ -205,7 +205,7 @@ impl RaidComponent {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SegmentType {
     Linear,
     Striped {

@@ -176,7 +176,7 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 |---|---|---|---|
 | MD 元数据与逻辑读取 | Experimental | `fs-lvm --test mdraid_native`；`public-small/mdraid` | mdadm 原生生成的 linear、RAID0/1/5/6/10；0.90、1.0、1.1、1.2 元数据；容量、已知内容、缺失成员和非对齐范围读取。校验成员数量、checksum、events、支持的 feature/layout 与副本一致性 |
 | MD -> EXT4 目录与预览 | Experimental | `evidence-access --test mdraid_access`；`app-services --test mdraid_materialization_native` | 原生 RAID0/EXT4 文件树、分区身份、范围读取、`FileEntryId` 预览、重复导入、来源变化后的独立身份、发布中断恢复与取消准入 |
-| 跨 PV 来源绑定 | Experimental | `evidence-access --lib native_cross_pv_binding`；`public-small/lvm-native` | 使用 MIT 许可的 lamlvm 原生镜像验证相同坐标上的不同 PV UUID 与重复 PV 来源拒绝 |
+| 跨 PV 来源绑定及 LVM -> MD -> EXT4 | Experimental | `evidence-access --lib native_cross_pv_binding --test mdraid_access`；`app-services --test mdraid_materialization_native`；`public-small/lvm-native` | lamlvm 原生镜像验证相同坐标上的不同 PV UUID 与重复 PV 来源拒绝；LVM2/mdadm/mke2fs 原生镜像验证无 metadata 副本的 PV、两 LV 组成的 RAID0、文件字节、目录与预览 |
 | 集合摘要与事件分页 | Experimental | `app-services --test cluster_import_queries --test linux_evidence_events` | 集合归属、完整成员包含关系、清单摘要验证、稳定时间顺序、超过两千条事件的分页、不可读取成员的明确错误 |
 
 MD 目录与预览共用文件系统探测及打开入口。EXT4 已有公开端到端证明；
@@ -185,6 +185,9 @@ MD 目录与预览共用文件系统探测及打开入口。EXT4 已有公开端
 以及原生 MD 元数据和成员关系；该元数据快照不充当原始证据内容摘要。
 派生源按输入身份保存独立 descriptor，通过处理阶段、generation 和发布凭据验证目录复用。
 旧 descriptor 格式需要重新导入。
+同一来源的分区探测结果供直接 MD 与 PV 发现共同使用。LVM committed metadata
+的版本选择由 `fs-lvm::metadata::select_committed_metadata` 统一处理，
+相同 VG UUID 和 seqno 的冲突内容返回类型化错误。
 
 ## 5. 容器邮件解析器 (V3 计划)
 

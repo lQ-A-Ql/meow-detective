@@ -2,10 +2,12 @@
 
 mod region;
 mod segments;
+mod selection;
 mod text;
 mod types;
 
 pub use region::{parse_metadata, parse_metadata_from_regions};
+pub use selection::select_committed_metadata;
 pub use types::{
     LvMeta, LvRole, PvMeta, RaidComponent, RaidComponentSource, SegmentArea, SegmentDependencies,
     SegmentMeta, SegmentType, VolumeGroup,

@@ -1,0 +1,13 @@
+  {
+      "report": [
+          {
+              "pv": [
+                  {"pv_uuid":"oGz4bx-1TEq-wDWE-DJdv-kFot-c8ta-0UIuLO", "pv_mda_count":"1", "pv_name":"/dev/loop0"},
+                  {"pv_uuid":"XMsDC3-XV7X-XOhV-2mxf-UDE4-GHou-H51DkE", "pv_mda_count":"0", "pv_name":"/dev/loop1"}
+              ]
+          }
+      ]
+      ,
+      "log": [
+      ]
+  }

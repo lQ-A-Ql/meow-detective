@@ -364,6 +364,7 @@ fn summary_reads_persisted_mdraid_without_materializing_a_source() {
 
     let mut outside = plan.clone();
     outside.array_uuid = [9; 16];
+    outside.members[0].superblock.array_uuid = outside.array_uuid;
     let cluster_service::MdRaidMemberOrigin::Lvm { identity, .. } = &mut outside.members[0].origin
     else {
         panic!("expected logical volume origin")
