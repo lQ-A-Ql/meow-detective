@@ -96,9 +96,16 @@ pub(super) fn enqueue(
         case_projections: Arc::clone(&runtime.case_projections),
     };
     events::status(runtime.events.as_deref(), &row)?;
+    let log_span = tracing::info_span!(
+        "post_import_task",
+        case_id = %row.case_id,
+        data_source_id = %row.data_source_id,
+        job_id = %task_id,
+    );
     match runtime
         .tasks
         .spawn_scoped_parallel(task_id, scope, priority, cancel, move || {
+            let _entered = log_span.enter();
             super::execution::run(work, task_cancel).map_err(|error| error.to_string())
         }) {
         Ok(()) => Ok(true),

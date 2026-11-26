@@ -17,7 +17,11 @@ pub(crate) fn initialize() -> (LogRuntime, LogGuard) {
         )
         .try_init()
         .expect("application tracing subscriber");
-    let panic_logs = runtime.clone();
+    install_panic_hook(runtime.clone());
+    (runtime, guard)
+}
+
+fn install_panic_hook(panic_logs: LogRuntime) {
     std::panic::set_hook(Box::new(move |panic| {
         let location = panic
             .location()
@@ -28,12 +32,15 @@ pub(crate) fn initialize() -> (LogRuntime, LogGuard) {
             .copied()
             .or_else(|| panic.payload().downcast_ref::<String>().map(String::as_str))
             .unwrap_or("application panic");
-        tracing::error!(location, panic_message = message, "Application thread panicked");
+        tracing::error!(
+            location,
+            panic_message = message,
+            "Application thread panicked"
+        );
         if let Err(error) = panic_logs.flush() {
             show_failure(&error.to_string());
         }
     }));
-    (runtime, guard)
 }
 
 pub(crate) fn show_failure(message: &str) {
@@ -55,3 +62,7 @@ pub(crate) fn show_failure(message: &str) {
     #[cfg(not(windows))]
     eprintln!("{message}");
 }
+
+#[cfg(test)]
+#[path = "../tests/unit/application_logging.rs"]
+mod tests;

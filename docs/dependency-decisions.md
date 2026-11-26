@@ -4,6 +4,24 @@ This document records non-trivial dependency license and sourcing decisions for 
 
 ## License decisions
 
+### flexi_logger — application runtime log files
+
+The application uses `flexi_logger 0.31.10` with default features disabled.
+Distribution selects MIT from its MIT OR Apache-2.0 license. The upstream
+notice is retained in `crates/infrastructure/THIRD-PARTY-NOTICES`.
+
+`FileLogWriter` supplies JSONL file output, numbered rotation and archive
+cleanup. A bounded application-owned channel moves file operations to a
+dedicated worker. The existing `tracing-subscriber` registry owns event
+capture and span context. The writer operates in Direct mode and performs
+explicit pre-write rotation so rotation errors reach application health.
+
+The dependency is pinned in workspace dependencies and Cargo.lock. Validation
+uses actual concurrent tracing events, filesystem rotation, Windows file
+sharing errors, explicit reopen, and bounded-memory pressure tests.
+The published crate manifest, MIT license and `FileLogWriter` implementation
+were reviewed on 2026-11-26.
+
 ### indicatif — task progress estimates
 
 The task-progress implementation uses `indicatif 0.18.6` under the MIT license.

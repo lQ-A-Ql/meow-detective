@@ -24,3 +24,4 @@ regex.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true
+sysinfo.workspace = true

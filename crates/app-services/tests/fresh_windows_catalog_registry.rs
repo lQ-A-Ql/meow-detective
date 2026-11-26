@@ -33,11 +33,6 @@ fn fresh_windows_directory_pages() {
 }
 
 fn run_fresh(build_timeline: bool) {
-    tracing_subscriber::fmt()
-        .with_env_filter("error,import_core=info")
-        .with_ansi(false)
-        .with_writer(std::io::stderr)
-        .init();
     let image = PathBuf::from(
         std::env::var_os("FORENSICS_FRESH_WINDOWS_E01").expect("set FORENSICS_FRESH_WINDOWS_E01"),
     );
@@ -46,6 +41,13 @@ fn run_fresh(build_timeline: bool) {
             .expect("set FORENSICS_FRESH_WINDOWS_OUTPUT"),
     );
     std::fs::create_dir_all(&output).unwrap();
+    let (logs, _log_guard) = infrastructure::logging::LogRuntime::start(
+        infrastructure::logging::LogConfig::new(output.join("logs")),
+    )
+    .unwrap();
+    use tracing_subscriber::prelude::*;
+    tracing_subscriber::registry().with(logs.layer()).init();
+    tracing::info!("Fresh Windows catalog and registry validation started");
     let input_before = input_metadata(&image);
     std::fs::write(
         output.join("input-before.json"),
@@ -160,6 +162,22 @@ fn run_fresh(build_timeline: bool) {
     )
     .unwrap();
     verify_pages(&case_root, &output.join("pages.json"));
+    logs.flush().unwrap();
+    let snapshot = app_services::application_log_service::ApplicationLogService::new(logs)
+        .read(transport::dto::ApplicationLogRequestDto {
+            direction: transport::dto::ApplicationLogDirectionDto::Latest,
+            cursors: Vec::new(),
+            filter: Default::default(),
+            limit_per_level: 100,
+        })
+        .unwrap();
+    assert!(snapshot.pages.iter().any(|page| page.emitted > 0));
+    assert!(snapshot.writer.failure.is_none());
+    std::fs::write(
+        output.join("application-logs.json"),
+        serde_json::to_vec_pretty(&snapshot).unwrap(),
+    )
+    .unwrap();
 }
 
 fn input_metadata(image: &Path) -> Vec<(PathBuf, u64, u128, bool)> {
