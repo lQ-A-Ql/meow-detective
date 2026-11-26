@@ -4,7 +4,7 @@ pub mod constants;
 pub mod file_magic;
 mod fs;
 pub mod hashing;
-mod logging;
+pub mod logging;
 pub mod paths;
 pub mod text;
 pub mod wechat_keys_env;

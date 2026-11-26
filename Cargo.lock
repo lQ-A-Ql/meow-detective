@@ -2365,6 +2365,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "flexi_logger"
+version = "0.31.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4945fa9cdfd7571192cf559c186d45ab36c8034482a2d217a19bdc566f190cc"
+dependencies = [
+ "chrono",
+ "log",
+ "thiserror 2.0.21",
+]
+
+[[package]]
 name = "float-cmp"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3608,11 +3619,22 @@ dependencies = [
 name = "infrastructure"
 version = "0.1.1"
 dependencies = [
+ "chrono",
+ "crossbeam-channel",
+ "flexi_logger",
  "hex",
+ "log",
  "md-5 0.10.6",
+ "regex",
+ "serde",
+ "serde_json",
  "sha1",
  "sha2 0.10.9",
  "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "tracing-subscriber",
+ "uuid",
 ]
 
 [[package]]

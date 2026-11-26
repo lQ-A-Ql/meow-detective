@@ -98,6 +98,8 @@ uuid = { version = "~1", features = ["v4"] }
 rayon = "~1.12"
 tracing = "~0.1"
 tracing-subscriber = { version = "~0.3", features = ["env-filter", "fmt", "json"] }
+flexi_logger = { version = "=0.31.10", default-features = false }
+log = "~0.4"
 tauri = { version = "~2.11.3", features = [] }
 tauri-build = { version = "~2", features = [] }
 embed-resource = "~3.0"
