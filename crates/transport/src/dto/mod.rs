@@ -138,6 +138,12 @@ pub use recovery::{
 };
 pub use registry::RegistryRunKeyDto;
 pub use registry_browser::*;
+pub mod report_document;
+pub mod report_export;
+pub use report_export::{ReportFormatDto, ReportStatusDto};
+pub use report_document::{
+    ReportDocumentDto, ReportEntityDto, ReportSectionDto, ReportSourceDto, ReportSourceSummaryDto,
+};
 pub use reports::{ReportHistoryItemDto, ReportTemplateDto};
 pub use rule_pack::{RulePackCoverageDto, RulePackSummaryDto, RulePackValidationResultDto};
 pub use search::{

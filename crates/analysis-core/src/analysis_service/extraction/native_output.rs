@@ -259,6 +259,7 @@ impl StreamingGeneration {
                 .map_err(clone_error)?;
         }
         crate::analysis_service::cancellation::ensure_not_cancelled(cancel)?;
+        crate::analysis_service::report_summary::rebuild(&self.store, &self.source_id, cancel)?;
         Ok(())
     }
 
@@ -362,6 +363,7 @@ pub(super) fn stage(
         )
         .map_err(clone_error)?;
     replace_records(&store, source_id, replacements, artifacts, events)?;
+    crate::analysis_service::report_summary::rebuild(&store, source_id, &AtomicBool::new(false))?;
     store
         .database()
         .persist(persistence_source::fjall::PersistMode::SyncAll)

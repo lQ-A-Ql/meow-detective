@@ -16,6 +16,7 @@ mod file_classification;
 mod file_classification_taxonomy;
 mod platforms;
 mod provenance;
+pub mod report_summary;
 mod summary;
 mod system_info;
 mod system_info_candidates;

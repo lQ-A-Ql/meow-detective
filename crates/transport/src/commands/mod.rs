@@ -35,6 +35,8 @@ pub use files::{
 pub use import::{ImportDataSourceRequest, ImportSourceKindDto};
 pub use platform::ImportTargetPlatformDto;
 pub use report::ExportScopeDto;
+mod report_export;
+pub use report_export::{ExportReportRequest, ReportScopeDto, SaveReportRequest};
 pub use settings::AppSettingsDto;
 pub use timeline::{
     GetTimelineEventByIdRequest, GetTimelineFacetsRequest, GetTimelineRequest,
