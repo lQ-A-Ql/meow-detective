@@ -365,3 +365,19 @@ fn case_root_from_connection_ignores_unrelated_database_names() {
     let memory = open_in_memory().unwrap();
     assert_eq!(case_root_from_connection(&memory).unwrap(), None);
 }
+
+#[test]
+fn case_read_only_connection_rejects_writes() {
+    let root = tempfile::tempdir().unwrap();
+    let path = root.path().join("app.db");
+    let writer = open_or_create(&path).unwrap();
+    crate::runner::run_all(&writer).unwrap();
+    let reader = open_existing_case_read_only(&path).unwrap();
+    assert_eq!(
+        reader
+            .query_row("PRAGMA query_only", [], |row| row.get::<_, i64>(0))
+            .unwrap(),
+        1
+    );
+    assert!(reader.execute("DELETE FROM reports", []).is_err());
+}

@@ -120,6 +120,10 @@ pub fn open_existing_case_graph_read_only(path: &Path) -> DbResult<Connection> {
     open_existing_source_read_only(path)
 }
 
+pub fn open_existing_case_read_only(path: &Path) -> DbResult<Connection> {
+    open_existing_source_read_only(path)
+}
+
 pub fn open_existing_source(path: &Path) -> DbResult<Connection> {
     // Existing source databases are opened as-is. Compatibility migrations
     // belong to explicit import/build creation paths, never to case reads.

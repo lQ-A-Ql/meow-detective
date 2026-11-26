@@ -175,7 +175,6 @@ $facades = @(
   'crates/app-services/src/governance/scoring.rs',
   'crates/import-core/src/import_analysis/mod.rs',
   'crates/app-services/src/notebook_service/mod.rs',
-  'crates/app-services/src/report/json.rs',
   'crates/app-services/src/report/mod.rs'
 )
 
@@ -250,13 +249,11 @@ $moduleManifest = @(
   @('crates/app-services/src/notebook_service/mod.rs', 'dto_conversion', 'crates/app-services/src/notebook_service/dto_conversion.rs'),
   @('crates/app-services/src/notebook_service/mod.rs', 'entry_operations', 'crates/app-services/src/notebook_service/entry_operations.rs'),
   @('crates/app-services/src/notebook_service/mod.rs', 'investigation_step_operations', 'crates/app-services/src/notebook_service/investigation_step_operations.rs'),
-  @('crates/app-services/src/report/mod.rs', 'catalog', 'crates/app-services/src/report/catalog.rs'),
-  @('crates/app-services/src/report/mod.rs', 'html_export', 'crates/app-services/src/report/html_export.rs'),
-  @('crates/app-services/src/report/json.rs', 'raw_bundle', 'crates/app-services/src/report/json/raw_bundle.rs'),
-  @('crates/app-services/src/report/mod.rs', 'output', 'crates/app-services/src/report/output.rs'),
-  @('crates/app-services/src/report/mod.rs', 'snapshot', 'crates/app-services/src/report/snapshot.rs'),
-  @('crates/app-services/src/report/mod.rs', 'types', 'crates/app-services/src/report/types.rs'),
-  @('crates/app-services/src/report/mod.rs', 'warnings', 'crates/app-services/src/report/warnings.rs')
+  @('crates/app-services/src/report/mod.rs', 'document', 'crates/app-services/src/report/document.rs'),
+  @('crates/app-services/src/report/mod.rs', 'error', 'crates/app-services/src/report/error.rs'),
+  @('crates/app-services/src/report/mod.rs', 'export', 'crates/app-services/src/report/export.rs'),
+  @('crates/app-services/src/report/mod.rs', 'history', 'crates/app-services/src/report/history.rs'),
+  @('crates/app-services/src/report/mod.rs', 'saving', 'crates/app-services/src/report/saving.rs')
 )
 
 $parentCache = @{}

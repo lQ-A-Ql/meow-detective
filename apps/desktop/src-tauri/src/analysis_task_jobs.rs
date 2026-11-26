@@ -15,6 +15,7 @@ use crate::{
 mod outcome;
 pub(crate) use outcome::AnalysisTaskOutcome;
 
+#[derive(Clone, Copy)]
 pub(crate) struct AnalysisTaskRequest<'a> {
     pub(crate) case_id: &'a str,
     pub(crate) case_root: &'a Path,
@@ -25,6 +26,33 @@ pub(crate) struct AnalysisTaskRequest<'a> {
 /// Register a long-running analysis writer with the case lifecycle manager and
 /// preserve its terminal state in the durable job table.
 pub(crate) fn run_with_outcome<T, F>(
+    state: &AppState,
+    app: &AppHandle,
+    request: AnalysisTaskRequest<'_>,
+    operation: F,
+) -> Result<T, CommandError>
+where
+    T: Send + 'static,
+    F: FnOnce(
+            &rusqlite::Connection,
+            Arc<AtomicBool>,
+        ) -> Result<AnalysisTaskOutcome<T>, CommandError>
+        + Send
+        + 'static,
+{
+    let result = run_task_with_outcome(state, app, request, operation)?;
+    schedule_projection_best_effort(request.case_id, || {
+        crate::case_projection_jobs::schedule(
+            &state.task_manager,
+            app,
+            request.case_id,
+            request.case_root,
+        )
+    });
+    Ok(result)
+}
+
+pub(crate) fn run_task_with_outcome<T, F>(
     state: &AppState,
     app: &AppHandle,
     request: AnalysisTaskRequest<'_>,
@@ -88,14 +116,6 @@ where
     let result = result_rx
         .recv()
         .map_err(|_| CommandError::internal("Analysis task ended without a result"))??;
-    schedule_projection_best_effort(request.case_id, || {
-        crate::case_projection_jobs::schedule(
-            &state.task_manager,
-            app,
-            request.case_id,
-            request.case_root,
-        )
-    });
     Ok(result)
 }
 

@@ -5,7 +5,7 @@ use transport::commands::{
     GetFileRowsRequest, GetFileTreeRequest, GetTimelineEventByIdRequest, GetTimelineFacetsRequest,
     GetTimelineRequest, ImportDataSourceRequest, ImportSourceKindDto, ImportTargetPlatformDto,
     ListDeletedRecoveriesRequest, ReadDeletedRecoveryRangeRequest,
-    RebuildTimelineProjectionRequest, ReportScopeDto, RunDeletedRecoveryRequest,
+    RebuildTimelineProjectionRequest, RunDeletedRecoveryRequest,
     SearchDeletedRecoveriesByHashRequest, SearchFilesRequest,
 };
 use transport::dto::{EvtxEventViewDto, LocalDiskDto};
@@ -302,11 +302,27 @@ fn app_settings_rejects_unknown_import_analysis_mode() {
 
 #[test]
 fn report_scope_defaults_include_structured_sections() {
-    let scope = ReportScopeDto::default();
+    let request: transport::commands::ExportReportRequest =
+        serde_json::from_str(r#"{"caseId":"case-1","format":"json"}"#).unwrap();
+    let scope = request.scope;
     assert!(scope.operating_system);
     assert!(scope.hardware);
     assert!(scope.browsers);
     assert!(scope.email);
+    assert_eq!(
+        serde_json::to_value(&scope)
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .len(),
+        4
+    );
+    assert!(
+        serde_json::from_str::<transport::commands::ExportReportRequest>(
+            r#"{"caseId":"case-1","format":"json","scope":{"fullTimeline":true}}"#
+        )
+        .is_err()
+    );
 }
 
 #[test]

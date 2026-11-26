@@ -44,7 +44,7 @@ pub async fn export_report(
         let case_id = active.case_id.clone();
         let case_root = active.case_root.clone();
         let source_id = request.data_source_id.clone();
-        analysis_task_jobs::run_with_outcome(
+        analysis_task_jobs::run_task_with_outcome(
             &state,
             &app,
             AnalysisTaskRequest {
