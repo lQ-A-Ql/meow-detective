@@ -21,6 +21,7 @@ struct Identity {
     generation: PathBuf,
     manifest: String,
     platform: String,
+    kind: String,
     files: Vec<(PathBuf, u64, SystemTime)>,
     epoch: u64,
 }
@@ -48,11 +49,8 @@ fn identity(
         .map_err(|error| MountServiceError::SourceNotReady(error.to_string()))?;
     let prepared = super::prepare_physical_mount_source(conn, source)?;
     let repo = DataSourceRepo::new(conn);
-    let files = super::preflight_identity::evidence_files(
-        &prepared.source_path,
-        &repo.source_kind(source)?,
-        &case.0,
-    )?;
+    let kind = repo.source_kind(source)?;
+    let files = super::preflight_identity::evidence_files(&prepared.source_path, &kind, &case.0)?;
     let generation = persistence_source::control::current_source_generation_root(root, source)?;
     let manifest = persistence_source::fjall::source_generation_manifest_digest(&generation)
         .map_err(|error| MountServiceError::Catalog(error.to_string()))?;
@@ -62,6 +60,7 @@ fn identity(
         root: root.canonicalize()?,
         generation,
         manifest,
+        kind: kind.to_string(),
         platform: repo
             .find_storage(source)?
             .expect("ready source metadata")

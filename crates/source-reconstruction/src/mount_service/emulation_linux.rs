@@ -275,13 +275,13 @@ fn open_lvm_lv_reader(
     context
         .lvm
         .borrow_mut()
-        .open_volume(&context.source_path, identity, &mut |path| {
-            evidence_access::file_service::open_host_evidence_reader(
-                &context.kind.to_string(),
-                path,
-                &context.case_id,
-            )
-            .map_err(std::io::Error::other)
+        .open_volume_with_source_reader(&context.source_path, identity, &mut |path, source| {
+            let kind = source
+                .map(|source| source.source_kind.clone())
+                .filter(|kind| !kind.is_empty())
+                .unwrap_or_else(|| context.kind.to_string());
+            evidence_access::file_service::open_host_evidence_reader(&kind, path, &context.case_id)
+                .map_err(std::io::Error::other)
         })
         .ok()
 }

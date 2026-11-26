@@ -35,11 +35,31 @@ impl LvmPoolRequestCache {
     where
         F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>> + ?Sized,
     {
+        self.open_volume_with_source_reader(source_path, identity, &mut |path, source| match source
+        {
+            Some(source) => open_lvm_pv_reader(path, source, open_reader),
+            None => open_reader(path),
+        })
+    }
+
+    pub fn open_volume_with_source_reader<F>(
+        &mut self,
+        source_path: &Path,
+        identity: &PreviewLvmIdentity,
+        open_reader: &mut F,
+    ) -> std::io::Result<Box<dyn EvidenceReader>>
+    where
+        F: FnMut(
+                &Path,
+                Option<&PreviewLvmPhysicalVolumeSource>,
+            ) -> std::io::Result<Box<dyn EvidenceReader>>
+            + ?Sized,
+    {
         let key = LvmPoolCacheKey::from_identity(identity);
         if !self.pools.contains_key(&key) {
             self.pools.insert(
                 key.clone(),
-                discover_lvm_pool(source_path, identity, open_reader)?,
+                discover_lvm_pool_with_source_reader(source_path, identity, open_reader)?,
             );
         }
         open_lvm_volume_from_pool(
@@ -153,6 +173,24 @@ fn discover_lvm_pool<F>(
 where
     F: FnMut(&Path) -> std::io::Result<Box<dyn EvidenceReader>> + ?Sized,
 {
+    discover_lvm_pool_with_source_reader(source_path, identity, &mut |path, source| match source {
+        Some(source) => open_lvm_pv_reader(path, source, open_reader),
+        None => open_reader(path),
+    })
+}
+
+fn discover_lvm_pool_with_source_reader<F>(
+    source_path: &Path,
+    identity: &PreviewLvmIdentity,
+    open_reader: &mut F,
+) -> std::io::Result<fs_lvm::LvmPool>
+where
+    F: FnMut(
+            &Path,
+            Option<&PreviewLvmPhysicalVolumeSource>,
+        ) -> std::io::Result<Box<dyn EvidenceReader>>
+        + ?Sized,
+{
     validate_identity(identity)?;
     let mut readers = Vec::with_capacity(identity.pv_offsets.len());
     for (index, pv_offset) in identity.pv_offsets.iter().enumerate() {
@@ -160,10 +198,7 @@ where
         let reader_path = source
             .map(|source| Path::new(&source.source_path))
             .unwrap_or(source_path);
-        let mut reader = match source {
-            Some(source) => open_lvm_pv_reader(reader_path, source, open_reader)?,
-            None => open_reader(reader_path)?,
-        };
+        let mut reader = open_reader(reader_path, source)?;
         if let Some(source) = source {
             validate_preview_lvm_pv_source(reader.as_mut(), *pv_offset, source)?;
         }
