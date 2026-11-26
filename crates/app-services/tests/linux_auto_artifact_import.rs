@@ -1,16 +1,19 @@
 //! Verifies that Linux artifact extraction is automatic after source import.
 
 use app_services::{
-    case_service,
+    active_case, bitlocker_runtime, capability_service, case_service,
     import_analysis::ImportAnalysisMode,
     import_pipeline::{execute_import_job, ImportJobOptions},
     import_precheck::prepare_import_source_config_from_path,
-    source_db,
+    post_import_service, source_db, task_runtime,
 };
 use persistence_source::repositories::artifact_repo::ArtifactRepo;
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
+
+#[path = "support/managed_capabilities.rs"]
+mod managed_capabilities;
 
 #[test]
 fn linux_logical_import_auto_extracts_identity_and_service_artifacts() {
@@ -66,7 +69,8 @@ fn linux_logical_import_auto_extracts_identity_and_service_artifacts() {
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
-            assert!(message.contains("Linux artifacts auto-analyzed"));
+            assert!(message.contains("Timeline:"));
+            managed_capabilities::run(&active, None, std::time::Duration::from_secs(30));
             let source_id = conn.query_row(
                 "SELECT id FROM data_sources WHERE case_id = ?1",
                 [&active.meta.id.0],

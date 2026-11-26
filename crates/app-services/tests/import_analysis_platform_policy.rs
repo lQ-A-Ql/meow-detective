@@ -9,6 +9,9 @@ use app_services::import_analysis::{
     run_import_analysis_staging, ImportAnalysisError, ImportAnalysisMode, ImportAnalysisOptions,
 };
 use app_services::import_pipeline::{execute_import_job, ImportJobOptions};
+use app_services::{
+    active_case, bitlocker_runtime, capability_service, post_import_service, task_runtime,
+};
 use app_services::{case_service, import_precheck, search_service, source_db};
 use domain::{DataSourceId, DataSourcePlatform};
 use fixture_builder::build_prefetch_v30;
@@ -16,6 +19,9 @@ use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_rep
 use persistence_sqlite::repositories::job_repo::JobRepo;
 use tempfile::TempDir;
 use transport::{ErrorCategory, ServiceErrorCategory};
+
+#[path = "support/managed_capabilities.rs"]
+mod managed_capabilities;
 
 #[derive(Debug, PartialEq, Eq)]
 struct PipelineOutcome {
@@ -143,6 +149,7 @@ fn run_logical_import(platform: DataSourcePlatform, case_name: &str) -> Pipeline
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
+            managed_capabilities::run(&active, None, std::time::Duration::from_secs(30));
 
             let data_source_id = conn.query_row(
                 "SELECT id FROM data_sources WHERE case_id = ?1 ORDER BY imported_at DESC LIMIT 1",

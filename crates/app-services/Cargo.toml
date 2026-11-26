@@ -61,6 +61,7 @@ libloading.workspace = true
 windows-sys.workspace = true
 
 [dev-dependencies]
+png.workspace = true
 sootmark-shell.workspace = true
 flate2.workspace = true
 crc32fast.workspace = true

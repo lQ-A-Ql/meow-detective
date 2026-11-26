@@ -1,9 +1,9 @@
 use app_services::{
-    case_service,
+    active_case, bitlocker_runtime, capability_service, case_service,
     import_analysis::ImportAnalysisMode,
     import_pipeline::{execute_import_job, ImportJobOptions},
     import_precheck::prepare_import_source_config_from_path,
-    source_db,
+    post_import_service, source_db, task_runtime,
 };
 use domain::{DataSourceId, DataSourcePlatform};
 use persistence_source::repositories::artifact_repo::ArtifactRepo;
@@ -11,6 +11,9 @@ use persistence_sqlite::repositories::{datasource_repo::DataSourceRepo, job_repo
 use std::fs;
 use std::path::Path;
 use std::sync::{atomic::AtomicBool, Arc};
+
+#[path = "support/managed_capabilities.rs"]
+mod managed_capabilities;
 
 #[test]
 fn windows_import_automatically_extracts_native_artifacts() {
@@ -72,7 +75,8 @@ fn windows_import_automatically_extracts_native_artifacts() {
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
-            assert!(message.contains("Windows artifacts auto-analyzed"));
+            assert!(message.contains("Timeline:"));
+            managed_capabilities::run(&active, None, std::time::Duration::from_secs(30));
             let sources = DataSourceRepo::new(conn).find_by_case(&active.meta.id)?;
             assert_eq!(sources.len(), 1);
             let source = source_db::open_ready_source_by_id(

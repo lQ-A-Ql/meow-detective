@@ -314,6 +314,7 @@ dependencies = [
  "persistence-source",
  "persistence-sqlite",
  "plugin-api",
+ "png 0.18.1",
  "rand 0.8.7",
  "rayon",
  "regex",

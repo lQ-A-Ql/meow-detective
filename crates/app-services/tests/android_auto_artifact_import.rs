@@ -1,13 +1,14 @@
 use app_services::{
+    active_case,
     analysis_service::{
         get_source_android_device_info, get_source_android_package_summary,
         AnalysisSourceReadRuntime,
     },
-    case_service,
+    bitlocker_runtime, capability_service, case_service,
     import_analysis::ImportAnalysisMode,
     import_pipeline::{execute_import_job, ImportJobOptions},
     import_precheck::{prepare_import_source_config_from_path, ImportSourceMode},
-    source_db,
+    post_import_service, source_db, task_runtime,
 };
 use domain::{DataSourceKind, DataSourcePlatform, FileEntryId};
 use persistence_source::repositories::file_repo::FileRepo;
@@ -45,6 +46,9 @@ const INPUTS: &[(&str, &str)] = &[
         "<package-restrictions><pkg name=\"org.example.app\" installed=\"true\" enabled=\"2\"/></package-restrictions>",
     ),
 ];
+
+#[path = "support/managed_capabilities.rs"]
+mod managed_capabilities;
 
 #[test]
 fn android_logical_import_automatically_populates_device_and_package_queries() {
@@ -94,10 +98,8 @@ fn android_logical_import_automatically_populates_device_and_package_queries() {
                 },
             )
             .map_err(|error| persistence_sqlite::DbError::System(error.message))?;
-            assert!(
-                message.contains("Android metadata auto-analyzed: facts=7 packages=2"),
-                "{message}"
-            );
+            assert!(message.contains("Timeline:"), "{message}");
+            managed_capabilities::run(&active, None, std::time::Duration::from_secs(30));
             let sources = DataSourceRepo::new(conn).find_by_case(&active.meta.id)?;
             assert_eq!(sources.len(), 1);
             let source_id = &sources[0].id;

@@ -210,6 +210,7 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
                 "Event": {
                     "System": {
                         "Provider": { "@Name": "EventLog" },
+                        "Channel": "System",
                         "EventID": 6005,
                         "EventRecordID": 10,
                         "TimeCreated": { "@SystemTime": "2026-02-01T00:00:00Z" }
@@ -220,6 +221,7 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
                 "Event": {
                     "System": {
                         "Provider": "EventLog",
+                        "Channel": "System",
                         "EventID": { "#text": "6008" },
                         "EventRecordID": "11",
                         "TimeCreated": "2026-02-01 01:30:00 +0000"
@@ -230,6 +232,7 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
                 "Event": {
                     "System": {
                         "Provider": { "Name": "User32" },
+                        "Channel": "System",
                         "EventID": "1074",
                         "EventRecordID": 12,
                         "TimeCreated": { "SystemTime": "2026-02-01T02:00:00Z" }
@@ -261,12 +264,13 @@ fn evtx_json_records_extract_boot_shutdown_candidates() {
 }
 
 #[test]
-fn evtx_json_records_fail_closed_for_unsupported_log_path() {
+fn evtx_json_records_use_provider_and_channel_at_arbitrary_log_paths() {
     let result = extract_boot_shutdown_events_from_json_records(
         &[json!({
             "Event": {
                 "System": {
                     "Provider": { "@Name": "EventLog" },
+                    "Channel": "System",
                     "EventID": 6005,
                     "TimeCreated": { "@SystemTime": "2026-02-01T00:00:00Z" }
                 }
@@ -275,22 +279,23 @@ fn evtx_json_records_fail_closed_for_unsupported_log_path() {
         "Windows/Temp/UnknownChannel.evtx",
     );
 
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("outside bounded EVTX parser scope"));
+    let extraction = result.unwrap();
+    assert_eq!(extraction.events.len(), 1);
+    assert_eq!(extraction.events[0].event_id, 6005);
+    assert_eq!(
+        extraction.events[0].source_path,
+        "Windows/Temp/UnknownChannel.evtx"
+    );
 }
 
 #[test]
-fn evtx_binary_parser_fail_closed_for_unsupported_log_path() {
+fn evtx_binary_parser_rejects_truncated_content_at_arbitrary_log_paths() {
     let result = extract_boot_shutdown_events(b"ElfFile\0", "Windows/Temp/UnknownChannel.evtx");
 
-    assert!(result.is_err());
-    assert!(result
-        .unwrap_err()
-        .to_string()
-        .contains("outside bounded EVTX parser scope"));
+    assert!(matches!(
+        result,
+        Err(artifacts_windows::evtx::EvtxBootError::ParserInit { .. })
+    ));
 }
 
 #[test]

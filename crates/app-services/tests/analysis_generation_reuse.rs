@@ -1,8 +1,8 @@
 use app_services::{
-    analysis_service, case_service,
+    active_case, analysis_service, bitlocker_runtime, capability_service, case_service,
     import_analysis::ImportAnalysisMode,
     import_pipeline::{execute_import_job_with_counts, ImportJobOptions},
-    import_precheck, source_db,
+    import_precheck, post_import_service, source_db, task_runtime,
 };
 use domain::{DataSourceId, DataSourcePlatform};
 use persistence_source::fjall::instrumentation;
@@ -11,6 +11,9 @@ use std::{
     path::Path,
     sync::{atomic::AtomicBool, Arc},
 };
+
+#[path = "support/managed_capabilities.rs"]
+mod managed_capabilities;
 
 #[test]
 fn unchanged_real_linux_analysis_preserves_generation_without_copy_or_writes() {
@@ -56,6 +59,7 @@ fn unchanged_real_linux_analysis_preserves_generation_without_copy_or_writes() {
                 "initial analysis must create reusable output"
             );
             JobRepo::new(connection).complete_committed(&job, &message)?;
+            managed_capabilities::run(&active, None, std::time::Duration::from_secs(30));
             let source_id = DataSourceRepo::new(connection)
                 .find_by_case(&active.meta.id)?
                 .remove(0)

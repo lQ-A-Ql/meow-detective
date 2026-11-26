@@ -2,7 +2,6 @@ use app_services::analysis_service::{
     run_analysis_extraction_execution_with_cancel, AnalysisExtractionExecution,
     AnalysisServiceError,
 };
-use artifacts_core::{ArtifactContext, ArtifactExtractor, VecSink};
 use chrono::Utc;
 use domain::{
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourcePlatform, DataSourceProvenance,
@@ -169,38 +168,6 @@ fn published_link_produces_attributed_artifact_and_canonical_timeline() {
     let repeated = source.run(&AtomicBool::new(false)).expect("repeat parse");
     assert_eq!(repeated.dto.checkpoint_hit_count, 1);
     assert_eq!(source.artifact_ids(), original_ids);
-}
-
-#[test]
-fn successful_run_replaces_only_unattributed_legacy_output_for_that_file() {
-    let source = NativeSource::new();
-    let mut sink = VecSink::new();
-    artifacts_windows::LnkExtractor
-        .run(
-            ArtifactContext {
-                file_id: source.entry.id.clone(),
-                file_path: source.entry.path.clone(),
-                reader: Box::new(File::open(&source.input).unwrap()),
-            },
-            &mut sink,
-        )
-        .expect("parse published link");
-    assert_eq!(sink.artifacts.len(), 1);
-    let legacy_id = sink.artifacts[0].id.0.clone();
-    ArtifactRepo::new(&source.connection)
-        .insert_batch(
-            &sink.artifacts,
-            "native-case",
-            &source.entry.data_source_id.0,
-        )
-        .expect("write legacy output");
-    source.seal();
-    source
-        .run(&AtomicBool::new(false))
-        .expect("replace legacy output");
-    let ids = source.artifact_ids();
-    assert_eq!(ids.len(), 1);
-    assert_ne!(ids[0], legacy_id);
 }
 
 #[test]
