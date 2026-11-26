@@ -39,8 +39,14 @@ pub(crate) fn producer_version(producer: &str) -> &'static str {
     }
 }
 
-pub(crate) const CHECKPOINT_VERSIONS: &[&str] =
-    &[super::ANALYSIS_EXTRACTOR_VERSION, EMAIL_EXTRACTOR_VERSION];
+pub(crate) fn checkpoint_versions() -> std::collections::BTreeSet<&'static str> {
+    WINDOWS_CAPABILITIES
+        .iter()
+        .chain(LINUX_CAPABILITIES)
+        .chain(ANDROID_CAPABILITIES)
+        .map(|capability| capability.extractor_version())
+        .collect()
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CandidateReadPolicy {

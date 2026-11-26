@@ -2,7 +2,7 @@ use super::artifact_query::count_analysis_artifacts;
 use super::{ExtractionOutcome, PluginExtractFailure};
 use crate::analysis_service::candidates::{EvidenceCandidate, LinuxCatalogMetadata};
 use crate::analysis_service::capability::{
-    find_capability, AnalysisCapability, CHECKPOINT_VERSIONS,
+    checkpoint_versions, find_capability, AnalysisCapability,
 };
 use crate::analysis_service::error::AnalysisServiceError;
 use persistence_source::repositories::{artifact_repo::ArtifactRepo, timeline_repo::TimelineRepo};
@@ -354,7 +354,7 @@ pub(super) fn existing_clean_scan_keys(
 ) -> Result<CleanScanKeys, AnalysisServiceError> {
     let mut valid = HashSet::new();
     let mut scans = Vec::new();
-    for version in CHECKPOINT_VERSIONS {
+    for version in checkpoint_versions() {
         scans.extend(AnalysisScanRepo::new(conn).list_clean_for_version(version)?);
     }
     for scan in scans {
@@ -380,7 +380,7 @@ pub(super) fn existing_diagnostic_scan_keys(
 ) -> Result<DiagnosticScanKeys, AnalysisServiceError> {
     let mut valid = HashMap::new();
     let mut scans = Vec::new();
-    for version in CHECKPOINT_VERSIONS {
+    for version in checkpoint_versions() {
         scans.extend(AnalysisScanRepo::new(conn).list_diagnostics_for_version(version)?);
     }
     for scan in scans {

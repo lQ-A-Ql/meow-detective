@@ -87,7 +87,7 @@ fn collect_linux_artifact_catalog_from_checkpoints(
     let repository = AnalysisScanRepo::new(conn);
     let mut candidates = HashMap::<String, LinuxArtifactCatalogCandidate>::new();
     let mut seen = HashSet::new();
-    for version in crate::analysis_service::capability::CHECKPOINT_VERSIONS {
+    for version in crate::analysis_service::capability::checkpoint_versions() {
         for scan in repository.list_clean_for_version(version)? {
             if scan.capability_key.starts_with("Linux")
                 && seen.insert(scan.source_object_id.clone())

@@ -8,7 +8,7 @@ use rusqlite::Connection;
 
 use super::output_digest::OutputDigestAccumulator;
 use crate::analysis_service::{
-    capability::{find_capability, producer_version, AnalysisCapability, CHECKPOINT_VERSIONS},
+    capability::{checkpoint_versions, find_capability, producer_version, AnalysisCapability},
     error::AnalysisServiceError,
 };
 
@@ -19,7 +19,7 @@ pub(super) fn existing_complete_scan_keys(
     conn: &Connection,
 ) -> Result<HashMap<CompleteScanKey, CompleteAnalysisCandidateScan>, AnalysisServiceError> {
     let mut scans = Vec::new();
-    for version in CHECKPOINT_VERSIONS {
+    for version in checkpoint_versions() {
         scans.extend(AnalysisScanRepo::new(conn).list_complete_for_version(version)?);
     }
     scans.retain(|scan| {

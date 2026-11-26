@@ -504,7 +504,7 @@ fn post_import_worker_staging_success_preserves_summary_and_counts() {
         .iter()
         .any(|(_, detail)| detail.contains("phase=search-index")
             && detail.contains("workerBudget=0")
-            && detail.contains("timeline=finalize")));
+            && detail.contains("timeline=queued")));
     assert!(events
         .iter()
         .all(|(_, detail)| !detail.contains("Analysis staging:")));

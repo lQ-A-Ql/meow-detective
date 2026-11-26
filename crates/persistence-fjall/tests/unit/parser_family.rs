@@ -187,7 +187,7 @@ fn cancelled_or_invalid_replacement_preserves_committed_records_and_indexes() {
 }
 
 #[test]
-fn concurrent_upsert_observes_replacement_before_planning_index_deletes() {
+fn concurrent_upsert_conflicts_with_replacement_and_preserves_current_indexes() {
     let (_root, store) = fixture();
     store
         .upsert(
@@ -201,22 +201,20 @@ fn concurrent_upsert_observes_replacement_before_planning_index_deletes() {
     let replacing = Arc::clone(&store);
     let replacement = std::thread::spawn(move || {
         let mut stopped = false;
-        replacing
-            .replace_family_with_control(
-                "source",
-                "android",
-                &[record("source", "android", "shared", "replacement")],
-                PersistMode::SyncAll,
-                &AtomicBool::new(false),
-                |_| {
-                    if !stopped {
-                        stopped = true;
-                        inside_tx.send(()).unwrap();
-                        release.recv().unwrap();
-                    }
-                },
-            )
-            .unwrap();
+        replacing.replace_family_with_control(
+            "source",
+            "android",
+            &[record("source", "android", "shared", "replacement")],
+            PersistMode::SyncAll,
+            &AtomicBool::new(false),
+            |_| {
+                if !stopped {
+                    stopped = true;
+                    inside_tx.send(()).unwrap();
+                    release.recv().unwrap();
+                }
+            },
+        )
     });
     started.recv_timeout(Duration::from_secs(5)).unwrap();
     let old = family(&store, "source", "android");
@@ -235,9 +233,12 @@ fn concurrent_upsert_observes_replacement_before_planning_index_deletes() {
         done_tx.send(()).unwrap();
     });
     entered.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert!(done.recv_timeout(Duration::from_millis(50)).is_err());
+    done.recv_timeout(Duration::from_secs(5)).unwrap();
     release_tx.send(()).unwrap();
-    replacement.join().unwrap();
+    assert!(matches!(
+        replacement.join().unwrap(),
+        Err(crate::FjallStorageError::WriteConflict)
+    ));
     update.join().unwrap();
     assert_eq!(family(&store, "source", "android")[0].kind, "after");
     for kind in ["before", "replacement"] {
