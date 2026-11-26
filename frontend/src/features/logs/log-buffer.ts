@@ -18,6 +18,13 @@ export function emptyLogBuffer(): LogBuffer {
 
 export function mergeLogSnapshot(current: LogBuffer, snapshot: ApplicationLogSnapshot, history = false): LogBuffer {
   const base = current.sessionId === snapshot.sessionId ? current : emptyLogBuffer();
+  const cursors = {
+    forward: history && base.forward.length ? base.forward : snapshot.pages.map((page) => page.forwardCursor),
+    backward: history || !base.backward.length ? snapshot.pages.map((page) => page.backwardCursor) : base.backward,
+  };
+  if (snapshot.pages.every((page) => page.records.length === 0)) {
+    return { ...base, ...cursors, sessionId: snapshot.sessionId, latest: snapshot };
+  }
   const rows = { ...base.rows };
   for (const page of snapshot.pages) {
     const unique = new Map<number, ApplicationLogRecord>();
@@ -41,7 +48,6 @@ export function mergeLogSnapshot(current: LogBuffer, snapshot: ApplicationLogSna
     sessionId: snapshot.sessionId,
     rows,
     latest: snapshot,
-    forward: history && base.forward.length ? base.forward : snapshot.pages.map((page) => page.forwardCursor),
-    backward: history || !base.backward.length ? snapshot.pages.map((page) => page.backwardCursor) : base.backward,
+    ...cursors,
   };
 }
