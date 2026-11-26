@@ -68,6 +68,13 @@ pub(super) fn category(
     family: &str,
     attrs: &Value,
 ) -> Option<(usize, String, &'static [&'static str])> {
+    if family == "LinuxSystemConfig"
+        && attrs
+            .get("overlayContext")
+            .is_some_and(|value| !value.is_null())
+    {
+        return None;
+    }
     Some(match family {
         "RegistryValue" if SYSTEM_FIELDS.contains(&text(attrs, "field")) => {
             (0, text(attrs, "hivePath").to_owned(), &[])
@@ -110,8 +117,7 @@ pub(super) fn category(
         "EmailMessage" => (3, email_container(attrs), &["mailClient", "containerPath"]),
         "LinuxSystemConfig"
             if text(attrs, "configKind") == "textConfig"
-                && text(attrs, "sourcePath")
-                    .replace('\\', "/")
+                && infrastructure::paths::evidence_relative_path(text(attrs, "sourcePath"))
                     .ends_with("/etc/hostname") =>
         {
             (
@@ -120,7 +126,7 @@ pub(super) fn category(
                 &["line", "sourcePath"],
             )
         }
-        "LinuxSystemConfig" if matches!(text(attrs, "configKind"), "osRelease" | "hostname") => (
+        "LinuxSystemConfig" if text(attrs, "configKind") == "osRelease" => (
             0,
             format!("linux:{}", text(attrs, "sourcePath")),
             &[
@@ -173,7 +179,8 @@ pub(super) fn selected(attrs: &Value, names: &[&str]) -> (BTreeMap<String, Strin
                 Value::Null => continue,
             };
             partial |= value.chars().count() > 1024;
-            fields.insert((*name).to_owned(), value.chars().take(1024).collect());
+            let field = if *name == "line" { "hostname" } else { *name };
+            fields.insert(field.to_string(), value.chars().take(1024).collect());
         }
     }
     (fields, partial)

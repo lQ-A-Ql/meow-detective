@@ -71,3 +71,21 @@ fn cancelled_projection_does_not_publish_summary() {
         .unwrap()
         .is_none());
 }
+
+#[test]
+fn linux_hostname_summary_maps_existing_text_config_fields() {
+    let mut summary = super::aggregation::Summary::default();
+    summary.push("LinuxSystemConfig", &serde_json::json!({"attrs": {"configKind": "textConfig", "sourcePath": "etc/hostname", "line": "linux-host"}})).unwrap();
+    let summary = summary.finish();
+    assert_eq!(summary.operating_system.record_count, 1);
+    assert_eq!(
+        summary.operating_system.entities[0].fields["hostname"],
+        "linux-host"
+    );
+    assert!(!summary.operating_system.entities[0]
+        .fields
+        .contains_key("line"));
+    let mut overlay = super::aggregation::Summary::default();
+    overlay.push("LinuxSystemConfig", &serde_json::json!({"attrs": {"configKind": "textConfig", "sourcePath": "etc/hostname", "line": "container-host", "overlayContext": {"containerId": "container-1"}}})).unwrap();
+    assert_eq!(overlay.finish().operating_system.record_count, 0);
+}
