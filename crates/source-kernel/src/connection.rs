@@ -27,6 +27,12 @@ pub fn open_existing_case_db(path: &Path) -> Result<Connection, persistence_sqli
     persistence_sqlite::connection::open_existing(path)
 }
 
+pub fn open_existing_case_read_only(
+    path: &Path,
+) -> Result<Connection, persistence_sqlite::DbError> {
+    persistence_sqlite::connection::open_existing_source_read_only(path)
+}
+
 struct DbErrorCommandAdapter(persistence_sqlite::DbError);
 
 impl std::fmt::Display for DbErrorCommandAdapter {

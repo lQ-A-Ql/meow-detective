@@ -12,10 +12,6 @@ use super::{prepare_physical_mount_source, MountServiceError, PreparedPhysicalIm
 use evidence_access::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use source_kernel::source_db::{self, ReadySourceError};
 
-/// Upper bound for the partition scan; real images have a handful of
-/// partitions and indices may be sparse when system partitions are skipped.
-const MAX_PREFLIGHT_PARTITIONS: usize = 64;
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreparedEmulationSource {
     pub source_path: PathBuf,
@@ -75,6 +71,15 @@ pub fn emulation_preflight(
     case_id: &CaseId,
     data_source_id: &DataSourceId,
 ) -> Result<EmulationPreflightDto, MountServiceError> {
+    super::preflight_cache::read(case_conn, case_root, case_id, data_source_id)
+}
+
+pub(super) fn inspect_preflight(
+    case_conn: &Connection,
+    case_root: &std::path::Path,
+    case_id: &CaseId,
+    data_source_id: &DataSourceId,
+) -> Result<super::preflight_cache::Facts, MountServiceError> {
     prepare_physical_mount_source(case_conn, data_source_id)?;
     let source =
         source_db::open_ready_source_read_only_by_id(case_conn, case_root, case_id, data_source_id)
@@ -84,22 +89,40 @@ pub fn emulation_preflight(
         .map(|storage| storage.platform)
         .unwrap_or_default();
     let repo = FileRepo::new(&source.connection);
+    let _store = persistence_source::detail::require_source_store(&source.connection)?;
     let direct_volume = super::emulation_layout::direct_volume(case_conn, case_id, data_source_id)?;
-    let mut preflight = match platform.as_str() {
-        "linux" => linux_preflight(case_conn, &source, &repo, data_source_id),
-        "windows" => windows_preflight(case_conn, case_id, &source, &repo, data_source_id),
-        _ => {
-            let mut dto = windows_preflight(case_conn, case_id, &source, &repo, data_source_id)?;
-            if dto.installs.is_empty() {
-                dto = linux_preflight(case_conn, &source, &repo, data_source_id)?;
+    let mut preflight =
+        match platform.as_str() {
+            "linux" => linux_preflight(case_conn, case_id, &source, &repo, data_source_id),
+            "windows" => windows_preflight(case_conn, case_id, &source, &repo, data_source_id).map(
+                |preflight| super::preflight_cache::Facts {
+                    preflight,
+                    guest: None,
+                },
+            ),
+            _ => {
+                let dto = windows_preflight(case_conn, case_id, &source, &repo, data_source_id)?;
+                if dto.installs.is_empty() {
+                    return linux_preflight(case_conn, case_id, &source, &repo, data_source_id)
+                        .map(|mut facts| {
+                            if direct_volume.is_some() {
+                                facts.preflight.recommended_boot_route =
+                                    EmulationBootRouteDto::RecoveryMedia;
+                            }
+                            facts.preflight.direct_volume = direct_volume;
+                            facts
+                        });
+                }
+                Ok(super::preflight_cache::Facts {
+                    preflight: dto,
+                    guest: None,
+                })
             }
-            Ok(dto)
-        }
-    }?;
+        }?;
     if direct_volume.is_some() {
-        preflight.recommended_boot_route = EmulationBootRouteDto::RecoveryMedia;
+        preflight.preflight.recommended_boot_route = EmulationBootRouteDto::RecoveryMedia;
     }
-    preflight.direct_volume = direct_volume;
+    preflight.preflight.direct_volume = direct_volume;
     Ok(preflight)
 }
 
@@ -111,15 +134,10 @@ fn windows_preflight(
     data_source_id: &DataSourceId,
 ) -> Result<EmulationPreflightDto, MountServiceError> {
     let mut installs = Vec::new();
-    for partition_index in 0..MAX_PREFLIGHT_PARTITIONS {
-        // Partition indices are not guaranteed dense: an import may skip
-        // system partitions, so a missing root must not end the scan.
-        if repo
-            .find_root_for_partition(data_source_id, partition_index)?
-            .is_none()
-        {
-            continue;
-        }
+    for partition in
+        PartitionRepo::new(&source.connection).find_by_data_source(&data_source_id.0)?
+    {
+        let partition_index = partition.partition_index as usize;
         if !path_present(
             repo,
             data_source_id,
@@ -163,15 +181,6 @@ fn windows_preflight(
             boot_risk_notes: Vec::new(),
         });
     }
-    let partition_count =
-        PartitionRepo::new(&source.connection).count_by_data_source(&data_source_id.0)?;
-    if partition_count as usize > MAX_PREFLIGHT_PARTITIONS {
-        tracing::warn!(
-            partition_count,
-            max = MAX_PREFLIGHT_PARTITIONS,
-            "emulation preflight partition scan truncated"
-        );
-    }
     enrich_installs_from_fs(case_conn, case_id, data_source_id, source, &mut installs);
     let recommended_boot_route = if installs.iter().any(|install| install.osdata_present) {
         EmulationBootRouteDto::RecoveryMedia
@@ -193,55 +202,48 @@ fn windows_preflight(
 /// maintenance CD is a Windows PE concept.
 fn linux_preflight(
     case_conn: &Connection,
+    case_id: &CaseId,
     source: &source_kernel::source_db::ReadySourceConnection,
     repo: &FileRepo<'_>,
     data_source_id: &DataSourceId,
-) -> Result<EmulationPreflightDto, MountServiceError> {
-    let mut installs = super::emulation_linux::linux_installs_from_catalog(repo, data_source_id)?;
+) -> Result<super::preflight_cache::Facts, MountServiceError> {
     let partitions = PartitionRepo::new(&source.connection);
-    let partition_count = partitions.count_by_data_source(&data_source_id.0)?;
-    if partition_count as usize > super::emulation_linux::MAX_LINUX_PRECHECK_PARTITIONS {
-        tracing::warn!(
-            partition_count,
-            max = super::emulation_linux::MAX_LINUX_PRECHECK_PARTITIONS,
-            "linux preflight partition scan truncated"
-        );
-    }
+    let records = partitions.find_by_data_source(&data_source_id.0)?;
+    let mut installs =
+        super::emulation_linux::linux_installs_from_catalog(repo, data_source_id, &records)?;
     let ds_repo = DataSourceRepo::new(case_conn);
     let path = ds_repo.source_path(data_source_id)?;
     let kind = ds_repo.source_kind(data_source_id)?;
+    let context = EvidenceContext::new(&case_id.0, std::path::Path::new(&path), &kind);
     super::emulation_linux::enrich_linux_installs_from_fs(
-        std::path::Path::new(&path),
-        &kind,
+        &context,
         &partitions,
         data_source_id,
         &mut installs,
     );
-    super::emulation_linux_boot::annotate_boot_path_risk(
-        std::path::Path::new(&path),
-        &kind,
-        &mut installs,
-    );
+    super::emulation_linux_boot::annotate_boot_path_risk(&context, &mut installs);
     super::emulation_linux_boot::annotate_xfs_log_risk(
-        std::path::Path::new(&path),
-        &kind,
+        &context,
         &partitions,
         data_source_id,
         &mut installs,
     )?;
     super::emulation_linux_boot::annotate_ext4_journal_risk(
-        std::path::Path::new(&path),
-        &kind,
+        &context,
         &partitions,
         data_source_id,
         &mut installs,
     )?;
-    Ok(EmulationPreflightDto {
-        data_source_id: data_source_id.0.clone(),
-        direct_volume: None,
-        installs,
-        recommended_boot_route: EmulationBootRouteDto::DirectSystem,
-        maintenance_tool_available: false,
+    let guest = super::emulation_linux::inspect_guest_profile(&context, &records)?;
+    Ok(super::preflight_cache::Facts {
+        guest: Some(guest),
+        preflight: EmulationPreflightDto {
+            data_source_id: data_source_id.0.clone(),
+            direct_volume: None,
+            installs,
+            recommended_boot_route: EmulationBootRouteDto::DirectSystem,
+            maintenance_tool_available: false,
+        },
     })
 }
 
@@ -283,7 +285,8 @@ fn enrich_installs_from_fs(
             return;
         }
     };
-    let context = repo_context(&source_path, &source_kind);
+    let context =
+        EvidenceContext::new(&case_id.0, std::path::Path::new(&source_path), &source_kind);
     let partitions = PartitionRepo::new(&source.connection);
     for install in installs.iter_mut() {
         let Some(probe) = probe_install_from_fs(
@@ -311,12 +314,35 @@ fn enrich_installs_from_fs(
 pub(crate) struct EvidenceContext {
     pub(crate) source_path: std::path::PathBuf,
     pub(crate) kind: domain::DataSourceKind,
+    pub(crate) case_id: String,
+    pub(crate) lvm: std::cell::RefCell<evidence_access::file_service::LvmPoolRequestCache>,
+    pub(crate) filesystems:
+        std::cell::RefCell<lru::LruCache<u32, std::rc::Rc<dyn FileSystemReader>>>,
 }
 
-fn repo_context(source_path: &str, source_kind: &domain::DataSourceKind) -> EvidenceContext {
-    EvidenceContext {
-        source_path: PathBuf::from(source_path),
-        kind: source_kind.clone(),
+impl EvidenceContext {
+    pub(crate) fn new(
+        case_id: &str,
+        path: &std::path::Path,
+        kind: &domain::DataSourceKind,
+    ) -> Self {
+        Self {
+            source_path: path.to_path_buf(),
+            kind: kind.clone(),
+            case_id: case_id.into(),
+            lvm: Default::default(),
+            filesystems: std::cell::RefCell::new(lru::LruCache::new(
+                std::num::NonZeroUsize::new(2).unwrap(),
+            )),
+        }
+    }
+    pub(crate) fn reader(&self) -> std::io::Result<Box<dyn evidence_core::EvidenceReader>> {
+        evidence_access::file_service::open_host_evidence_reader(
+            &self.kind.to_string(),
+            &self.source_path,
+            &self.case_id,
+        )
+        .map_err(std::io::Error::other)
     }
 }
 

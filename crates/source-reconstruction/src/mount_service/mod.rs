@@ -15,6 +15,8 @@ mod filesystem_factory;
 mod handle;
 mod open;
 mod physical;
+mod preflight_cache;
+mod preflight_identity;
 mod source_validation;
 
 pub use audit::{record_image_unmount_audit, record_logical_mount_audit};
@@ -28,3 +30,4 @@ pub use physical::{
     prepare_physical_mount_source, record_physical_mount_audit, PreparedPhysicalImageKind,
     PreparedPhysicalMountSource,
 };
+pub use preflight_cache::clear_emulation_preflight_cache;

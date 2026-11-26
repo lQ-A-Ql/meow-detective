@@ -3,6 +3,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum MountServiceError {
+    #[error("emulation preflight failed: {0}")]
+    Preflight(std::sync::Arc<MountServiceError>),
     #[error("OS identity could not be read: {0}")]
     OsRelease(#[from] artifacts_linux::LinuxArtifactError),
     #[error("emulation parent view failed: {0}")]
@@ -32,6 +34,7 @@ pub enum MountServiceError {
 impl transport::ServiceErrorCategory for MountServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::Preflight(error) => error.category(),
             Self::OsRelease(artifacts_linux::LinuxArtifactError::Io(_)) => {
                 transport::ErrorCategory::Io
             }

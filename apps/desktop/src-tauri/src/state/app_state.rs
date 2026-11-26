@@ -115,6 +115,7 @@ impl AppState {
     }
 
     pub fn retire_preview_case(&self, case_id: &str, timeout: Duration) -> Result<bool, String> {
+        app_services::mount_service::clear_emulation_preflight_cache();
         self.registry_browser
             .invalidate_case(case_id)
             .map_err(|error| error.to_string())?;

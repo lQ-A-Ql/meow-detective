@@ -5,7 +5,6 @@
 use std::io::Read;
 use std::path::{Path, PathBuf};
 
-use domain::{CaseId, DataSourceId};
 use evidence_emulation::{
     build_iso, CowDisk, EmulationError, IsoFile, ParentIdentity, VmOptions, VmdkAdapter,
     VmdkDescriptor, VmwareFirmware, VmxConfig,
@@ -48,10 +47,7 @@ pub(super) struct MaintenancePayload {
 }
 
 pub(super) fn build_maintenance_payload(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    data_source_id: &DataSourceId,
+    preflight: &transport::dto::EmulationPreflightDto,
     include_without_tool: bool,
 ) -> Result<Option<MaintenancePayload>, EmulationRegistryError> {
     let tool = resolve_maintenance_tool()
@@ -60,13 +56,6 @@ pub(super) fn build_maintenance_payload(
     if tool.is_none() && !include_without_tool {
         return Ok(None);
     }
-    let preflight = app_services::mount_service::emulation_preflight(
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
-    )
-    .map_err(EmulationRegistryError::Source)?;
     let targets_json = serde_json::to_vec_pretty(&preflight)
         .map_err(|error| EmulationRegistryError::Workspace(error.to_string()))?;
     Ok(Some(MaintenancePayload {

@@ -180,6 +180,7 @@ sysinfo = { version = "~0.40.4", default-features = false, features = ["system"]
 hex = "0.4"
 once_cell = "1"
 lru = "0.19"
+moka = { version = "=0.12.16", default-features = false, features = ["sync"] }
 segment-tree = "2.0"
 memchr = "2"
 memcomparable = "=0.2.0"

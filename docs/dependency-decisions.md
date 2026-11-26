@@ -4,6 +4,23 @@ This document records non-trivial dependency license and sourcing decisions for 
 
 ## License decisions
 
+### moka — emulation preflight result reuse
+
+`source-reconstruction` uses `moka 0.12.16` with the `sync` feature and
+default features disabled. Distribution selects MIT. Its notice is retained
+in `crates/source-reconstruction/THIRD-PARTY-NOTICES`.
+
+The synchronous cache coalesces concurrent fallible initialization through
+`try_get_with`. The key binds the case, source, published generation manifest,
+platform, evidence segment metadata and runtime epoch. A cache of 32 results
+retains immutable preflight and guest-profile facts. Source identity is
+checked before and after retrieval. Case retirement advances the epoch and
+invalidates entries. Existing `lru` bounds request-local filesystem views.
+
+The published API and MIT license were reviewed on 2026-11-26. Validation
+uses actual imported images, concurrent production service calls and source
+change rejection.
+
 ### flexi_logger — application runtime log files
 
 The application uses `flexi_logger 0.31.10` with default features disabled.

@@ -207,7 +207,8 @@ fn assess_disk(image: &[u8]) -> BootPathAssessment {
     let temp = tempfile::TempDir::new().unwrap();
     let path = temp.path().join("source.raw");
     std::fs::write(&path, image).unwrap();
-    gpt_disk_boot_path_assessment(&path, &domain::DataSourceKind::Raw)
+    let context = EvidenceContext::new("boot-test", &path, &domain::DataSourceKind::Raw);
+    assess_gpt_disk_boot_path(&context).unwrap_or(BootPathAssessment::Undetermined)
 }
 
 #[test]

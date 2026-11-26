@@ -21,15 +21,12 @@ pub(super) fn build_maintenance_for_guest(
     requested: bool,
     linux: bool,
     derived_ntfs: bool,
-    conn: &rusqlite::Connection,
-    root: &Path,
-    case_id: &CaseId,
-    source_id: &DataSourceId,
+    preflight: &transport::dto::EmulationPreflightDto,
 ) -> Result<Option<super::materials::MaintenancePayload>, EmulationRegistryError> {
     if !requested || linux {
         return Ok(None);
     }
-    super::materials::build_maintenance_payload(conn, root, case_id, source_id, derived_ntfs)
+    super::materials::build_maintenance_payload(preflight, derived_ntfs)
 }
 
 pub(super) fn prepare_linux_network_if_needed(

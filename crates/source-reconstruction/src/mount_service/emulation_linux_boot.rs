@@ -8,7 +8,6 @@ use transport::dto::EmulationInstallDto;
 
 use super::emulation::EvidenceContext;
 use super::emulation_linux::open_linux_volume_reader;
-use evidence_access::datasource_service::open_evidence_reader;
 use evidence_access::partition_query_service::PartitionQueryRepo as PartitionRepo;
 
 /// XFS log annotation for the boot path: a volume captured with pending
@@ -18,8 +17,7 @@ use evidence_access::partition_query_service::PartitionQueryRepo as PartitionRep
 /// boot-critical. Reads stay bounded by the snapshot limit. A volume that
 /// cannot be assessed is annotated separately so launch can fail closed.
 pub(crate) fn annotate_xfs_log_risk(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
+    context: &EvidenceContext,
     partitions: &PartitionRepo<'_>,
     data_source_id: &DataSourceId,
     installs: &mut [EmulationInstallDto],
@@ -29,17 +27,13 @@ pub(crate) fn annotate_xfs_log_risk(
     if installs.is_empty() {
         return Ok(());
     }
-    let context = EvidenceContext {
-        source_path: source_path.to_path_buf(),
-        kind: source_kind.clone(),
-    };
     let records = partitions.find_by_data_source(&data_source_id.0)?;
     let mut assessments = Vec::new();
     for record in records
         .iter()
         .filter(|record| record.filesystem.as_deref() == Some("XFS"))
     {
-        let assessment = open_linux_volume_reader(&context, record)
+        let assessment = open_linux_volume_reader(context, record)
             .and_then(|reader| fs_xfs::XfsReader::open(reader, 0).ok())
             .and_then(|xfs| {
                 xfs.read_internal_log_snapshot(XFS_LOG_MAX_SNAPSHOT_BYTES)
@@ -62,8 +56,7 @@ pub(crate) fn annotate_xfs_log_risk(
 /// before editing `/etc/shadow`; preflight surfaces the state so that the
 /// investigator can see why that preparation is required.
 pub(crate) fn annotate_ext4_journal_risk(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
+    context: &EvidenceContext,
     partitions: &PartitionRepo<'_>,
     data_source_id: &DataSourceId,
     installs: &mut [EmulationInstallDto],
@@ -71,17 +64,13 @@ pub(crate) fn annotate_ext4_journal_risk(
     if installs.is_empty() {
         return Ok(());
     }
-    let context = EvidenceContext {
-        source_path: source_path.to_path_buf(),
-        kind: source_kind.clone(),
-    };
     let records = partitions.find_by_data_source(&data_source_id.0)?;
     let mut assessments = Vec::new();
     for record in records
         .iter()
         .filter(|record| record.filesystem.as_deref() == Some("Ext4"))
     {
-        let Some(reader) = open_linux_volume_reader(&context, record) else {
+        let Some(reader) = open_linux_volume_reader(context, record) else {
             assessments.push(Ext4JournalAssessment::Unverified);
             continue;
         };
@@ -154,8 +143,7 @@ fn add_boot_risk(installs: &mut [EmulationInstallDto], risk: &str) {
 /// decision can fail closed like the XFS path. MBR disks boot legacy and need
 /// no annotation.
 pub(crate) fn annotate_boot_path_risk(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
+    context: &EvidenceContext,
     installs: &mut [EmulationInstallDto],
 ) {
     if installs.is_empty() {
@@ -163,7 +151,7 @@ pub(crate) fn annotate_boot_path_risk(
     }
     annotate_boot_path_assessment(
         installs,
-        gpt_disk_boot_path_assessment(source_path, source_kind),
+        assess_gpt_disk_boot_path(context).unwrap_or(BootPathAssessment::Undetermined),
     );
 }
 
@@ -190,26 +178,16 @@ fn annotate_boot_path_assessment(
     }
 }
 
-fn gpt_disk_boot_path_assessment(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
-) -> BootPathAssessment {
-    assess_gpt_disk_boot_path(source_path, source_kind).unwrap_or(BootPathAssessment::Undetermined)
-}
-
 /// `None` when the disk layout could not be determined (no annotation
 /// without evidence).
-fn assess_gpt_disk_boot_path(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
-) -> Option<BootPathAssessment> {
+fn assess_gpt_disk_boot_path(context: &EvidenceContext) -> Option<BootPathAssessment> {
     use evidence_core::volume::gpt::{
         classify_partition_type, parse_gpt_entries, parse_gpt_header, GptPartitionType,
     };
     use std::io::{Read, Seek, SeekFrom};
 
     const BIOS_BOOT_PARTITION: [u8; 16] = *b"Hah!IdontNeedEFI";
-    let mut reader = open_evidence_reader(source_path, source_kind).ok()?;
+    let mut reader = context.reader().ok()?;
     let mut header = [0u8; 512];
     reader.seek(SeekFrom::Start(512)).ok()?;
     reader.read_exact(&mut header).ok()?;

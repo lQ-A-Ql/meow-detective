@@ -12,7 +12,6 @@ use domain::DataSourceId;
 use evidence_access::partition_query_service::PartitionQueryRepo as PartitionRepo;
 use evidence_core::{EvidenceReader, FileSystemReader};
 use persistence_source::repositories::file_repo::FileRepo;
-use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use rusqlite::Connection;
 use transport::dto::{EmulationInstallDto, EmulationInstallPlatformDto};
 
@@ -20,9 +19,6 @@ use super::emulation::EvidenceContext;
 use super::emulation_linux_controller::LinuxControllerEvidence;
 use super::emulation_linux_network::linux_network_pci_slot;
 use super::MountServiceError;
-use evidence_access::datasource_service::open_evidence_reader;
-
-pub(crate) const MAX_LINUX_PRECHECK_PARTITIONS: usize = 64;
 
 /// Catalog-only detection: a partition holding `/etc/os-release` (or the
 /// `/usr/lib/os-release` fallback location) is a Linux system root
@@ -31,15 +27,11 @@ pub(crate) const MAX_LINUX_PRECHECK_PARTITIONS: usize = 64;
 pub(crate) fn linux_installs_from_catalog(
     repo: &FileRepo<'_>,
     data_source_id: &DataSourceId,
+    partitions: &[evidence_access::partition_query_service::PartitionRecord],
 ) -> Result<Vec<EmulationInstallDto>, MountServiceError> {
     let mut installs = Vec::new();
-    for partition_index in 0..MAX_LINUX_PRECHECK_PARTITIONS {
-        if repo
-            .find_root_for_partition(data_source_id, partition_index)?
-            .is_none()
-        {
-            continue;
-        }
+    for partition in partitions {
+        let partition_index = partition.partition_index as usize;
         let has_os_release = path_present(repo, data_source_id, partition_index, "etc/os-release")?
             || path_present(repo, data_source_id, partition_index, "usr/lib/os-release")?;
         if !has_os_release {
@@ -82,23 +74,13 @@ fn path_present(
 /// without its own kernel image is only flagged when no other partition of
 /// the image carries one either.
 pub(crate) fn enrich_linux_installs_from_fs(
-    source_path: &std::path::Path,
-    source_kind: &domain::DataSourceKind,
+    context: &EvidenceContext,
     partitions: &PartitionRepo<'_>,
     data_source_id: &DataSourceId,
     installs: &mut [EmulationInstallDto],
 ) {
-    let context = EvidenceContext {
-        source_path: source_path.to_path_buf(),
-        kind: source_kind.clone(),
-    };
     for install in installs.iter_mut() {
-        match probe_linux_install(
-            &context,
-            partitions,
-            data_source_id,
-            install.partition_index,
-        ) {
+        match probe_linux_install(context, partitions, data_source_id, install.partition_index) {
             Ok(Some(probe)) => {
                 install.os_release_pretty_name = probe.pretty_name;
                 install.kernel_present = Some(probe.kernel_present);
@@ -134,7 +116,7 @@ pub(crate) fn enrich_linux_installs_from_fs(
         {
             return false;
         }
-        open_linux_fs(&context, record)
+        open_linux_fs(context, record)
             .map(|fs| {
                 // A dedicated boot partition carries the kernels at its own
                 // root; a shared root carries them under /boot.
@@ -251,10 +233,22 @@ pub fn linux_guest_os_id(distro_id: Option<&str>) -> &'static str {
 fn open_linux_fs(
     context: &EvidenceContext,
     record: &evidence_access::partition_query_service::PartitionRecord,
-) -> Option<Box<dyn FileSystemReader>> {
+) -> Option<std::rc::Rc<dyn FileSystemReader>> {
+    if let Some(fs) = context
+        .filesystems
+        .borrow_mut()
+        .get(&record.partition_index)
+    {
+        return Some(fs.clone());
+    }
     let fs_label = record.filesystem.as_deref()?;
     let reader = open_linux_volume_reader(context, record)?;
-    open_fs_by_label(reader, fs_label)
+    let fs: std::rc::Rc<dyn FileSystemReader> = open_fs_by_label(reader, fs_label)?.into();
+    context
+        .filesystems
+        .borrow_mut()
+        .put(record.partition_index, fs.clone());
+    Some(fs)
 }
 
 /// The volume-level reader beneath the filesystem: a partition window for
@@ -266,7 +260,7 @@ pub(super) fn open_linux_volume_reader(
     if record.lvm_lv_name.is_some() {
         return open_lvm_lv_reader(context, record);
     }
-    let reader = open_evidence_reader(&context.source_path, &context.kind).ok()?;
+    let reader = context.reader().ok()?;
     let length = (record.length > 0).then_some(record.length);
     let window = evidence_core::PartitionWindowReader::new(reader, record.offset, length).ok()?;
     Some(Box::new(window))
@@ -276,30 +270,20 @@ fn open_lvm_lv_reader(
     context: &EvidenceContext,
     record: &evidence_access::partition_query_service::PartitionRecord,
 ) -> Option<Box<dyn EvidenceReader>> {
-    let pv_offsets: Vec<u64> = record
-        .lvm_pv_offsets_json
-        .as_deref()
-        .and_then(|json| serde_json::from_str(json).ok())?;
-    if pv_offsets.is_empty() {
-        return None;
-    }
-    // One reader per PV, even when every PV lives on the same disk image.
-    let readers = pv_offsets
-        .iter()
-        .map(|_| {
-            open_evidence_reader(&context.source_path, &context.kind)
-                .map(|reader| reader as Box<dyn EvidenceReader>)
-                .ok()
+    let candidate = evidence_access::file_service::preview_partition_candidate_from_record(record);
+    let identity = candidate.lvm_identity.as_ref()?;
+    context
+        .lvm
+        .borrow_mut()
+        .open_volume(&context.source_path, identity, &mut |path| {
+            evidence_access::file_service::open_host_evidence_reader(
+                &context.kind.to_string(),
+                path,
+                &context.case_id,
+            )
+            .map_err(std::io::Error::other)
         })
-        .collect::<Option<Vec<_>>>()?;
-    let pool = fs_lvm::LvmPool::discover(readers, pv_offsets).ok()?;
-    let volumes = pool.list_volumes();
-    let lv_index = volumes.iter().position(|volume| {
-        Some(volume.name.as_str()) == record.lvm_lv_name.as_deref()
-            && Some(volume.uuid.as_str()) == record.lvm_lv_uuid.as_deref()
-    })?;
-    let lv = pool.open_volume(lv_index).ok()?;
-    Some(Box::new(lv))
+        .ok()
 }
 
 fn open_fs_by_label(
@@ -328,38 +312,26 @@ pub fn linux_guest_profile(
     case_id: &domain::CaseId,
     data_source_id: &DataSourceId,
 ) -> Result<LinuxGuestProfile, MountServiceError> {
-    let source = source_kernel::source_db::open_ready_source_read_only_by_id(
-        case_conn,
-        case_root,
-        case_id,
-        data_source_id,
-    )
-    .map_err(|error| MountServiceError::SourceNotReady(error.to_string()))?;
-    let partitions = PartitionRepo::new(&source.connection);
-    let repo = DataSourceRepo::new(case_conn);
-    let (source_path, source_kind) = repo
-        .source_path(data_source_id)
-        .and_then(|path| repo.source_kind(data_source_id).map(|kind| (path, kind)))?;
-    let all_partitions = partitions
-        .find_by_data_source(&data_source_id.0)
-        .unwrap_or_default();
-    let context = EvidenceContext {
-        source_path: std::path::PathBuf::from(source_path),
-        kind: source_kind,
-    };
+    super::preflight_cache::guest_profile(case_conn, case_root, case_id, data_source_id)
+}
+
+pub(super) fn inspect_guest_profile(
+    context: &EvidenceContext,
+    all_partitions: &[evidence_access::partition_query_service::PartitionRecord],
+) -> Result<LinuxGuestProfile, MountServiceError> {
     // Read the distro id and initramfs controller evidence from Linux
     // filesystems. A dedicated /boot partition is included in this scan.
     let mut distro_id = None;
     let mut controller_evidence = LinuxControllerEvidence::default();
     let mut network_pci_slot = None;
-    for record in &all_partitions {
+    for record in all_partitions {
         let Some(fs_label) = record.filesystem.as_deref() else {
             continue;
         };
         if !matches!(fs_label, "Ext4" | "XFS" | "Btrfs") {
             continue;
         }
-        let Some(fs) = open_linux_fs(&context, record) else {
+        let Some(fs) = open_linux_fs(context, record) else {
             continue;
         };
         let current_evidence = super::emulation_linux_controller::inspect_filesystem(fs.as_ref());
@@ -384,6 +356,7 @@ pub fn linux_guest_profile(
     })
 }
 
+#[derive(Clone)]
 pub struct LinuxGuestProfile {
     pub guest_os: String,
     pub disk_adapter: evidence_emulation::VmdkAdapter,

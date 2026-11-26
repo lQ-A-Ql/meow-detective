@@ -11,6 +11,12 @@ impl EmulationRegistry {
         options: VmOptions,
     ) -> Result<EmulationSessionStatus, EmulationRegistryError> {
         self.reject_duplicate(case_root, data_source_id)?;
+        let preflight = app_services::mount_service::emulation_preflight(
+            case_conn,
+            case_root,
+            case_id,
+            data_source_id,
+        )?;
         let guest = guest_profile_for_source(case_conn, case_root, case_id, data_source_id)?;
         if guest.is_linux && recovery_iso.is_some() {
             return Err(EmulationRegistryError::RecoveryMedia(
@@ -49,10 +55,7 @@ impl EmulationRegistry {
             recovery_media.is_some(),
             guest.is_linux,
             parent.source_volume.is_some(),
-            case_conn,
-            case_root,
-            case_id,
-            data_source_id,
+            &preflight,
         )
         .inspect_err(|_| {
             let _ = backend.stop();
