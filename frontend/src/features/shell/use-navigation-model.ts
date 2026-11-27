@@ -1,7 +1,6 @@
 import { useNavigate } from 'react-router';
 import { useCurrentCase } from '@/features/case/hooks';
 import { useJobsSnapshot } from '@/features/jobs/hooks';
-import { isDevOrAuditMode } from '@/lib/env';
 import { useUiStore, type PageKey } from '@/stores/ui-store';
 
 export interface NavigationLink {
@@ -29,12 +28,9 @@ export function useNavigationModel() {
   const currentCase = useCurrentCase();
   const { data: jobs } = useJobsSnapshot(currentCase.data?.id);
   const toggleDrawer = useUiStore((state) => state.toggleDrawer);
-  const links = isDevOrAuditMode()
-    ? [...productionLinks.slice(0, 3), { to: '/v2', page: 'v2' as const }, ...productionLinks.slice(3)]
-    : productionLinks;
 
   return {
-    links,
+    links: productionLinks,
     runningCount: jobs?.filter((job) => job.status === 'running').length ?? 0,
     toggleDrawer,
     openSettings() {

@@ -155,18 +155,6 @@ const shapedDefaults: Record<string, () => unknown> = {
     warnings: [],
     pageTotal: 0,
   }),
-  get_correlation_snapshot: () => ({
-    leads: [],
-    nodes: [],
-    edges: [],
-    clusters: [],
-    familyCoverage: [],
-    leadCount: 0,
-    clusterCount: 0,
-    nodeCount: 0,
-    edgeCount: 0,
-    generatedAt: '',
-  }),
   get_graph_snapshot: () => ({
     nodes: [],
     edges: [],
@@ -412,8 +400,6 @@ export async function invoke<T>(command: string, payload?: MockCommandPayload): 
       return analysisData.graphSnapshot as T;
     case 'list_graph_nodes':
       return analysisData.graphSnapshot.nodes as T;
-    case 'get_correlation_snapshot':
-      return analysisData.correlationSnapshot as T;
     case 'get_infrastructure_graph':
       return platformData.infrastructureGraph as T;
     case 'open_file_handle_request': {

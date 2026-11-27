@@ -27,7 +27,6 @@ export * from './taskProgress';
 export * from './reports';
 export * from './import';
 export * from './mcpHost';
-export * from './correlation';
 export * from './graph';
 export * from './notebook';
 export * from './batch';

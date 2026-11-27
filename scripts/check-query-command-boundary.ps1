@@ -96,10 +96,8 @@ $policies = [ordered]@{
     "get_plugin_family_entries"
   )
   "analysis_commands/governance.rs" = @(
-    "get_v2_governance_snapshot",
     "get_v3_governance_snapshot",
-    "get_case_overview_snapshot",
-    "get_correlation_snapshot"
+    "get_case_overview_snapshot"
   )
   "infrastructure_commands.rs" = @("get_infrastructure_graph")
   "graph_commands.rs" = @(

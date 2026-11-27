@@ -3,7 +3,6 @@ import type { IconDefinition } from '@fortawesome/fontawesome-svg-core';
 import {
   faChartLine,
   faChartPie,
-  faClipboardCheck,
   faComputer,
   faCubes,
   faFileLines,
@@ -22,7 +21,6 @@ const sidebarIcons = {
   emulation: faComputer,
   analysis: faChartLine,
   infrastructure: faNetworkWired,
-  v2: faClipboardCheck,
   v3: faChartPie,
   search: faMagnifyingGlass,
   timeline: faTimeline,

@@ -1,7 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import {
   getBrowserHistorySummary,
-  getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvtxEventSummary,
   getEvidenceClassificationSummary,
@@ -11,7 +10,6 @@ import {
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
   getSystemInfo,
-  getV2GovernanceSnapshot,
   getV3GovernanceSnapshot,
   getCaseOverviewSnapshot,
   runPluginExtraction,
@@ -342,28 +340,6 @@ export function usePluginFamilyEntries(request: {
     ...query,
     data: mergePluginFamilyPages(query.data?.pages ?? []),
   };
-}
-
-export function useV2GovernanceSnapshot() {
-  const currentCase = useCurrentCase();
-  return useQuery({
-    queryKey: ['analysis', 'v2-governance', currentCase.data?.id ?? null],
-    queryFn: getV2GovernanceSnapshot,
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
-    retry: false,
-    ...ANALYSIS_QUERY_OPTIONS,
-  });
-}
-
-export function useCorrelationSnapshot() {
-  const currentCase = useCurrentCase();
-  return useQuery({
-    queryKey: ['analysis', 'correlation', currentCase.data?.id ?? null],
-    queryFn: getCorrelationSnapshot,
-    enabled: currentCase.isSuccess && Boolean(currentCase.data),
-    retry: false,
-    ...ANALYSIS_QUERY_OPTIONS,
-  });
 }
 
 export function useV3GovernanceSnapshot() {

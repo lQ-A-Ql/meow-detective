@@ -403,7 +403,7 @@ PVE 集群测试通过 `FORENSICS_PVE_CLUSTER_ROOT` 等环境变量 opt-in，默
 | Firefox History | Experimental | 同上 |
 | Email extraction | Experimental | 已有抽取建模，公开样本与基准待补 |
 
-当前产品内 `/v2` 页面已经开始承接这套口径：
+治理服务通过以下字段表达验证状态：
 
 - `verificationChains`
 - `supportMatrixEntries`
@@ -413,7 +413,6 @@ PVE 集群测试通过 `FORENSICS_PVE_CLUSTER_ROOT` 等环境变量 opt-in，默
 
 其中 `releaseGates.core-fixture-regression` 已开始直接读取核心链路的验证状态，不再是假定“统一通过”。
 
-也就是说，可信验证不再只存在于文档和测试里，已经有一条面向 investigator / release reviewer 的可见链路。
 从 2026-06-13 起，`knownLimitations` 与 `supportMatrix.documentedLimitCount` 也开始由独立事实源 `testdata/governance/v2-known-limitations.json` 提供，不再继续由 Rust 侧手工维护一份并与 `docs/known-unsupported-formats.md` 漂移。
 
 ## 6. 字段承诺分级

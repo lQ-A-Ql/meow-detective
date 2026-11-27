@@ -8,7 +8,6 @@ const names = [
   'emulation',
   'analysis',
   'infrastructure',
-  'v2',
   'v3',
   'search',
   'timeline',

@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { LoaderCircle } from '@/components/icons';
 import { Layout } from '@/components/layout/Layout';
 import { RouteErrorBoundary } from '@/app/components/RouteErrorBoundary';
-import { isDevOrAuditMode } from '@/lib/env';
 
 /**
  * Painted inside the layout shell while the first lazy page module resolves.
@@ -108,16 +107,6 @@ export const appRoutes: RouteObject[] = [
               Component: (await import('./pages/Settings')).Settings,
             }),
           },
-          ...(isDevOrAuditMode()
-            ? [
-                {
-                  path: 'v2',
-                  lazy: async () => ({
-                    Component: (await import('./pages/V2Workbench')).V2Workbench,
-                  }),
-                },
-              ]
-            : []),
         ],
       },
     ],

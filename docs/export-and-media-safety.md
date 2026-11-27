@@ -90,4 +90,4 @@ no-clobber 原子发布；该接口没有 overwrite 选项。失败时移除临�
 - 导出、提取、媒体 handle 结果必须能进入统一审计记录
 - overwrite 行为必须进入候选发布回归
 - 媒体协议、导出策略与错误脱敏必须纳入 release scorecard
-- 当前 `/v2` 页面中的 security defaults 与 error taxonomy 仓库事实源为 `testdata/governance/v2-security-taxonomy.json`
+- 治理服务使用的 security defaults 与 error taxonomy 仓库事实源为 `testdata/governance/v2-security-taxonomy.json`

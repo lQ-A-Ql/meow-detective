@@ -14,10 +14,7 @@ pub use extraction::{
     get_linux_artifact_summary, get_plugin_family_entries, get_registry_extraction_summary,
     get_registry_structured_summary, list_plugin_modules, run_plugin_extraction,
 };
-pub use governance::{
-    get_case_overview_snapshot, get_correlation_snapshot, get_v2_governance_snapshot,
-    get_v3_governance_snapshot,
-};
+pub use governance::{get_case_overview_snapshot, get_v3_governance_snapshot};
 pub use linux_cluster::{get_linux_evidence_set_summary, list_linux_evidence_sets};
 pub use linux_events::get_linux_evidence_events;
 pub use queries::{

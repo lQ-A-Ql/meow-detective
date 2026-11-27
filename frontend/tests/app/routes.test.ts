@@ -42,11 +42,21 @@ describe('app route code splitting', () => {
     expect(boundary?.HydrateFallback).toEqual(expect.any(Function));
   });
 
-  it('includes the V2 governance workbench route', () => {
-    const v2Route = pageRoutes().find((route) => route.path === 'v2');
-
-    expect(v2Route).toBeDefined();
-    expect(v2Route?.lazy).toEqual(expect.any(Function));
+  it('registers the supported workspace routes', () => {
+    expect(pageRoutes().map((route) => (route.index ? '/' : route.path))).toEqual([
+      '/',
+      'analysis',
+      'v3',
+      'files',
+      'infrastructure/linux',
+      'emulation',
+      'search',
+      'timeline',
+      'artifacts',
+      'reports',
+      'logs',
+      'settings',
+    ]);
   });
 
   it('exposes the image emulation workspace as a lazy route', () => {

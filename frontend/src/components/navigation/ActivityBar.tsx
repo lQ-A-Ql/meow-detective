@@ -12,7 +12,6 @@ const iconByPage: Record<NavigationLink['page'], SidebarIconName> = {
   emulation: 'emulation',
   analysis: 'analysis',
   infrastructure: 'infrastructure',
-  v2: 'v2',
   v3: 'v3',
   search: 'search',
   timeline: 'timeline',

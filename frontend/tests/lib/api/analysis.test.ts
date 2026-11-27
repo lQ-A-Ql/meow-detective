@@ -5,7 +5,6 @@ import {
   getFileClassificationBoard,
   getBrowserHistorySummary,
   getCaseOverviewSnapshot,
-  getCorrelationSnapshot,
   getEmailExtractionSummary,
   getEvidenceClassificationSummary,
   getLinuxEvidenceSetSummary,
@@ -14,7 +13,6 @@ import {
   getRegistryExtractionSummary,
   getRegistryStructuredSummary,
   getSystemInfo,
-  getV2GovernanceSnapshot,
   getV3GovernanceSnapshot,
   runPluginExtraction,
 } from '@/lib/api/analysis';
@@ -105,12 +103,6 @@ describe('analysis API', () => {
     });
   });
 
-  it('getV2GovernanceSnapshot calls the correct command', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    await getV2GovernanceSnapshot();
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_V2_GOVERNANCE_SNAPSHOT);
-  });
-
   it('getV3GovernanceSnapshot calls the correct command', async () => {
     requestMock.mockResolvedValueOnce({} as never);
     await getV3GovernanceSnapshot();
@@ -139,11 +131,5 @@ describe('analysis API', () => {
     expect(requestMock).toHaveBeenNthCalledWith(2, COMMANDS.analysis.GET_LINUX_EVIDENCE_EVENTS, {
       request: { importSetId: 'set-1', offset: 10, limit: 25 },
     });
-  });
-
-  it('getCorrelationSnapshot calls the correct command', async () => {
-    requestMock.mockResolvedValueOnce({} as never);
-    await getCorrelationSnapshot();
-    expect(requestMock).toHaveBeenCalledWith(COMMANDS.analysis.GET_CORRELATION_SNAPSHOT);
   });
 });

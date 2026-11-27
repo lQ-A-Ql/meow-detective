@@ -7,7 +7,6 @@ import {
   AndroidPackageSummary,
   BrowserHistorySummary,
   CaseOverviewSnapshot,
-  CorrelationSnapshot,
   EmailExtractionSummary,
   EvtxEventSummary,
   EvtxEventPageRequest,
@@ -23,7 +22,6 @@ import {
   PluginModule,
   RegistryExtractionSummary,
   RegistryStructuredSummary,
-  V2GovernanceSnapshot,
   V3GovernanceSnapshot,
   WeChatKeyRecoveryResult,
 } from '@/types/models';
@@ -79,10 +77,6 @@ export async function getLinuxArtifactSummary(request: AnalysisExtractionPageReq
   return apiClient.request(COMMANDS.analysis.GET_LINUX_ARTIFACT_SUMMARY, { request });
 }
 
-export async function getV2GovernanceSnapshot(): Promise<V2GovernanceSnapshot> {
-  return apiClient.request(COMMANDS.analysis.GET_V2_GOVERNANCE_SNAPSHOT);
-}
-
 export async function getV3GovernanceSnapshot(): Promise<V3GovernanceSnapshot> {
   return apiClient.request(COMMANDS.analysis.GET_V3_GOVERNANCE_SNAPSHOT);
 }
@@ -135,8 +129,4 @@ export async function recoverWeChatKeys(dataSourceId: string, dumpPath: string):
   return apiClient.request(COMMANDS.analysis.RECOVER_WECHAT_KEYS, {
     request: { dataSourceId, dumpPath },
   });
-}
-
-export async function getCorrelationSnapshot(): Promise<CorrelationSnapshot> {
-  return apiClient.request(COMMANDS.analysis.GET_CORRELATION_SNAPSHOT);
 }
