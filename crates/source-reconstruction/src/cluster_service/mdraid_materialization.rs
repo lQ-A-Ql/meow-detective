@@ -2,15 +2,15 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use domain::{CaseId, DataSource, DataSourceId};
 use evidence_access::mdraid::{
-    discover_linux_evidence_set_mdraid_with_cancel, mdraid_array_fingerprint, open_mdraid_reader,
-    verify_mdraid_source_content, MdRaidArrayPlan, MdRaidDiscoveryMember, MdRaidPlanError,
+    discover_mdraid_from_collection, mdraid_array_fingerprint, open_mdraid_reader,
+    verify_mdraid_source_content, MdRaidArrayPlan, MdRaidPlanError,
 };
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
     processing_phase_repo::{DataSourceProcessingPhaseRepo, ProcessingPhase, ProcessingPhaseClaim},
 };
 
-use super::linux_import::LinuxEvidenceSetImportPlan;
+use evidence_access::datasource_service::ImageCollectionPlan;
 
 mod build;
 mod catalog;
@@ -135,7 +135,7 @@ pub fn materialize_linux_evidence_set_mdraid(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,
-    plan: &LinuxEvidenceSetImportPlan,
+    plan: &ImageCollectionPlan,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
     materialize_linux_evidence_set_mdraid_with_cancel(
         conn,
@@ -150,19 +150,12 @@ pub fn materialize_linux_evidence_set_mdraid_with_cancel(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,
-    plan: &LinuxEvidenceSetImportPlan,
+    plan: &ImageCollectionPlan,
     cancel: &AtomicBool,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
     ensure_not_cancelled(cancel)?;
-    let members = plan
-        .members
-        .iter()
-        .map(|member| MdRaidDiscoveryMember {
-            source_path: &member.source_path,
-            source_kind: &member.source_kind,
-        })
-        .collect::<Vec<_>>();
-    discover_linux_evidence_set_mdraid_with_cancel(&members, cancel)?
+    plan.verify_content(cancel)?;
+    discover_mdraid_from_collection(plan, cancel)?
         .iter()
         .map(|array| materialize_mdraid_array_with_cancel(conn, case_root, case_id, array, cancel))
         .collect()

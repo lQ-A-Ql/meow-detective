@@ -112,13 +112,16 @@ fn open_candidate_filesystem_with_factory(
     factory: Option<&dyn evidence_core::EvidenceReaderFactory>,
 ) -> Result<Option<Box<dyn FileSystemReader + Send>>, String> {
     let open = || {
-        if !matches!(candidate.source, ImageFilesystemSource::LvmLogicalVolume) {
-            if let Some(factory) = factory {
-                return factory
-                    .open_reader()
-                    .map(|reader| (reader, candidate.offset))
-                    .map_err(|error| error.to_string());
-            }
+        if let Some(factory) = factory {
+            let offset = if candidate.source == ImageFilesystemSource::LvmLogicalVolume {
+                0
+            } else {
+                candidate.offset
+            };
+            return factory
+                .open_reader()
+                .map(|reader| (reader, offset))
+                .map_err(|error| error.to_string());
         }
         open_candidate_reader(source_path, source_kind, candidate)
     };

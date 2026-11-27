@@ -6,14 +6,13 @@ use thiserror::Error;
 use crate::datasource_service::{self, LvmLogicalVolumeIdentity};
 
 mod content;
-mod discovery;
+pub(crate) mod discovery;
 mod filesystem;
 
-pub use content::{
-    mdraid_reader_content_bytes, verify_mdraid_source_content, MdRaidSourceContent,
-    CONTENT_CHUNK_BYTES,
-};
+use crate::source_runtime::content::SourceContent;
+pub use content::{mdraid_reader_content_bytes, verify_mdraid_source_content};
 pub use discovery::discover_linux_evidence_set_mdraid_with_cancel;
+pub use discovery::discover_mdraid_from_collection;
 pub use discovery::{discover_linux_evidence_set_mdraid, MdRaidDiscoveryMember};
 pub(crate) use filesystem::open_mdraid_partition;
 pub use filesystem::{open_mdraid_filesystem, probe_mdraid_filesystems};
@@ -46,6 +45,8 @@ pub enum MdRaidPlanError {
     SourceContentChanged,
     #[error("MD RAID catalog materialization cancelled")]
     Cancelled,
+    #[error("collection image plan failed: {0}")]
+    Collection(#[from] datasource_service::CollectionPlanError),
 }
 
 impl transport::ServiceErrorCategory for MdRaidPlanError {
@@ -56,6 +57,7 @@ impl transport::ServiceErrorCategory for MdRaidPlanError {
             }
             Self::MdRaid(_) => transport::ErrorCategory::Unsupported,
             Self::Classification(error) => error.category(),
+            Self::Collection(error) => error.category(),
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::Generation(_)
@@ -145,7 +147,7 @@ pub struct MdRaidArrayPlan {
     pub min_data_size_sectors: u64,
     pub capacity_mismatch: bool,
     pub source_snapshot: crate::source_runtime::snapshot::SourceSnapshot,
-    pub source_content: Vec<MdRaidSourceContent>,
+    pub source_content: Vec<SourceContent>,
     pub members: Vec<MdRaidMemberPlan>,
 }
 
@@ -188,9 +190,12 @@ fn validate_source_snapshot(plan: &MdRaidArrayPlan) -> Result<(), MdRaidPlanErro
         .into());
     }
     plan.source_snapshot.validate()?;
-    if discovery::capture_array_sources(plan)? != plan.source_snapshot {
+    if content::input_sources(plan)?
+        .keys()
+        .any(|path| !plan.source_snapshot.contains(std::path::Path::new(path)))
+    {
         return Err(fs_lvm::mdraid::MdRaidError::MetadataConflict(
-            "MD RAID backing source identity changed since discovery".to_string(),
+            "MD RAID source snapshot does not cover all inputs".to_string(),
         )
         .into());
     }

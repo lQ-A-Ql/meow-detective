@@ -17,6 +17,7 @@ pub(super) struct LvmExpansionState {
     pub(super) new_candidates: Vec<(ImageFilesystemCandidate, u64, Option<String>)>,
     pub(super) remove_indices: Vec<usize>,
     pub(super) expanded_vgs: HashSet<String>,
+    pub(super) md_members: Vec<crate::mdraid::MdRaidMemberPlan>,
 }
 
 pub(super) struct ExpandedPoolSources {

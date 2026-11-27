@@ -176,7 +176,7 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 |---|---|---|---|
 | MD 元数据与逻辑读取 | Experimental | `fs-lvm --test mdraid_native`；`public-small/mdraid` | mdadm 原生生成的 linear、RAID0/1/5/6/10；0.90、1.0、1.1、1.2 元数据；容量、已知内容、缺失成员和非对齐范围读取。校验成员数量、checksum、events、支持的 feature/layout 与副本一致性 |
 | MD -> EXT4 目录与预览 | Experimental | `evidence-access --test mdraid_access`；`app-services --test mdraid_materialization_native` | 原生 RAID0/EXT4 文件树、分区身份、范围读取、`FileEntryId` 预览、重复导入、来源变化后的独立身份、发布中断恢复与取消准入 |
-| 跨 PV 来源绑定及 LVM -> MD -> EXT4 | Experimental | `evidence-access --lib native_cross_pv_binding --test mdraid_access`；`app-services --test mdraid_materialization_native`；`public-small/lvm-native` | lamlvm 原生镜像验证相同坐标上的不同 PV UUID 与重复 PV 来源拒绝；LVM2/mdadm/mke2fs 原生镜像验证无 metadata 副本的 PV、两 LV 组成的 RAID0、文件字节、目录与预览 |
+| 跨 PV 来源绑定及 LVM -> MD -> EXT4 | Experimental | `evidence-access --test lvm_collection_native --test mdraid_access`；`app-services --test mdraid_materialization_native`；`public-small/lvm-native` | 原生镜像验证相同坐标上的不同 PV UUID、重复 PV 来源拒绝、没有 metadata 副本的 PV、两 LV 组成的 RAID0、文件字节、目录与预览 |
 | 集合摘要与事件分页 | Experimental | `app-services --test cluster_import_queries --test linux_evidence_events` | 集合归属、完整成员包含关系、清单摘要验证、稳定时间顺序、超过两千条事件的分页、不可读取成员的明确错误 |
 
 MD 目录与预览共用文件系统探测及打开入口。EXT4 已有公开端到端证明；
@@ -204,8 +204,12 @@ Kubernetes 清单保留固定数量且顺序稳定的候选，同时统计全部
 按 PV UUID 汇集完整 VG，每个 VG 只展开一次可读取逻辑卷。
 规范路径排序确定稳定目录所属成员，全部物理成员分别保存来源数据库与 PV 分区记录；
 逻辑分区保存 VG/LV UUID 和全部 PV 来源，其他 PV 不重复枚举同一逻辑目录。
-计划获取及目录发布前验证全部 RAW backing file/E01 segment 的 metadata snapshot；
-这项检查表示来源文件元数据身份，内容摘要的强校验范围见上述 MD 说明。
+集合计划绑定全部输入的完整逻辑磁盘 SHA-256 和固定 1 MiB 区块摘要，
+并保存全部 RAW backing file/E01 segment 的 metadata snapshot。
+来源发现、跨 PV 展开和成员目录读取验证涉及区块；目录最终发布前验证完整集合内容。
+集合内容 fingerprint 写入来源恢复记录，中断恢复拒绝不同内容或缺失绑定的计划。
+MD 成员发现复用集合直接探测和 VG 展开期间保留的原生 MD 元数据，
+派生目录阶段消费同一计划，不重新探测镜像、汇集 PV 或展开 VG。
 重复输入、重复 PV UUID、冲突 committed metadata 和 thin 打开错误会终止共享计划准备。
 `evidence-access --test lvm_collection_native` 和
 `app-services --test lvm_collection_import_native` 使用 LVM2/mkfs.ext4 原生镜像，
@@ -215,7 +219,9 @@ RAW、E01、LocalDisk、AndroidSparse 预览统一使用已发布分区记录，
 跨 PV 预览按记录中的全部来源重新打开，并验证 VG/LV UUID。
 文件流与范围读取共用文件系统打开入口及有界读取组件。
 集合计划准备预留 192 MiB 工作内存，保留计划按实际结构估计收费，上限 16 MiB；
-`Arc` 共享期间只保留一份许可。来源 snapshot、PV 检查和 VG 打开使用预算读取工厂。
+结构计划与内容摘要分别持有共享许可；内容摘要按逻辑容量收费，上限 128 MiB。
+借用的读取器继续持有摘要许可，最后一个借用释放后归还资源。
+来源 snapshot、PV 检查和 VG 打开使用预算读取工厂。
 内存、metadata、物理读取器、句柄与工作区由 `source-kernel::resource_budget` 管理，
 调度器只负责 CPU 权重。1536 MiB 总估计预算与 1020 MiB 重型工作区决定当前重型成员并发为 1。
 这些数值属于分配估计；大型实际样本 RSS 性能仍需要单独测量。

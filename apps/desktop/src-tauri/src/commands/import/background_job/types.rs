@@ -45,6 +45,8 @@ pub(crate) struct BrowseableEvidenceSetImport {
 }
 
 pub(super) struct EvidenceSetImportSummary {
+    pub(super) collection_plan:
+        Option<std::sync::Arc<app_services::datasource_service::ImageCollectionPlan>>,
     pub(super) ready_count: u32,
     pub(super) failed_count: u32,
     pub(super) member_messages: Vec<String>,
@@ -53,6 +55,7 @@ pub(super) struct EvidenceSetImportSummary {
 impl EvidenceSetImportSummary {
     pub(super) fn new() -> Self {
         Self {
+            collection_plan: None,
             ready_count: 0,
             failed_count: 0,
             member_messages: Vec::new(),

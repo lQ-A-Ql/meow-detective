@@ -26,6 +26,20 @@ pub enum CollectionPlanError {
     DuplicateIdentity,
     #[error("collection member does not match the shared image plan")]
     MemberMismatch,
+    #[error("collection content verification failed: {0}")]
+    Content(crate::source_runtime::content::ContentError),
+    #[error("collection MD discovery failed: {0}")]
+    MdRaid(#[from] fs_lvm::mdraid::MdRaidError),
+}
+
+impl From<crate::source_runtime::content::ContentError> for CollectionPlanError {
+    fn from(error: crate::source_runtime::content::ContentError) -> Self {
+        match error {
+            crate::source_runtime::content::ContentError::Cancelled => Self::Cancelled,
+            crate::source_runtime::content::ContentError::Io(error) => Self::from(error),
+            error => Self::Content(error),
+        }
+    }
 }
 
 impl From<std::io::Error> for CollectionPlanError {
@@ -55,6 +69,9 @@ pub struct ImageCollectionPlan {
     probes: Vec<ImageFilesystemProbe>,
     shared_members: Vec<bool>,
     snapshot: SourceSnapshot,
+    source_snapshots: Vec<SourceSnapshot>,
+    content: super::collection_content::CollectionContent,
+    md_members: Vec<crate::mdraid::MdRaidMemberPlan>,
     _memory: std::sync::Arc<super::collection_memory::PlanMemory>,
 }
 
@@ -84,37 +101,13 @@ impl ImageCollectionPlan {
             }
             canonical.push(LvmDiscoverySource::new(path, source.source_kind.clone()));
         }
-        let snapshot = SourceSnapshot::capture_images(&canonical)?;
-        let mut probes = Vec::with_capacity(canonical.len());
-        let mut pv_infos = Vec::new();
-        let mut uuids = HashSet::new();
-        for source in &canonical {
-            check_cancel(cancel)?;
-            let factory = crate::source_runtime::open_factory_with_cancel(
-                &source.source_path,
-                &source.source_kind,
-                cancel,
-            )?;
-            let mut reader = factory.open_reader_with_cancel(cancel)?;
-            let probe = datasource_service::detect_image_filesystem(&mut reader)?;
-            drop(reader);
-            for (_, candidate) in expansion::collect_lvm_candidates(&probe) {
-                let info = discovery::inspect_lvm_pv_candidate(
-                    &candidate,
-                    &source.source_path,
-                    &source.source_kind,
-                )
-                .map_err(CollectionPlanError::PhysicalVolume)?;
-                if !uuids.insert(source_identity::normalize_lvm_uuid_for_match(
-                    &info.label.pv_uuid,
-                )) {
-                    return Err(CollectionPlanError::DuplicateIdentity);
-                }
-                pv_infos.push(info);
-            }
-            factory.validate_snapshot()?;
-            probes.push(probe);
-        }
+        let source_snapshots = canonical
+            .iter()
+            .map(|source| SourceSnapshot::capture_images(std::slice::from_ref(source)))
+            .collect::<Result<Vec<_>, _>>()?;
+        let snapshot = SourceSnapshot::merged(&source_snapshots);
+        let content = super::collection_content::CollectionContent::capture(&canonical, cancel)?;
+        let (mut probes, pv_infos, mut md_members) = inspect_sources(&canonical, &content, cancel)?;
         let groups = discovery::collect_metadata_groups(&pv_infos)?;
         let keys = pv_infos
             .iter()
@@ -126,22 +119,98 @@ impl ImageCollectionPlan {
         let mut shared_members = vec![false; canonical.len()];
         for group in complete {
             check_cancel(cancel)?;
-            expand_group(&canonical, &mut probes, &mut shared_members, group)?;
+            md_members.extend(expand_group(
+                &canonical,
+                &mut probes,
+                &mut shared_members,
+                group,
+                &content,
+            )?);
         }
         for probe in &mut probes {
             probe.warnings.extend(warnings.iter().cloned());
         }
         snapshot.validate()?;
-        drop(groups);
-        drop(pv_infos);
-        let memory = super::collection_memory::retain(preparation, &canonical, &probes, &snapshot)?;
+        let memory = super::collection_memory::retain(
+            preparation,
+            &canonical,
+            &probes,
+            &snapshot,
+            &md_members,
+        )?;
         Ok(Self {
             sources: canonical,
             probes,
             shared_members,
             snapshot,
+            source_snapshots,
+            content,
+            md_members,
             _memory: memory,
         })
+    }
+
+    pub fn verify_content(&self, cancel: &AtomicBool) -> Result<(), CollectionPlanError> {
+        check_cancel(cancel)?;
+        self.validate_snapshot()?;
+        self.content.verify(cancel)?;
+        self.validate_snapshot()
+    }
+
+    pub fn content_fingerprint(&self) -> String {
+        self.content.fingerprint()
+    }
+
+    pub(crate) fn source_snapshot(
+        &self,
+        sources: &[LvmDiscoverySource],
+    ) -> Result<SourceSnapshot, CollectionPlanError> {
+        let snapshots = sources
+            .iter()
+            .map(|source| {
+                self.sources
+                    .iter()
+                    .position(|known| {
+                        known.source_path == source.source_path
+                            && known.source_kind == source.source_kind
+                    })
+                    .map(|index| self.source_snapshots[index].clone())
+                    .ok_or(CollectionPlanError::MemberMismatch)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        Ok(SourceSnapshot::merged(&snapshots))
+    }
+
+    pub fn source_content(
+        &self,
+        path: &Path,
+        kind: &domain::DataSourceKind,
+    ) -> Result<&crate::source_runtime::content::SourceContent, CollectionPlanError> {
+        self.content
+            .get(path, kind)
+            .map(|identity| identity.as_ref())
+    }
+
+    pub fn verified_factory(
+        &self,
+        path: &Path,
+        kind: &domain::DataSourceKind,
+        cancel: &AtomicBool,
+    ) -> Result<evidence_core::SharedReaderFactory, CollectionPlanError> {
+        self.validate_snapshot()?;
+        self.content.factory(path, kind, cancel)
+    }
+
+    pub(crate) fn md_members(&self) -> &[crate::mdraid::MdRaidMemberPlan] {
+        &self.md_members
+    }
+    pub(super) fn contains_candidate(
+        &self,
+        candidate: &datasource_service::ImageFilesystemCandidate,
+    ) -> bool {
+        self.probes
+            .iter()
+            .any(|probe| probe.candidates.contains(candidate))
     }
 
     pub fn validate_snapshot(&self) -> Result<(), CollectionPlanError> {
@@ -171,12 +240,57 @@ impl ImageCollectionPlan {
     }
 }
 
+type SourceDiscovery = (
+    Vec<ImageFilesystemProbe>,
+    Vec<super::model::LvmPvDiscoveryInfo>,
+    Vec<crate::mdraid::MdRaidMemberPlan>,
+);
+
+fn inspect_sources(
+    canonical: &[LvmDiscoverySource],
+    content: &super::collection_content::CollectionContent,
+    cancel: &AtomicBool,
+) -> Result<SourceDiscovery, CollectionPlanError> {
+    let mut probes = Vec::with_capacity(canonical.len());
+    let mut pv_infos = Vec::new();
+    let mut md_members = Vec::new();
+    let mut uuids = HashSet::new();
+    for source in canonical {
+        check_cancel(cancel)?;
+        let factory = content.factory(&source.source_path, &source.source_kind, cancel)?;
+        let mut reader = factory.open_reader_with_cancel(cancel)?;
+        let probe = datasource_service::detect_image_filesystem(&mut reader)?;
+        md_members.extend(crate::mdraid::discovery::direct_members(
+            source, &probe, &factory,
+        )?);
+        for (_, candidate) in expansion::collect_lvm_candidates(&probe) {
+            let info = discovery::inspect_lvm_pv_reader(
+                &candidate,
+                &source.source_path,
+                &source.source_kind,
+                &mut *reader,
+            )
+            .map_err(CollectionPlanError::PhysicalVolume)?;
+            if !uuids.insert(source_identity::normalize_lvm_uuid_for_match(
+                &info.label.pv_uuid,
+            )) {
+                return Err(CollectionPlanError::DuplicateIdentity);
+            }
+            pv_infos.push(info);
+        }
+        factory.validate_snapshot()?;
+        probes.push(probe);
+    }
+    Ok((probes, pv_infos, md_members))
+}
+
 fn expand_group(
     sources: &[LvmDiscoverySource],
     probes: &mut [ImageFilesystemProbe],
     shared: &mut [bool],
     group: Vec<datasource_service::LvmPhysicalVolumeSource>,
-) -> Result<(), CollectionPlanError> {
+    content: &super::collection_content::CollectionContent,
+) -> Result<Vec<crate::mdraid::MdRaidMemberPlan>, CollectionPlanError> {
     let members = sources
         .iter()
         .enumerate()
@@ -202,11 +316,13 @@ fn expand_group(
         &source.source_kind,
         group.clone(),
         &mut state,
+        Some(content),
     )?;
+    let md_members = std::mem::take(&mut state.md_members);
     let expanded = !state.remove_indices.is_empty();
     expansion::apply_expansion_results(&mut probes[owner], state);
     if !expanded {
-        return Ok(());
+        return Ok(md_members);
     }
     for member in members {
         if member == owner {
@@ -227,10 +343,10 @@ fn expand_group(
         });
         shared[member] = true;
     }
-    Ok(())
+    Ok(md_members)
 }
 
-fn check_cancel(cancel: &AtomicBool) -> Result<(), CollectionPlanError> {
+pub(super) fn check_cancel(cancel: &AtomicBool) -> Result<(), CollectionPlanError> {
     if cancel.load(Ordering::Acquire) {
         return Err(CollectionPlanError::Cancelled);
     }

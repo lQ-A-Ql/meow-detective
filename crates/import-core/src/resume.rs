@@ -4,6 +4,7 @@ use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo;
 
 const SOURCE_VIEW_KEY: &str = "import:physical-member-metadata:v1";
+const COLLECTION_VIEW_KEY: &str = "import:collection-logical-content:v1";
 
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum ResumeIdentityError {
@@ -63,6 +64,22 @@ pub(crate) fn bind_source_view(
         (None, _) if has_work || !initialize_view => Err(ResumeIdentityError::LiveDevice),
         (None, None) => Ok(()),
         (None, Some(_)) => Err(ResumeIdentityError::Changed),
+    }
+}
+
+pub(crate) fn bind_collection_view(
+    conn: &rusqlite::Connection,
+    fingerprint: Option<&str>,
+    initialize_view: bool,
+) -> Result<(), ResumeIdentityError> {
+    let repo = SourceMetaRepo::new(conn);
+    let prior = repo.read(COLLECTION_VIEW_KEY)?;
+    match (fingerprint, prior) {
+        (Some(identity), Some(expected)) if identity == expected => Ok(()),
+        (Some(identity), None) if initialize_view => Ok(repo.write(COLLECTION_VIEW_KEY, identity)?),
+        (None, None) => Ok(()),
+        (Some(_), None) => Err(ResumeIdentityError::Unbound),
+        _ => Err(ResumeIdentityError::Changed),
     }
 }
 

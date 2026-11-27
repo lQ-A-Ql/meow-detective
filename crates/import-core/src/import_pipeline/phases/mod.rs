@@ -5,6 +5,7 @@ mod finalize;
 mod locked;
 mod logical_enumeration;
 mod merge;
+mod partition_factory;
 mod probe;
 mod register;
 

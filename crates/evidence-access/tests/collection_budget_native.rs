@@ -39,6 +39,19 @@ fn native_shared_collection_plan_releases_its_single_reservation_after_the_last_
     borrowed
         .member_probe(0, &sources[0].source_path, &DataSourceKind::Raw)
         .unwrap();
+    let factory = borrowed
+        .verified_factory(
+            &sources[0].source_path,
+            &DataSourceKind::Raw,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    let mut reader = factory.open_reader().unwrap();
     drop(borrowed);
+    drop(factory);
+    assert!(global_pool().snapshot().0.bytes > 0);
+    let mut byte = [0];
+    std::io::Read::read_exact(&mut reader, &mut byte).unwrap();
+    drop(reader);
     assert_eq!(global_pool().snapshot().0, Resources::default());
 }

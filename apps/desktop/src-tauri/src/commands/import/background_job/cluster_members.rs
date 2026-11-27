@@ -53,6 +53,9 @@ pub(super) fn import_evidence_set_members(
         }
     };
     let total_members = configs.len() as u32;
+    let collection_plan = configs
+        .first()
+        .and_then(|config| config.collection_plan.clone());
     if total_members == 0 {
         return Ok(Some(EvidenceSetImportSummary::new()));
     }
@@ -95,6 +98,7 @@ pub(super) fn import_evidence_set_members(
         task_manager,
     };
     let mut summary = run_member_workers(&coordinator, scheduling, work)?;
+    summary.collection_plan = collection_plan;
     summary.member_messages.sort();
     if cancel_token.load(Ordering::Acquire) {
         cancel_evidence_set_members(connection, job_repo, job, app, &summary);

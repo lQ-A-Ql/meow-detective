@@ -46,6 +46,16 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         })
         .collect::<Vec<_>>();
     let plans = cluster_service::discover_linux_evidence_set_mdraid(&members).unwrap();
+    let shared = evidence_access::datasource_service::ImageCollectionPlan::prepare(
+        &paths
+            .iter()
+            .map(|path| {
+                evidence_access::datasource_service::LvmDiscoverySource::new(path, kind.clone())
+            })
+            .collect::<Vec<_>>(),
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .unwrap();
     let case = case_service::create_case(workspace.path(), "Native MD filesystem", None).unwrap();
     let connection = case.connection().unwrap();
     let source = cluster_service::materialize_mdraid_array(
@@ -63,6 +73,15 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     )
     .unwrap();
     assert_eq!(source.id, repeated.id);
+    let from_collection = cluster_service::materialize_linux_evidence_set_mdraid(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &shared,
+    )
+    .unwrap();
+    assert_eq!(from_collection.len(), 1);
+    assert_eq!(source.id, from_collection[0].id);
     let source_connection = source_db::open_source_db(&case.case_root, &source.id).unwrap();
     let native =
         source_db::open_registered_fjall_source_read_only(&case.case_root, &source.id).unwrap();

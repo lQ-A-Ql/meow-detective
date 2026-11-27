@@ -45,6 +45,7 @@ pub fn expand_lvm_pool_candidates(
             source_kind,
             pv_sources,
             &mut state,
+            None,
         ) {
             probe
                 .warnings
@@ -74,8 +75,9 @@ pub(super) fn expand_discovery_group(
     source_kind: &DataSourceKind,
     pv_sources: Vec<LvmPhysicalVolumeSource>,
     state: &mut LvmExpansionState,
+    content: Option<&super::collection_content::CollectionContent>,
 ) -> Result<(), fs_lvm::LvmError> {
-    let (pool, seed_offset) = discover_lvm_pool(&pv_sources, source_kind)?;
+    let (pool, seed_offset) = discover_lvm_pool(&pv_sources, source_kind, content)?;
     let expanded =
         expanded_pool_sources(&pool, &pv_sources, source_path, source_kind, seed_offset)?;
     let representative = representative_lvm_candidate(
@@ -131,6 +133,7 @@ pub(super) fn expand_discovery_group(
 fn discover_lvm_pool(
     pv_sources: &[LvmPhysicalVolumeSource],
     default_source_kind: &DataSourceKind,
+    content: Option<&super::collection_content::CollectionContent>,
 ) -> Result<(fs_lvm::LvmPool, u64), fs_lvm::LvmError> {
     let pv_offsets = pv_sources
         .iter()
@@ -144,7 +147,17 @@ fn discover_lvm_pool(
             .source_kind
             .as_ref()
             .unwrap_or(default_source_kind);
-        readers.push(crate::source_runtime::open_factory(reader_path, reader_kind)?.open_reader()?);
+        let factory = match content {
+            Some(content) => content
+                .factory(
+                    reader_path,
+                    reader_kind,
+                    &std::sync::atomic::AtomicBool::new(false),
+                )
+                .map_err(std::io::Error::other)?,
+            None => crate::source_runtime::open_factory(reader_path, reader_kind)?,
+        };
+        readers.push(factory.open_reader()?);
     }
     Ok((fs_lvm::LvmPool::discover(readers, pv_offsets)?, seed_offset))
 }
@@ -265,6 +278,17 @@ fn append_readable_volume_candidates(
     let vg = pool.volume_group();
     for (lv_idx, lv_info) in readable_volumes {
         let mut lv_reader = pool.open_volume_reader(lv_idx)?;
+        if let Some(superblock) = super::mdraid::probe_nested_mdraid(&mut *lv_reader) {
+            probe.warnings.push(format!(
+                "LVM expand: nested MD RAID candidate detected; {}; {}",
+                lvm_lv_diagnostic_context(vg, &lv_info, &expanded.sources),
+                super::mdraid::format_mdraid_candidate(&superblock)
+            ));
+            state
+                .md_members
+                .push(nested_md_member(superblock, vg, &lv_info, expanded));
+            continue;
+        }
 
         let filesystem = read_boot_filesystem(&mut *lv_reader, 0);
         match filesystem {
@@ -312,6 +336,31 @@ fn append_readable_volume_candidates(
         }
     }
     Ok(())
+}
+
+fn nested_md_member(
+    superblock: fs_lvm::mdraid::MdRaidSuperblock,
+    vg: &fs_lvm::VolumeGroup,
+    volume: &fs_lvm::LvInfo,
+    expanded: &ExpandedPoolSources,
+) -> crate::mdraid::MdRaidMemberPlan {
+    crate::mdraid::MdRaidMemberPlan {
+        superblock,
+        origin: crate::mdraid::MdRaidMemberOrigin::Lvm {
+            vg_name: vg.name.clone(),
+            vg_uuid: vg.id.clone(),
+            lv_name: volume.name.clone(),
+            lv_uuid: volume.uuid.clone(),
+            identity: LvmLogicalVolumeIdentity {
+                vg_uuid: vg.id.clone(),
+                vg_name: vg.name.clone(),
+                lv_uuid: volume.uuid.clone(),
+                lv_name: volume.name.clone(),
+                pv_offsets: expanded.offsets.clone(),
+                pv_sources: expanded.sources.clone(),
+            },
+        },
+    }
 }
 
 fn build_logical_volume_candidate(

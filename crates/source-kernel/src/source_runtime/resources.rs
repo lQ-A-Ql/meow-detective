@@ -231,14 +231,15 @@ impl EvidenceReader for BudgetedReader {
 }
 pub fn raw_parse(cancel: Option<&AtomicBool>) -> io::Result<ResourcePermit> {
     global_pool()
-        .acquire(
-            Resources {
-                bytes: 384 * MIB,
-                metadata: 256 * MIB,
-                handles: 32,
-                ..Default::default()
-            },
-            cancel,
-        )
+        .acquire(raw_parse_request(), cancel)
         .map_err(ResourceError::into_io)
+}
+
+pub fn raw_parse_request() -> Resources {
+    Resources {
+        bytes: 384 * MIB,
+        metadata: 256 * MIB,
+        handles: 32,
+        ..Default::default()
+    }
 }

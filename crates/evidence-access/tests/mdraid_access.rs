@@ -39,6 +39,24 @@ fn native_md_ext4_uses_shared_filesystem_discovery_and_bounded_reads() {
         .collect::<Vec<_>>();
     let plans = discover_linux_evidence_set_mdraid(&members).unwrap();
     assert_eq!(plans.len(), 1);
+    let collection = evidence_access::datasource_service::ImageCollectionPlan::prepare(
+        &paths
+            .iter()
+            .map(|path| {
+                evidence_access::datasource_service::LvmDiscoverySource::new(path, kind.clone())
+            })
+            .collect::<Vec<_>>(),
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(
+        plans,
+        evidence_access::mdraid::discover_mdraid_from_collection(
+            &collection,
+            &std::sync::atomic::AtomicBool::new(false)
+        )
+        .unwrap()
+    );
     let mut changed_plan = plans[0].clone();
     changed_plan.layout += 1;
     assert!(open_mdraid_reader(&changed_plan).is_err());
@@ -144,6 +162,24 @@ fn native_lvm_members_include_a_pv_without_metadata_and_preserve_file_bytes() {
         .collect::<Vec<_>>();
     let plans = discover_linux_evidence_set_mdraid(&members).unwrap();
     assert_eq!(plans.len(), 1);
+    let collection = evidence_access::datasource_service::ImageCollectionPlan::prepare(
+        &paths
+            .iter()
+            .map(|path| {
+                evidence_access::datasource_service::LvmDiscoverySource::new(path, kind.clone())
+            })
+            .collect::<Vec<_>>(),
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(
+        plans,
+        evidence_access::mdraid::discover_mdraid_from_collection(
+            &collection,
+            &std::sync::atomic::AtomicBool::new(false)
+        )
+        .unwrap()
+    );
     assert_eq!(plans[0].members.len(), 2);
     assert!(plans[0].members.iter().all(|member| matches!(
         &member.origin,
@@ -166,4 +202,31 @@ fn native_lvm_members_include_a_pv_without_metadata_and_preserve_file_bytes() {
             .unwrap(),
         expected
     );
+    drop(filesystem);
+    let modified = paths[0].metadata().unwrap().modified().unwrap();
+    let mut changed = File::options()
+        .read(true)
+        .write(true)
+        .open(&paths[0])
+        .unwrap();
+    changed.seek(SeekFrom::Start(512)).unwrap();
+    let mut byte = [0];
+    changed.read_exact(&mut byte).unwrap();
+    changed.seek(SeekFrom::Start(512)).unwrap();
+    changed.write_all(&[byte[0] ^ 0x80]).unwrap();
+    changed.sync_all().unwrap();
+    changed
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    drop(changed);
+    collection.validate_snapshot().unwrap();
+    assert_eq!(
+        plans,
+        evidence_access::mdraid::discover_mdraid_from_collection(
+            &collection,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap()
+    );
+    assert!(open_mdraid_reader(&plans[0]).is_err());
 }

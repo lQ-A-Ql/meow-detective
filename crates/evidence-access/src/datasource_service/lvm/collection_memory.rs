@@ -30,8 +30,35 @@ pub(super) fn retain(
     sources: &[LvmDiscoverySource],
     probes: &[ImageFilesystemProbe],
     snapshot: &SourceSnapshot,
+    md_members: &[crate::mdraid::MdRaidMemberPlan],
 ) -> std::io::Result<Arc<PlanMemory>> {
     let mut bytes = snapshot.metadata_bytes() + 4096;
+    bytes += md_members
+        .iter()
+        .map(|member| {
+            (std::mem::size_of_val(member)
+                + member.superblock.dev_roles.capacity() * 2
+                + member.superblock.name.capacity()) as u64
+                + match &member.origin {
+                    crate::mdraid::MdRaidMemberOrigin::Direct { source_path, .. } => {
+                        source_path.capacity() as u64
+                    }
+                    crate::mdraid::MdRaidMemberOrigin::Lvm {
+                        vg_name,
+                        vg_uuid,
+                        lv_name,
+                        lv_uuid,
+                        identity,
+                    } => {
+                        (vg_name.capacity()
+                            + vg_uuid.capacity()
+                            + lv_name.capacity()
+                            + lv_uuid.capacity()) as u64
+                            + identity_bytes(Some(identity))
+                    }
+                }
+        })
+        .sum::<u64>();
     bytes += sources
         .iter()
         .map(|source| std::mem::size_of_val(source) as u64 + source.source_path.capacity() as u64)

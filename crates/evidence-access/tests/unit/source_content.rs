@@ -1,6 +1,8 @@
 use super::*;
+use crate::datasource_service;
 use std::fs::{File, FileTimes, OpenOptions};
-use std::io::Write;
+use std::io::{Read, Seek, Write};
+use std::sync::Arc;
 
 #[test]
 fn verified_content_checks_partial_reads_final_chunk_seek_and_retains_verified_bytes() {
@@ -15,12 +17,7 @@ fn verified_content_checks_partial_reads_final_chunk_seek_and_retains_verified_b
     expected.truncate(CONTENT_CHUNK_BYTES + 257);
     File::create(&path).unwrap().write_all(&expected).unwrap();
     let original_time = path.metadata().unwrap().modified().unwrap();
-    let content = hash_source(
-        path.to_str().unwrap(),
-        &DataSourceKind::Raw,
-        &AtomicBool::new(false),
-    )
-    .unwrap();
+    let content = capture(&path, &DataSourceKind::Raw, &AtomicBool::new(false)).unwrap();
     assert_eq!(content.chunk_sha256.len(), 2);
     assert_eq!(content.logical_size, expected.len() as u64);
     assert_eq!(
@@ -71,19 +68,10 @@ fn source_content_hashing_rejects_cancellation_and_accepts_empty_raw_images() {
     let path = workspace.path().join("empty.raw");
     File::create(&path).unwrap();
     assert!(matches!(
-        hash_source(
-            path.to_str().unwrap(),
-            &DataSourceKind::Raw,
-            &AtomicBool::new(true)
-        ),
-        Err(MdRaidPlanError::Cancelled),
+        capture(&path, &DataSourceKind::Raw, &AtomicBool::new(true)),
+        Err(ContentError::Cancelled),
     ));
-    let content = hash_source(
-        path.to_str().unwrap(),
-        &DataSourceKind::Raw,
-        &AtomicBool::new(false),
-    )
-    .unwrap();
+    let content = capture(&path, &DataSourceKind::Raw, &AtomicBool::new(false)).unwrap();
     assert_eq!(content.logical_size, 0);
     assert_eq!(content.chunk_sha256, Vec::<String>::new());
     assert_eq!(
@@ -96,12 +84,7 @@ fn source_content_hashing_rejects_cancellation_and_accepts_empty_raw_images() {
 fn e01_content_identity_and_verified_reads_use_decompressed_logical_bytes() {
     let path = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../testdata/fixtures/public-small/e01/tiny.E01");
-    let content = hash_source(
-        path.to_str().unwrap(),
-        &DataSourceKind::E01,
-        &AtomicBool::new(false),
-    )
-    .unwrap();
+    let content = capture(&path, &DataSourceKind::E01, &AtomicBool::new(false)).unwrap();
     let mut independent = image_e01::E01Reader::open(&path).unwrap();
     let expected = crate::hash_service::HashService::sha256_reader(&mut independent).unwrap();
     assert_eq!(content.logical_sha256, expected);

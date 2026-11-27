@@ -44,6 +44,26 @@ fn metadata_bound_work_reopens_only_with_the_same_member_view() {
 }
 
 #[test]
+fn collection_content_identity_remains_bound_across_resume() {
+    let (_temp, conn, _path) = setup();
+    super::bind_collection_view(&conn, Some("content-a"), true).unwrap();
+    super::bind_collection_view(&conn, Some("content-a"), false).unwrap();
+    assert!(matches!(
+        super::bind_collection_view(&conn, Some("content-b"), false),
+        Err(ResumeIdentityError::Changed)
+    ));
+    assert!(matches!(
+        super::bind_collection_view(&conn, None, false),
+        Err(ResumeIdentityError::Changed)
+    ));
+    let (_temp, conn, _path) = setup();
+    assert!(matches!(
+        super::bind_collection_view(&conn, Some("content-a"), false),
+        Err(ResumeIdentityError::Unbound)
+    ));
+}
+
+#[test]
 fn unbound_existing_staging_is_never_adopted_as_a_verified_snapshot() {
     let (temp, conn, path) = setup();
     let staging = crate::staging::staging_dir(temp.path(), "source");

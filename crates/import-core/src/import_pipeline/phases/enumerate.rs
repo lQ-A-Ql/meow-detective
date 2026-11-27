@@ -2,6 +2,7 @@ use std::{sync::Arc, time::Instant};
 
 use transport::CommandError;
 
+use super::partition_factory::partition_factory;
 use crate::staging;
 use evidence_access::{datasource_service, file_service};
 
@@ -147,7 +148,7 @@ fn build_pending_partition_work(
             partition,
             candidates,
             ctx.profiler.clone(),
-            ctx.runtime.as_ref().map(|runtime| runtime.factory()),
+            partition_factory(ctx, candidates, partition.index)?,
         );
         match work {
             Ok(work) => pending.push(work),

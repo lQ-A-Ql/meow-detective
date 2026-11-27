@@ -4,6 +4,7 @@
 //! `source-kernel::source_runtime`; this module owns the reader factory and the
 //! per-source runtime identities built on top of it.
 
+pub mod content;
 pub mod factory;
 pub mod identity;
 pub mod nested_range;

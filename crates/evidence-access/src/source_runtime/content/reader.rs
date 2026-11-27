@@ -6,21 +6,22 @@ use std::{
 use evidence_core::{EvidenceReader, ReaderInfo};
 use sha2::{Digest, Sha256};
 
-use super::{MdRaidSourceContent, CONTENT_CHUNK_BYTES};
+use super::{SourceContent, CONTENT_CHUNK_BYTES};
 
-pub(super) struct ContentVerifiedReader {
+pub(crate) struct ContentVerifiedReader {
     source: Box<dyn EvidenceReader>,
-    identity: Arc<MdRaidSourceContent>,
+    identity: Arc<SourceContent>,
     position: u64,
     cached_chunk: Option<u64>,
     bytes: Vec<u8>,
 }
 
 impl ContentVerifiedReader {
-    pub(super) fn new(
+    pub(crate) fn new(
         source: Box<dyn EvidenceReader>,
-        identity: Arc<MdRaidSourceContent>,
+        identity: Arc<SourceContent>,
     ) -> io::Result<Self> {
+        identity.validate().map_err(io::Error::other)?;
         if source.info().size != identity.logical_size {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
@@ -98,6 +99,13 @@ impl Seek for ContentVerifiedReader {
 }
 
 impl EvidenceReader for ContentVerifiedReader {
+    fn reserve_work(
+        &self,
+        bytes: u64,
+    ) -> io::Result<Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>> {
+        self.source.reserve_work(bytes)
+    }
+
     fn info(&self) -> &ReaderInfo {
         self.source.info()
     }

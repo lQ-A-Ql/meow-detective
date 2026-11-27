@@ -5,6 +5,24 @@ use std::{io, path::PathBuf, time::SystemTime};
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceSnapshot(Vec<(PathBuf, u64, SystemTime, Option<SystemTime>)>);
 impl SourceSnapshot {
+    pub fn contains(&self, path: &std::path::Path) -> bool {
+        self.0.iter().any(|(known, ..)| known == path)
+    }
+    pub fn merged(snapshots: &[Self]) -> Self {
+        let mut members = std::collections::BTreeMap::new();
+        for snapshot in snapshots {
+            for (path, length, modified, created) in &snapshot.0 {
+                members.insert(path.clone(), (*length, *modified, *created));
+            }
+        }
+        Self(
+            members
+                .into_iter()
+                .map(|(path, (length, modified, created))| (path, length, modified, created))
+                .collect(),
+        )
+    }
+
     pub fn capture_images(
         sources: &[crate::datasource_service::LvmDiscoverySource],
     ) -> io::Result<Self> {

@@ -89,11 +89,14 @@ fn materialize_nested_mdraid_catalogs(
             "Materializing nested MD RAID catalog",
         );
     }
+    let Some(collection) = summary.collection_plan.as_ref() else {
+        return MdRaidOutcome::Failed(CommandError::internal("Collection image plan is missing"));
+    };
     match cluster_service::materialize_linux_evidence_set_mdraid_with_cancel(
         connection,
         &job.case_root,
         &job.case_id,
-        &job.plan,
+        collection,
         cancel_token,
     ) {
         Ok(sources) => {

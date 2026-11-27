@@ -123,7 +123,7 @@ fn publish_outcome(
         .collection_plan
         .as_ref()
         .map_or(Ok(()), |plan| {
-            plan.validate_snapshot()
+            plan.verify_content(ctx.options.cancel_token)
                 .map_err(CommandError::from_typed_service_error)
         })
         .and_then(|()| validate_current(ctx.runtime.as_deref()));
@@ -170,6 +170,13 @@ pub(super) fn prepare_runtime(
                     &ds.id,
                 )
                 .map(|factory| std::sync::Arc::new(factory) as evidence_core::SharedReaderFactory)
+            } else if let Some(plan) = &ctx.import_config.collection_plan {
+                plan.verified_factory(
+                    &ctx.import_config.source_path,
+                    &ctx.import_config.kind,
+                    ctx.options.cancel_token,
+                )
+                .map_err(std::io::Error::other)
             } else {
                 evidence_access::source_runtime::factory::open_factory_for_case(
                     &ctx.import_config.source_path,
@@ -189,6 +196,16 @@ pub(super) fn prepare_runtime(
             &ds.id,
             factory.as_ref(),
             ctx.case_root,
+            initialize_view,
+        )
+        .map_err(CommandError::from_typed_service_error)?;
+        crate::resume::bind_collection_view(
+            ctx.source_connection()?,
+            ctx.import_config
+                .collection_plan
+                .as_ref()
+                .map(|plan| plan.content_fingerprint())
+                .as_deref(),
             initialize_view,
         )
         .map_err(CommandError::from_typed_service_error)?;

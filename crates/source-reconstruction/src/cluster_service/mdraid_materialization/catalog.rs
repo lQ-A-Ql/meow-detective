@@ -12,7 +12,19 @@ pub(super) fn enumerate_mdraid_catalog(
     source_conn: &rusqlite::Connection,
     cancel: &AtomicBool,
 ) -> Result<(), MdRaidPlanError> {
-    let workers = source_kernel::resource_budget::default_cpu_budget().clamp(1, 4);
+    let pool = source_kernel::resource_budget::global_pool();
+    let used = pool.snapshot().0;
+    let parse = source_kernel::source_runtime::resources::raw_parse_request();
+    let metadata_workers = pool.limits().metadata.saturating_sub(used.metadata) / parse.metadata;
+    let memory_workers = pool
+        .limits()
+        .bytes
+        .saturating_sub(used.bytes)
+        .saturating_sub(source_kernel::resource_budget::ENUMERATION_BYTES)
+        / parse.bytes;
+    let workers = source_kernel::resource_budget::default_cpu_budget()
+        .clamp(1, 4)
+        .min(metadata_workers.min(memory_workers).max(1) as usize);
     let _budget = acquire_budget(source, workers, cancel)?;
     let probe = evidence_access::mdraid::probe_mdraid_filesystems(&source.source_path)?;
     if !probe

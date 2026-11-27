@@ -93,6 +93,7 @@ fn native_cross_pv_view_has_one_stable_owner_and_matches_the_kernel_digest() {
     );
     sources.reverse();
     let reversed = ImageCollectionPlan::prepare(&sources, &cancel).unwrap();
+    assert_eq!(plan.content_fingerprint(), reversed.content_fingerprint());
     assert!(reversed
         .member_probe(0, &sources[0].source_path, &sources[0].source_kind)
         .unwrap()
@@ -164,5 +165,72 @@ fn collection_admission_propagates_thin_transaction_failure() {
                 actual: 2
             }
         )),
+    ));
+}
+
+#[test]
+fn collection_content_detects_replacement_with_unchanged_length_and_timestamps() {
+    use std::io::{Seek, SeekFrom, Write};
+    let workspace = tempfile::tempdir().unwrap();
+    let sources = sources(workspace.path());
+    let cancel = AtomicBool::new(false);
+    let plan = std::sync::Arc::new(ImageCollectionPlan::prepare(&sources, &cancel).unwrap());
+    plan.verify_content(&cancel).unwrap();
+    let probe = plan
+        .member_probe(0, &sources[0].source_path, &DataSourceKind::Raw)
+        .unwrap();
+    let factory = plan.logical_volume_factory(&probe.candidates[0]).unwrap();
+    let modified = sources[1]
+        .source_path
+        .metadata()
+        .unwrap()
+        .modified()
+        .unwrap();
+    let mut file = File::options()
+        .read(true)
+        .write(true)
+        .open(&sources[1].source_path)
+        .unwrap();
+    let changed_offset = 2 * 1024 * 1024;
+    file.seek(SeekFrom::Start(changed_offset)).unwrap();
+    let mut byte = [0];
+    file.read_exact(&mut byte).unwrap();
+    file.seek(SeekFrom::Start(changed_offset)).unwrap();
+    file.write_all(&[byte[0] ^ 0x80]).unwrap();
+    file.sync_all().unwrap();
+    file.set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    drop(file);
+    plan.validate_snapshot().unwrap();
+    assert!(matches!(
+        plan.verify_content(&cancel),
+        Err(CollectionPlanError::Content(
+            evidence_access::source_runtime::content::ContentError::Changed
+        ))
+    ));
+    let mut direct = plan
+        .verified_factory(&sources[1].source_path, &DataSourceKind::Raw, &cancel)
+        .unwrap()
+        .open_reader()
+        .unwrap();
+    direct.seek(SeekFrom::Start(changed_offset)).unwrap();
+    assert!(direct.read_exact(&mut byte).is_err());
+    let mut logical = factory.open_reader().unwrap();
+    let mut buffer = vec![0; 1024 * 1024];
+    let mut rejected = false;
+    loop {
+        match logical.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(_) => {}
+            Err(_) => {
+                rejected = true;
+                break;
+            }
+        }
+    }
+    assert!(rejected);
+    assert!(matches!(
+        plan.verify_content(&AtomicBool::new(true)),
+        Err(CollectionPlanError::Cancelled)
     ));
 }

@@ -197,7 +197,16 @@ pub(super) fn inspect_lvm_pv_candidate(
             e
         )
     })?;
-    let label = fs_lvm::label::parse_pv_label(&mut reader, candidate.offset).map_err(|e| {
+    inspect_lvm_pv_reader(candidate, source_path, source_kind, &mut *reader)
+}
+
+pub(super) fn inspect_lvm_pv_reader(
+    candidate: &ImageFilesystemCandidate,
+    source_path: &Path,
+    source_kind: &DataSourceKind,
+    reader: &mut dyn evidence_core::EvidenceReader,
+) -> std::result::Result<LvmPvDiscoveryInfo, String> {
+    let label = fs_lvm::label::parse_pv_label(reader, candidate.offset).map_err(|e| {
         format!(
             "LVM expand: cannot parse PV label for source='{}' offset={}: {}",
             lvm_source_fingerprint(&source_path.to_string_lossy()),
@@ -210,7 +219,7 @@ pub(super) fn inspect_lvm_pv_candidate(
     } else {
         Some(
             fs_lvm::metadata::parse_metadata_from_regions(
-                &mut reader,
+                reader,
                 &label.metadata_areas,
                 candidate.offset,
             )
