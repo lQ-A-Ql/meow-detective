@@ -64,6 +64,13 @@ fn private_collection_native_identity_inventory() {
 }
 
 fn exercise(variable: &str, members: usize) {
+    let _logging = tracing::subscriber::set_default(
+        tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::io::stderr)
+            .with_max_level(tracing::Level::INFO)
+            .finish(),
+    );
     let root = PathBuf::from(std::env::var_os(variable).expect("set the private collection root"));
     let input =
         cluster_service::plan_linux_evidence_set_import(root, Some("content-bound-plan".into()))
@@ -92,6 +99,7 @@ fn exercise(variable: &str, members: usize) {
         members,
         started.elapsed().as_millis()
     );
+    let discovery_started = Instant::now();
     let arrays = mdraid::discover_mdraid_from_collection(&plan, &cancel).unwrap();
     assert_eq!(
         arrays,
@@ -109,6 +117,12 @@ fn exercise(variable: &str, members: usize) {
         let mut header = [0; 4096];
         reader.read_exact(&mut header).unwrap();
     }
+    eprintln!(
+        "private discovery complete: elapsed_ms={} arrays={}",
+        discovery_started.elapsed().as_millis(),
+        arrays.len()
+    );
+    let ranges_started = Instant::now();
     for source in &sources {
         let content = plan
             .source_content(&source.source_path, &source.source_kind)
@@ -139,7 +153,16 @@ fn exercise(variable: &str, members: usize) {
             assert_eq!(actual, expected);
         }
     }
+    eprintln!(
+        "private representative ranges complete: elapsed_ms={}",
+        ranges_started.elapsed().as_millis()
+    );
+    let verification_started = Instant::now();
     plan.verify_content(&cancel).unwrap();
+    eprintln!(
+        "private full verification complete: elapsed_ms={}",
+        verification_started.elapsed().as_millis()
+    );
     eprintln!(
         "private shared plan verified: members={} arrays={} elapsed_ms={}",
         members,
