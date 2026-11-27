@@ -8,8 +8,7 @@ use std::{
 
 use domain::{CaseId, DataSource, DataSourceId};
 use persistence_sqlite::repositories::{
-    catalog_publication_repo::CatalogPublicationRepo, ceph_rbd_lineage_repo::CephRbdReplicaRecord,
-    datasource_repo::DataSourceRepo,
+    ceph_rbd_lineage_repo::CephRbdReplicaRecord, datasource_repo::DataSourceRepo,
 };
 
 use super::{
@@ -18,9 +17,8 @@ use super::{
     derived_data_source_id, DerivedSourceError, DerivedSourceResult, MaterializedRbdSource,
 };
 use crate::derived_source_service::finalizer::{
-    begin_catalog_phase, catalog_phase_is_current, complete_catalog_phase, defer_catalog_phase,
-    fail_catalog_phase, finalize_derived_source, queue_post_catalog_phases,
-    start_catalog_heartbeat, PhaseClaim, ProcessingPhaseAttempt,
+    begin_catalog_phase, catalog_phase_is_current, defer_catalog_phase, fail_catalog_phase,
+    finalize_derived_source, start_catalog_heartbeat, PhaseClaim, ProcessingPhaseAttempt,
 };
 use ceph_reconstruction::ceph_reconstruction::{
     load_lineage_fingerprint, RadosReplicaSource, RbdImageDescriptor, RbdReplicaPolicy,
@@ -28,11 +26,13 @@ use ceph_reconstruction::ceph_reconstruction::{
 
 mod guards;
 mod logging;
+mod publication;
 mod recovery;
 mod registration;
 
 use guards::ensure_not_cancelled;
 use logging::log_finalization_report;
+use publication::{publication_request, RbdPublicationAttempt, RbdPublicationValidator};
 use recovery::reuse_existing_catalog;
 use registration::{build_data_source, register_derived_source, validate_existing_registration};
 
@@ -88,15 +88,6 @@ fn prepare_derived_source(
         .find(|source| source.id == *data_source_id);
     let (data_source, fingerprint) = match existing_source {
         Some(existing_source) => {
-            if let Some(ready) = reuse_existing_catalog(
-                context.case_conn,
-                context.case_root,
-                context.case_id,
-                data_source_id,
-            )? {
-                ensure_not_cancelled(context.cancel_token)?;
-                return Ok(PreparedDerivedSource::Ready(ready));
-            }
             let fingerprint = validate_existing_registration(
                 context.case_conn,
                 context.ceph_scope_id,
@@ -106,6 +97,15 @@ fn prepare_derived_source(
                 context.replica_records,
                 context.policy,
             )?;
+            if let Some(ready) = reuse_existing_catalog(
+                context.case_conn,
+                context.case_root,
+                context.case_id,
+                data_source_id,
+            )? {
+                ensure_not_cancelled(context.cancel_token)?;
+                return Ok(PreparedDerivedSource::Ready(ready));
+            }
             (existing_source, fingerprint)
         }
         None => {
@@ -182,6 +182,8 @@ fn run_catalog_materialization(
     }
     handle_catalog_result(
         context.case_conn,
+        context.case_root,
+        context.case_id,
         data_source,
         &data_source_id,
         &fingerprint,
@@ -191,20 +193,26 @@ fn run_catalog_materialization(
     )
 }
 
+#[allow(clippy::too_many_arguments)]
 fn handle_catalog_result(
     case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
     data_source: DataSource,
     data_source_id: &DataSourceId,
     fingerprint: &str,
     catalog_attempt: &ProcessingPhaseAttempt,
     cancel_token: &AtomicBool,
-    catalog_result: DerivedSourceResult<MaterializedRbdSource>,
+    catalog_result: DerivedSourceResult<(MaterializedRbdSource, String)>,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
     match catalog_result {
-        Ok(summary) => match finish_materialization(
+        Ok((summary, publication_digest)) => match finish_materialization(
             case_conn,
+            case_root,
+            case_id,
             data_source,
             summary,
+            &publication_digest,
             fingerprint,
             catalog_attempt,
             cancel_token,
@@ -257,65 +265,47 @@ fn start_catalog(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn finish_materialization(
     case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
     data_source: DataSource,
     summary: MaterializedRbdSource,
+    publication_digest: &str,
     fingerprint: &str,
     catalog_attempt: &ProcessingPhaseAttempt,
     cancel_token: &AtomicBool,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
     ensure_not_cancelled(cancel_token)?;
-    publish_catalog_readiness(
+    let validator = RbdPublicationValidator { case_root };
+    let attempt = RbdPublicationAttempt {
+        attempt: catalog_attempt,
+        summary: &summary,
+        lineage_fingerprint: fingerprint,
+    };
+    let catalog_fingerprint =
+        crate::derived_source_service::catalog_manifest::catalog_fingerprint_for_source(
+            fingerprint,
+        );
+    let request = publication_request(
         case_conn,
+        case_root,
+        case_id,
         &data_source,
-        fingerprint,
-        catalog_attempt,
-        &summary,
+        &catalog_fingerprint,
+        &attempt,
+        &validator,
+        cancel_token,
+    );
+    persistence_source::publication::catalog_publication::publish_build(
+        &request,
+        publication_digest,
     )?;
     Ok(MaterializedRbdSource {
         data_source,
         ..summary
     })
-}
-
-fn publish_catalog_readiness(
-    case_conn: &rusqlite::Connection,
-    data_source: &DataSource,
-    fingerprint: &str,
-    catalog_attempt: &ProcessingPhaseAttempt,
-    summary: &MaterializedRbdSource,
-) -> DerivedSourceResult<()> {
-    let source_db_rel_path =
-        source_kernel::source_db::canonical_source_db_rel_path(&data_source.id);
-    let catalog_fingerprint =
-        source_kernel::derived_source_catalog::catalog_fingerprint(fingerprint);
-    if !CatalogPublicationRepo::new(case_conn).is_published(
-        &data_source.id,
-        &catalog_fingerprint,
-        &source_db_rel_path,
-        &summary.catalog_digest,
-    )? {
-        return Err(DerivedSourceError::InconsistentState(
-            "Catalog cannot become ready without a matching publication seal".to_string(),
-        ));
-    }
-    let transaction = case_conn
-        .unchecked_transaction()
-        .map_err(persistence_sqlite::DbError::from)?;
-    complete_catalog_phase(
-        &transaction,
-        &data_source.id,
-        fingerprint,
-        catalog_attempt,
-        summary,
-    )?;
-    queue_post_catalog_phases(&transaction, &data_source.id, fingerprint)?;
-    DataSourceRepo::new(&transaction).update_import_state(&data_source.id, "ready", None)?;
-    transaction
-        .commit()
-        .map_err(persistence_sqlite::DbError::from)?;
-    Ok(())
 }
 
 fn record_catalog_deferred(
@@ -469,22 +459,31 @@ pub(super) fn ready_source_summary_if_current(
         case_root,
         &data_source_id,
     )?;
-    let Some(summary) =
-        load_current_source_summary(&source_connection, &lineage_fingerprint, data_source)?
+    let Some(summary) = load_current_source_summary(
+        &source_connection,
+        &lineage_fingerprint,
+        data_source.clone(),
+    )?
     else {
         return Ok(None);
     };
-    let source_db_rel_path =
-        source_kernel::source_db::canonical_source_db_rel_path(&data_source_id);
-    if !CatalogPublicationRepo::new(case_conn).is_published(
-        &data_source_id,
-        &source_kernel::derived_source_catalog::catalog_fingerprint(&lineage_fingerprint),
-        &source_db_rel_path,
-        &summary.catalog_digest,
-    )? {
+    let case_id = DataSourceRepo::new(case_conn).case_id(&data_source_id)?;
+    let validator = RbdPublicationValidator { case_root };
+    if let Err(error) = persistence_source::publication::catalog_publication::verify_publication(
+        case_conn,
+        case_root,
+        &data_source,
+        &crate::derived_source_service::catalog_manifest::catalog_fingerprint_for_source(
+            &lineage_fingerprint,
+        ),
+        &case_id,
+        persistence_source::publication::catalog_publication::CatalogProjection::Partition,
+        &validator,
+    ) {
         tracing::warn!(
             data_source_id = %data_source_id.0,
-            "Published Catalog has no matching app database publication seal"
+            error = %error,
+            "Published RBD Catalog has no matching publication receipt"
         );
         return Ok(None);
     }

@@ -1,26 +1,40 @@
 use std::path::Path;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use domain::{structure::StructureViewAttempt, CaseId, DataSource};
-use persistence_source::fjall::{
-    encode_key, KeyPart, KeyspaceName, PersistMode, VersionedEnvelope,
-};
+use domain::{structure::StructureViewAttempt, CaseId, DataSource, DataSourceId};
+use persistence_fjall::{encode_key, KeyPart, KeyspaceName, PersistMode, VersionedEnvelope};
 use persistence_sqlite::repositories::{
-    catalog_publication_repo::CatalogPublicationRepo, datasource_repo::DataSourceRepo,
+    catalog_publication_repo::{seal_for, CatalogPublication, CatalogPublicationRepo},
+    datasource_repo::DataSourceRepo,
     structure_view_attempt_repo::StructureViewAttemptRepo,
 };
-use source_kernel::source_db;
+
+use crate::control::paths::{canonical_source_db_rel_path, source_db_path};
+use crate::publication::build::{publish_source_build_db, verify_finalized_source_db};
 
 const STRUCTURE_VIEW_GENERATION: &str = "source.fjall";
+
+mod recovery_files;
+pub use recovery_files::restore_prepared_build;
+mod cleanup;
+pub use cleanup::discard_unpublished_catalog_build;
+mod registered;
+pub use registered::verify_registered_catalog;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CatalogProjection {
+    SourceOnly,
+    Partition,
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum StructurePublicationError {
     #[error("structure publication database operation failed: {0}")]
     Database(#[from] persistence_sqlite::DbError),
     #[error("structure publication storage operation failed: {0}")]
-    Storage(#[from] persistence_source::runtime::StorageRuntimeError),
+    Storage(#[from] crate::runtime::StorageRuntimeError),
     #[error("structure publication generation operation failed: {0}")]
-    Generation(#[from] persistence_source::fjall::FjallStorageError),
+    Generation(#[from] persistence_fjall::FjallStorageError),
     #[error("structure publication I/O failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("structure publication is inconsistent")]
@@ -37,37 +51,25 @@ impl From<rusqlite::Error> for StructurePublicationError {
     }
 }
 
-impl transport::ServiceErrorCategory for StructurePublicationError {
-    fn category(&self) -> transport::ErrorCategory {
-        match self {
-            Self::Database(_) | Self::Storage(_) | Self::Generation(_) | Self::Io(_) => {
-                transport::ErrorCategory::Io
-            }
-            Self::InvalidPublication | Self::Validation(_) => transport::ErrorCategory::Parser,
-            Self::Cancelled => transport::ErrorCategory::Cancelled,
-        }
-    }
-}
-
 pub trait StructurePublicationAttempt {
     fn attempt_id(&self) -> &str;
     fn owner_id(&self) -> &str;
     fn refresh(
         &self,
         conn: &rusqlite::Connection,
-        source: &domain::DataSourceId,
+        source: &DataSourceId,
         fingerprint: &str,
     ) -> Result<(), StructurePublicationError>;
     fn finish_ready(
         &self,
         conn: &rusqlite::Connection,
-        source: &domain::DataSourceId,
+        source: &DataSourceId,
         fingerprint: &str,
     ) -> Result<(), StructurePublicationError>;
     fn finish_failed(
         &self,
         conn: &rusqlite::Connection,
-        source: &domain::DataSourceId,
+        source: &DataSourceId,
         fingerprint: &str,
         error: &str,
         cancelled: bool,
@@ -92,45 +94,76 @@ pub struct StructureBuildRequest<'a> {
     pub fingerprint: &'a str,
     pub attempt: &'a dyn StructurePublicationAttempt,
     pub validator: &'a dyn StructurePublicationValidator,
+    pub projection: CatalogProjection,
     pub cancel: &'a AtomicBool,
+}
+
+impl StructureBuildRequest<'_> {
+    fn fence(&self, conn: &rusqlite::Connection) -> Result<(), StructurePublicationError> {
+        ensure_not_cancelled(self.cancel)?;
+        self.attempt
+            .refresh(conn, &self.source.id, self.fingerprint)?;
+        self.validator
+            .validate(conn, self.case_id, self.source, self.fingerprint)
+    }
+}
+
+pub fn seal_catalog_generation(
+    source_conn: &rusqlite::Connection,
+    source_id: &DataSourceId,
+    attempt_id: &str,
+    fingerprint: &str,
+    projection: CatalogProjection,
+    cancel: &AtomicBool,
+) -> Result<String, StructurePublicationError> {
+    ensure_not_cancelled(cancel)?;
+    let store = crate::detail::open_store_for_write(source_conn)?
+        .ok_or(StructurePublicationError::InvalidPublication)?;
+    let expected = format!("source.fjall.build.{attempt_id}");
+    if store
+        .database()
+        .path()
+        .file_name()
+        .and_then(|name| name.to_str())
+        != Some(&expected)
+    {
+        return Err(StructurePublicationError::InvalidPublication);
+    }
+    if projection == CatalogProjection::Partition {
+        let (keyspace, key, marker) =
+            crate::runtime::partition_marker::partition_projection_marker(&source_id.0)?;
+        store.write_envelope(keyspace, key, &marker, PersistMode::Buffer)?;
+    }
+    write_source_projection_complete(&store, &source_id.0)?;
+    persistence_fjall::seal_source_generation_with_control(
+        &store,
+        &source_id.0,
+        attempt_id,
+        fingerprint,
+        cancel,
+        |_, _| {},
+    )?;
+    let manifest = persistence_fjall::verify_source_generation_with_control(
+        &store,
+        &source_id.0,
+        cancel,
+        |_, _| {},
+    )?;
+    Ok(manifest.immutable_data_digest)
 }
 
 pub fn seal_catalog(
     request: &StructureBuildRequest<'_>,
     source_conn: &rusqlite::Connection,
 ) -> Result<String, StructurePublicationError> {
-    let store = persistence_source::detail::open_store_for_write(source_conn)?
-        .ok_or(StructurePublicationError::InvalidPublication)?;
-    let (keyspace, key, marker) =
-        evidence_access::partition_storage_service::partition_projection_marker(
-            &request.source.id.0,
-        )?;
-    store.write_envelope(keyspace, key, &marker, PersistMode::Buffer)?;
-    let key = encode_key("projection", &[KeyPart::Text(request.source.id.0.clone())])?;
-    let marker = VersionedEnvelope::new(
-        "source_projection_complete",
-        1,
-        format!("projection:{}", request.source.id.0),
-        &request.source.id.0,
-        1,
-        request.source.id.0.as_bytes().to_vec(),
-    );
-    store.write_envelope(KeyspaceName::Meta, key, &marker, PersistMode::SyncAll)?;
-    persistence_source::fjall::seal_source_generation_with_control(
-        &store,
-        &request.source.id.0,
+    seal_catalog_generation(
+        source_conn,
+        &request.source.id,
         request.attempt.attempt_id(),
         request.fingerprint,
+        request.projection,
         request.cancel,
-        |_, _| {},
-    )?;
-    let manifest = persistence_source::fjall::verify_source_generation_with_control(
-        &store,
-        &request.source.id.0,
-        request.cancel,
-        |_, _| {},
-    )?;
-    Ok(manifest.immutable_data_digest)
+    )
 }
 
 pub fn publish_build(
@@ -138,34 +171,33 @@ pub fn publish_build(
     digest: &str,
 ) -> Result<(), StructurePublicationError> {
     ensure_not_cancelled(request.cancel)?;
-    request.validator.validate(
-        request.case_conn,
-        request.case_id,
-        request.source,
-        request.fingerprint,
-    )?;
-    request
-        .attempt
-        .refresh(request.case_conn, &request.source.id, request.fingerprint)?;
-    let publication = CatalogPublicationRepo::new(request.case_conn).prepare(
+    let transaction = request.case_conn.unchecked_transaction()?;
+    request.fence(&transaction)?;
+    let publication = CatalogPublicationRepo::new(&transaction).prepare(
         &request.source.id,
         request.attempt.attempt_id(),
         request.fingerprint,
-        &source_db::canonical_source_db_rel_path(&request.source.id),
+        &canonical_source_db_rel_path(&request.source.id),
         digest,
     )?;
-    source_db::publish_source_build_db(
+    bind_view_attempt(
+        &transaction,
+        request.case_id,
+        &request.source.id.0,
+        request.fingerprint,
+        request.attempt.attempt_id(),
+        request.attempt.owner_id(),
+        digest,
+    )?;
+    ensure_not_cancelled(request.cancel)?;
+    transaction.commit()?;
+    publish_source_build_db(
         request.case_root,
         &request.source.id,
         request.attempt.attempt_id(),
     )?;
     let transaction = request.case_conn.unchecked_transaction()?;
-    request.validator.validate(
-        &transaction,
-        request.case_id,
-        request.source,
-        request.fingerprint,
-    )?;
+    request.fence(&transaction)?;
     bind_view_attempt(
         &transaction,
         request.case_id,
@@ -180,10 +212,20 @@ pub fn publish_build(
         &publication.attempt_id,
         &publication.seal,
     )?;
+    verify_publication(
+        &transaction,
+        request.case_root,
+        request.source,
+        request.fingerprint,
+        request.case_id,
+        request.projection,
+        request.validator,
+    )?;
     DataSourceRepo::new(&transaction).update_import_state(&request.source.id, "ready", None)?;
     request
         .attempt
         .finish_ready(&transaction, &request.source.id, request.fingerprint)?;
+    ensure_not_cancelled(request.cancel)?;
     transaction.commit()?;
     Ok(())
 }
@@ -194,6 +236,7 @@ pub fn verify_publication(
     source: &DataSource,
     fingerprint: &str,
     case_id: &CaseId,
+    projection: CatalogProjection,
     validator: &dyn StructurePublicationValidator,
 ) -> Result<(), StructurePublicationError> {
     validator.validate(conn, case_id, source, fingerprint)?;
@@ -201,14 +244,16 @@ pub fn verify_publication(
     let stored = publications
         .find(&source.id)?
         .ok_or(StructurePublicationError::InvalidPublication)?;
-    let native = source_db::open_registered_fjall_source_read_only(case_root, &source.id)?;
+    let native = crate::runtime::open_source_read_only(case_root, &source.id.0)?;
     let manifest = native.generation_manifest(&source.id.0)?;
     let snapshot = native.snapshot();
     native.require_projection_complete(&snapshot, &source.id.0)?;
     let attempt = StructureViewAttemptRepo::new(conn)
         .find_for_attempt(&case_id.0, &source.id.0, &stored.attempt_id)?
         .ok_or(StructurePublicationError::InvalidPublication)?;
-    if !native.partition_projection_complete(&snapshot, &source.id.0)?
+    if !native.source_projection_complete(&snapshot, &source.id.0)?
+        || projection == CatalogProjection::Partition
+            && !native.partition_projection_complete(&snapshot, &source.id.0)?
         || manifest.projection_batch_digest != fingerprint
         || attempt.attempt_id != stored.attempt_id
         || attempt.input_fingerprint != fingerprint
@@ -217,7 +262,7 @@ pub fn verify_publication(
         || !publications.is_published(
             &source.id,
             fingerprint,
-            &source_db::canonical_source_db_rel_path(&source.id),
+            &canonical_source_db_rel_path(&source.id),
             &manifest.immutable_data_digest,
         )?
     {
@@ -229,7 +274,8 @@ pub fn verify_publication(
 pub fn recover_prepared_publication(
     request: &StructureBuildRequest<'_>,
 ) -> Result<bool, StructurePublicationError> {
-    let path = source_db::source_db_path(request.case_root, &request.source.id);
+    ensure_not_cancelled(request.cancel)?;
+    let path = source_db_path(request.case_root, &request.source.id);
     let stored = CatalogPublicationRepo::new(request.case_conn).find(&request.source.id)?;
     let Some(publication) = stored else {
         return if path.exists() {
@@ -238,72 +284,114 @@ pub fn recover_prepared_publication(
             Ok(false)
         };
     };
-    if publication.input_fingerprint != request.fingerprint {
-        return Err(StructurePublicationError::InvalidPublication);
-    }
+    validate_receipt(request, &publication)?;
+    let transaction = request.case_conn.unchecked_transaction()?;
+    request.fence(&transaction)?;
+    transaction.commit()?;
     if !path.exists() {
         if publication.state != "prepared" {
             return Err(StructurePublicationError::InvalidPublication);
         }
-        source_db::publish_source_build_db(
+        publish_source_build_db(
             request.case_root,
             &request.source.id,
             &publication.attempt_id,
         )?;
     }
-    source_db::verify_finalized_source_db(&path, &request.source.id)?;
-    let native =
-        source_db::open_registered_fjall_source_read_only(request.case_root, &request.source.id)?;
+    verify_finalized_source_db(&path, &request.source.id)?;
+    let native = crate::runtime::open_source_read_only(request.case_root, &request.source.id.0)?;
     let manifest = native.generation_manifest(&request.source.id.0)?;
-    if manifest.projection_batch_digest != request.fingerprint
+    let snapshot = native.snapshot();
+    if !native.source_projection_complete(&snapshot, &request.source.id.0)?
+        || request.projection == CatalogProjection::Partition
+            && !native.partition_projection_complete(&snapshot, &request.source.id.0)?
+        || manifest.projection_batch_digest != request.fingerprint
         || manifest.immutable_data_digest != publication.catalog_digest
         || (publication.state == "prepared" && manifest.attempt_id != publication.attempt_id)
     {
         return Err(StructurePublicationError::InvalidPublication);
     }
+    let transaction = request.case_conn.unchecked_transaction()?;
+    request.fence(&transaction)?;
+    if CatalogPublicationRepo::new(&transaction).find(&request.source.id)?
+        != Some(publication.clone())
+    {
+        return Err(StructurePublicationError::InvalidPublication);
+    }
     if publication.state == "prepared" {
-        let transaction = request.case_conn.unchecked_transaction()?;
-        let owner_id = StructureViewAttemptRepo::new(&transaction)
-            .find_for_attempt(
-                &request.case_id.0,
-                &request.source.id.0,
-                &publication.attempt_id,
-            )?
-            .map_or_else(
-                || request.attempt.owner_id().to_owned(),
-                |attempt| attempt.owner_id,
-            );
-        bind_view_attempt(
-            &transaction,
-            request.case_id,
-            &request.source.id.0,
-            request.fingerprint,
-            &publication.attempt_id,
-            &owner_id,
-            &manifest.immutable_data_digest,
-        )?;
         CatalogPublicationRepo::new(&transaction).mark_published(
             &request.source.id,
             &publication.attempt_id,
             &publication.seal,
         )?;
-        transaction.commit()?;
     }
     verify_publication(
-        request.case_conn,
+        &transaction,
         request.case_root,
         request.source,
         request.fingerprint,
         request.case_id,
+        request.projection,
         request.validator,
     )?;
-    let transaction = request.case_conn.unchecked_transaction()?;
     DataSourceRepo::new(&transaction).update_import_state(&request.source.id, "ready", None)?;
     request
         .attempt
         .finish_ready(&transaction, &request.source.id, request.fingerprint)?;
+    ensure_not_cancelled(request.cancel)?;
     transaction.commit()?;
     Ok(true)
+}
+
+fn validate_receipt(
+    request: &StructureBuildRequest<'_>,
+    publication: &CatalogPublication,
+) -> Result<(), StructurePublicationError> {
+    let path = canonical_source_db_rel_path(&request.source.id);
+    if publication.input_fingerprint != request.fingerprint
+        || publication.source_db_rel_path != path
+        || publication.seal
+            != seal_for(
+                &request.source.id.0,
+                &publication.attempt_id,
+                request.fingerprint,
+                &path,
+                &publication.catalog_digest,
+            )
+    {
+        return Err(StructurePublicationError::InvalidPublication);
+    }
+    let attempt = StructureViewAttemptRepo::new(request.case_conn)
+        .find_for_attempt(
+            &request.case_id.0,
+            &request.source.id.0,
+            &publication.attempt_id,
+        )?
+        .ok_or(StructurePublicationError::InvalidPublication)?;
+    if attempt.input_fingerprint != request.fingerprint
+        || attempt.receipt != publication.catalog_digest
+        || attempt.generation != STRUCTURE_VIEW_GENERATION
+    {
+        return Err(StructurePublicationError::InvalidPublication);
+    }
+    Ok(())
+}
+
+fn write_source_projection_complete(
+    store: &persistence_fjall::SourceStore,
+    source_id: &str,
+) -> Result<(), StructurePublicationError> {
+    let key = encode_key("projection", &[KeyPart::Text(source_id.to_owned())])?;
+    let marker = VersionedEnvelope::new(
+        "source_projection_complete",
+        1,
+        format!("projection:{source_id}"),
+        source_id,
+        1,
+        source_id.as_bytes().to_vec(),
+    );
+    store.write_envelope(KeyspaceName::Meta, key, &marker, PersistMode::SyncAll)?;
+    Ok(())
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -331,7 +419,7 @@ fn bind_view_attempt(
 }
 
 pub fn ensure_not_cancelled(cancel: &AtomicBool) -> Result<(), StructurePublicationError> {
-    if cancel.load(std::sync::atomic::Ordering::Acquire) {
+    if cancel.load(Ordering::Acquire) {
         Err(StructurePublicationError::Cancelled)
     } else {
         Ok(())

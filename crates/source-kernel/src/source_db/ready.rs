@@ -55,6 +55,13 @@ pub fn open_ready_source_by_id(
     data_source_id: &DataSourceId,
 ) -> Result<ReadySourceConnection, ReadySourceError> {
     let platform = resolve_ready_source_platform(case_conn, case_id, data_source_id)?;
+    persistence_source::publication::catalog_publication::verify_registered_catalog(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    )
+    .map_err(|error| DbError::System(error.to_string()))?;
     let connection = super::open_registered_source_db(case_conn, case_root, data_source_id)?;
 
     Ok(ReadySourceConnection {
@@ -71,6 +78,13 @@ pub fn open_ready_source_read_only_by_id(
     data_source_id: &DataSourceId,
 ) -> Result<ReadySourceConnection, ReadySourceError> {
     let platform = resolve_ready_source_platform(case_conn, case_id, data_source_id)?;
+    persistence_source::publication::catalog_publication::verify_registered_catalog(
+        case_conn,
+        case_root,
+        case_id,
+        data_source_id,
+    )
+    .map_err(|error| DbError::System(error.to_string()))?;
     let connection =
         super::open_registered_source_db_read_only(case_conn, case_root, data_source_id)?;
 

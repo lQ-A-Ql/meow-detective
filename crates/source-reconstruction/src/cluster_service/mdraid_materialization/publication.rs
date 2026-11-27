@@ -3,8 +3,10 @@ use std::path::Path;
 use domain::{CaseId, DataSource};
 use evidence_access::mdraid::{mdraid_array_fingerprint, MdRaidPlanError};
 
-use crate::cluster_service::structure_publication::{
-    self, StructureBuildRequest, StructurePublicationError, StructurePublicationValidator,
+use persistence_source::publication::catalog_publication as structure_publication;
+use persistence_source::publication::catalog_publication::{
+    CatalogProjection, StructureBuildRequest, StructurePublicationError,
+    StructurePublicationValidator,
 };
 
 use super::build::CatalogBuild;
@@ -37,7 +39,7 @@ pub(super) fn seal_catalog(
 ) -> Result<String, MdRaidPlanError> {
     let validator = MdRaidValidator;
     structure_publication::seal_catalog(&build_request(request, &validator), conn)
-        .map_err(MdRaidPlanError::from)
+        .map_err(map_publication_error)
 }
 
 pub(super) fn publish_build(
@@ -47,7 +49,7 @@ pub(super) fn publish_build(
     super::ensure_not_cancelled(request.cancel)?;
     let validator = MdRaidValidator;
     structure_publication::publish_build(&build_request(request, &validator), digest)
-        .map_err(MdRaidPlanError::from)
+        .map_err(map_publication_error)
 }
 
 pub(super) fn verify_publication(
@@ -65,9 +67,10 @@ pub(super) fn verify_publication(
         source,
         fingerprint,
         &case_id,
+        CatalogProjection::Partition,
         &validator,
     )
-    .map_err(MdRaidPlanError::from)
+    .map_err(map_publication_error)
 }
 
 pub(super) fn recover_prepared_publication(
@@ -75,7 +78,7 @@ pub(super) fn recover_prepared_publication(
 ) -> Result<bool, MdRaidPlanError> {
     let validator = MdRaidValidator;
     structure_publication::recover_prepared_publication(&build_request(request, &validator))
-        .map_err(MdRaidPlanError::from)
+        .map_err(map_publication_error)
 }
 
 fn build_request<'a>(
@@ -90,6 +93,7 @@ fn build_request<'a>(
         fingerprint: request.fingerprint,
         attempt: request.attempt,
         validator,
+        projection: CatalogProjection::Partition,
         cancel: request.cancel,
     }
 }
@@ -105,16 +109,14 @@ fn map_error(error: MdRaidPlanError) -> StructurePublicationError {
     }
 }
 
-impl From<StructurePublicationError> for MdRaidPlanError {
-    fn from(error: StructurePublicationError) -> Self {
-        match error {
-            StructurePublicationError::Database(error) => Self::Database(error),
-            StructurePublicationError::Storage(error) => Self::Storage(error),
-            StructurePublicationError::Generation(error) => Self::Generation(error),
-            StructurePublicationError::Io(error) => Self::Io(error),
-            StructurePublicationError::InvalidPublication
-            | StructurePublicationError::Validation(_) => Self::InvalidPublication,
-            StructurePublicationError::Cancelled => Self::Cancelled,
-        }
+pub(super) fn map_publication_error(error: StructurePublicationError) -> MdRaidPlanError {
+    match error {
+        StructurePublicationError::Database(error) => MdRaidPlanError::Database(error),
+        StructurePublicationError::Storage(error) => MdRaidPlanError::Storage(error),
+        StructurePublicationError::Generation(error) => MdRaidPlanError::Generation(error),
+        StructurePublicationError::Io(error) => MdRaidPlanError::Io(error),
+        StructurePublicationError::InvalidPublication
+        | StructurePublicationError::Validation(_) => MdRaidPlanError::InvalidPublication,
+        StructurePublicationError::Cancelled => MdRaidPlanError::Cancelled,
     }
 }

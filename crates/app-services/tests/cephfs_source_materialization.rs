@@ -22,12 +22,18 @@ use ceph_wire::{
     CephFsNamespaceEntryKind, CephFsNamespaceRecord, CEPH_NOSNAP,
 };
 use chrono::Utc;
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance};
+use domain::{
+    structure::{AcquisitionId, SourceRevisionContent},
+    CaseId, DataSource, DataSourceId, DataSourceKind, DataSourceProvenance,
+};
 use persistence_sqlite::repositories::{
     case_repo::CaseRepo,
     datasource_repo::{DataSourceRepo, DataSourceStorage},
     linux_topology_membership_repo::{LinuxTopologyMembershipRecord, LinuxTopologyMembershipRepo},
     linux_topology_scope_repo::{LinuxTopologyScopeRecord, LinuxTopologyScopeRepo},
+    processing_phase_repo::{DataSourceProcessingPhaseRepo, ProcessingPhase, ProcessingPhaseClaim},
+    source_revision_repo::SourceRevisionRepo,
+    structure_view_attempt_repo::StructureViewAttemptRepo,
 };
 use sha2::Digest;
 
@@ -103,6 +109,19 @@ fn fixture() -> Fixture {
             })
             .expect("bind Ceph member");
         drop(app_services::source_db::open_source_db(root.path(), &id).expect("create source db"));
+        SourceRevisionRepo::new(&case_conn)
+            .bind(
+                &case_id.0,
+                source_id,
+                &SourceRevisionContent::captured(
+                    AcquisitionId(format!("fixture:{source_id}")),
+                    1,
+                    None,
+                    format!("{:x}", index + 1).repeat(64),
+                ),
+                true,
+            )
+            .expect("bind Ceph member revision");
     }
 
     Fixture {
@@ -284,10 +303,32 @@ fn materialize_result_with_content(
     app_services::ceph_reconstruction::MaterializedCephFsSource,
     app_services::ceph_reconstruction::CephFsSourceError,
 > {
+    materialize_with_cancel(
+        fixture,
+        graph,
+        presence,
+        inline,
+        sparse_extents,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+}
+
+fn materialize_with_cancel(
+    fixture: &Fixture,
+    graph: &ceph_wire::CephFsNamespaceGraph,
+    presence: &CephFsPresenceAssessment,
+    inline: &BTreeMap<u64, Vec<u8>>,
+    sparse_extents: &BTreeMap<u64, Vec<CephFsSparseExtentProof>>,
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<
+    app_services::ceph_reconstruction::MaterializedCephFsSource,
+    app_services::ceph_reconstruction::CephFsSourceError,
+> {
     let assembly = assembly_for(graph);
     let descriptor = descriptor();
     let ceph_scope_id = domain::CephScopeId(CEPH_SCOPE_ID.to_string());
     materialize_cephfs_source(CephFsSourceMaterializationRequest {
+        cancel,
         case_conn: &fixture.case_conn,
         case_root: fixture.root.path(),
         case_id: &fixture.case_id,
@@ -919,6 +960,241 @@ fn stale_catalog_publication_is_not_reported_as_incomplete_namespace() {
         matches!(error, CephFsSourceError::StalePublication),
         "unexpected stale catalog error: {error:?}"
     );
+}
+
+#[test]
+fn cephfs_prepared_build_recovers_before_source_database_rename() {
+    let fixture = fixture();
+    fixture
+        .case_conn
+        .execute_batch(
+            "CREATE TRIGGER fail_cephfs_ready BEFORE UPDATE OF import_state ON data_sources
+         WHEN NEW.kind='ceph_fs' AND NEW.import_state='ready'
+         BEGIN SELECT RAISE(ABORT, 'injected ready failure'); END;",
+        )
+        .unwrap();
+    assert!(materialize_result(&fixture, true).is_err());
+    fixture
+        .case_conn
+        .execute_batch("DROP TRIGGER fail_cephfs_ready")
+        .unwrap();
+    let source_id = registered_cephfs_source_id(&fixture);
+    let publication =
+        persistence_sqlite::repositories::catalog_publication_repo::CatalogPublicationRepo::new(
+            &fixture.case_conn,
+        )
+        .find(&source_id)
+        .unwrap()
+        .unwrap();
+    assert_eq!(publication.state, "prepared");
+    let original_view = StructureViewAttemptRepo::new(&fixture.case_conn)
+        .find(CASE_ID, &source_id.0)
+        .unwrap()
+        .unwrap();
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
+        fixture.root.path(),
+        &source_id.0,
+        &publication.attempt_id,
+    )
+    .unwrap();
+    let close = app_services::storage_runtime::close_source_store_at_path(&layout.published_path())
+        .unwrap()
+        .unwrap();
+    std::fs::rename(layout.published_path(), layout.build_path()).unwrap();
+    std::fs::rename(
+        app_services::source_db::source_db_path(fixture.root.path(), &source_id),
+        persistence_source::publication::source_build_db_path(
+            fixture.root.path(),
+            &source_id,
+            &publication.attempt_id,
+        )
+        .unwrap(),
+    )
+    .unwrap();
+    drop(close);
+    let recovered = materialize(&fixture, true);
+    assert!(recovered.published);
+    assert_eq!(recovered.file_count, 2);
+    let recovered_view = StructureViewAttemptRepo::new(&fixture.case_conn)
+        .find(CASE_ID, &source_id.0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(original_view, recovered_view);
+}
+
+#[test]
+fn cephfs_publication_rejects_receipt_tampering() {
+    let fixture = fixture();
+    let result = materialize(&fixture, true);
+    let source_id = result.data_source.id;
+    let repo = StructureViewAttemptRepo::new(&fixture.case_conn);
+    let attempt = repo
+        .find(CASE_ID, &source_id.0)
+        .expect("read CephFS view attempt")
+        .expect("CephFS view attempt exists");
+    fixture
+        .case_conn
+        .execute(
+            "DELETE FROM structure_view_attempts WHERE derived_source_id=?1",
+            [&source_id.0],
+        )
+        .expect("remove CephFS view attempt");
+    let tampered = domain::structure::StructureViewAttempt {
+        receipt: if attempt.receipt.starts_with('0') {
+            format!("1{}", &attempt.receipt[1..])
+        } else {
+            format!("0{}", &attempt.receipt[1..])
+        },
+        ..attempt
+    };
+    repo.bind(CASE_ID, &tampered)
+        .expect("insert tampered CephFS receipt");
+
+    let error = materialize_result(&fixture, true).expect_err("tampered receipt must fail");
+    assert!(matches!(error, CephFsSourceError::StalePublication));
+    assert!(get_file_tree_for_case(
+        &fixture.case_conn,
+        fixture.root.path(),
+        &fixture.case_id,
+        false,
+    )
+    .is_err());
+}
+
+#[test]
+fn cephfs_cancelled_publication_cleans_only_the_unpublished_attempt_and_retries() {
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+    let fixture = fixture();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let trigger_cancel = cancel.clone();
+    fixture
+        .case_conn
+        .create_scalar_function(
+            "cancel_cephfs_publication",
+            0,
+            rusqlite::functions::FunctionFlags::SQLITE_UTF8,
+            move |_| {
+                trigger_cancel.store(true, Ordering::Release);
+                Ok(1_i64)
+            },
+        )
+        .unwrap();
+    fixture
+        .case_conn
+        .execute_batch(
+            "CREATE TRIGGER cancel_cephfs_prepare AFTER INSERT ON data_source_catalog_publications
+         BEGIN SELECT cancel_cephfs_publication(); END;",
+        )
+        .unwrap();
+    let error = materialize_with_cancel(
+        &fixture,
+        &namespace(true),
+        &present_assessment(),
+        &BTreeMap::from([(2, FILE_CONTENT.to_vec())]),
+        &BTreeMap::new(),
+        &cancel,
+    )
+    .unwrap_err();
+    assert!(matches!(error, CephFsSourceError::Cancelled));
+    let source_id = registered_cephfs_source_id(&fixture);
+    let phase = DataSourceProcessingPhaseRepo::new(&fixture.case_conn)
+        .find(&source_id, ProcessingPhase::Catalog)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        phase.state,
+        persistence_sqlite::repositories::processing_phase_repo::ProcessingPhaseState::Deferred
+    );
+    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
+        fixture.root.path(),
+        &source_id.0,
+        phase.attempt_id.as_deref().unwrap(),
+    )
+    .unwrap();
+    assert!(!layout.build_path().exists());
+    assert!(!layout.published_path().exists());
+    assert!(!app_services::source_db::source_db_path(fixture.root.path(), &source_id).exists());
+    assert!(
+        persistence_sqlite::repositories::catalog_publication_repo::CatalogPublicationRepo::new(
+            &fixture.case_conn
+        )
+        .find(&source_id)
+        .unwrap()
+        .is_none()
+    );
+    fixture
+        .case_conn
+        .execute_batch("DROP TRIGGER cancel_cephfs_prepare")
+        .unwrap();
+    cancel.store(false, Ordering::Release);
+    assert!(materialize(&fixture, true).published);
+}
+
+#[test]
+fn cephfs_publication_rejects_view_input_lineage_mismatch() {
+    let fixture = fixture();
+    let result = materialize(&fixture, true);
+    let source_id = result.data_source.id;
+    fixture
+        .case_conn
+        .execute(
+            "DELETE FROM structure_view_inputs
+             WHERE derived_source_id=?1
+               AND parent_source_id=(
+                   SELECT parent_source_id FROM structure_view_inputs
+                   WHERE derived_source_id=?1 ORDER BY parent_source_id LIMIT 1
+               )",
+            [&source_id.0],
+        )
+        .expect("remove one CephFS view input");
+
+    let error = materialize_result(&fixture, true).expect_err("missing view input must fail");
+    assert!(
+        error.to_string().contains("structure view inputs changed"),
+        "{error}"
+    );
+}
+
+#[test]
+fn cephfs_recovery_rejects_a_competing_catalog_owner() {
+    let fixture = fixture();
+    let result = materialize(&fixture, true);
+    let source_id = result.data_source.id;
+    let phase_repo = DataSourceProcessingPhaseRepo::new(&fixture.case_conn);
+    let phase = phase_repo
+        .find(&source_id, ProcessingPhase::Catalog)
+        .expect("read CephFS Catalog phase")
+        .expect("CephFS Catalog phase exists");
+    fixture
+        .case_conn
+        .execute(
+            "UPDATE data_source_processing_phases
+             SET state='pending', owner_id=NULL, attempt_id=NULL, stats_json='{}',
+                 last_error=NULL, started_at=NULL, completed_at=NULL,
+                 heartbeat_at=NULL, lease_expires_at=NULL, updated_at=datetime('now')
+             WHERE data_source_id=?1 AND phase='catalog'",
+            [&source_id.0],
+        )
+        .expect("reset CephFS Catalog phase");
+    let claim = phase_repo
+        .claim(
+            &source_id,
+            ProcessingPhase::Catalog,
+            phase.version,
+            &phase.input_fingerprint,
+            "competing-cephfs-owner",
+        )
+        .expect("claim CephFS Catalog phase");
+    assert!(matches!(claim, ProcessingPhaseClaim::Acquired(_)));
+    DataSourceRepo::new(&fixture.case_conn)
+        .update_import_state(&source_id, "pending", None)
+        .expect("mark CephFS source pending for recovery");
+
+    let error = materialize_result(&fixture, true).expect_err("competing owner must fail");
+    assert!(matches!(error, CephFsSourceError::ProcessingBusy));
 }
 
 #[test]

@@ -5,11 +5,12 @@ use evidence_access::lvm::{open_lvm_volume_reader, LvmPlanError, LvmVolumePlan};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use source_kernel::source_db;
 
-use crate::cluster_service::structure_publication::{
-    self, StructureBuildRequest, StructurePublicationAttempt, StructurePublicationError,
+use persistence_source::publication::catalog_publication as structure_publication;
+use persistence_source::publication::catalog_publication::{
+    CatalogProjection, StructureBuildRequest, StructurePublicationAttempt,
 };
 
-use super::phase::LvmAttempt;
+use super::{map_publication_error, phase::LvmAttempt};
 
 pub(super) struct CatalogBuild<'a> {
     pub case_conn: &'a rusqlite::Connection,
@@ -25,7 +26,9 @@ pub(super) struct CatalogBuild<'a> {
 
 pub(super) fn build_and_publish(request: CatalogBuild<'_>) -> Result<(), LvmPlanError> {
     let publication = publication_request(&request);
-    if structure_publication::recover_prepared_publication(&publication)? {
+    if structure_publication::recover_prepared_publication(&publication)
+        .map_err(map_publication_error)?
+    {
         return Ok(());
     }
     let source_conn = source_db::open_fresh_source_build_db(
@@ -36,7 +39,8 @@ pub(super) fn build_and_publish(request: CatalogBuild<'_>) -> Result<(), LvmPlan
     let result = populate_and_seal(&request, &source_conn, &publication);
     drop(source_conn);
     match result {
-        Ok(digest) => structure_publication::publish_build(&publication, &digest)?,
+        Ok(digest) => structure_publication::publish_build(&publication, &digest)
+            .map_err(map_publication_error)?,
         Err(error) => {
             discard_build(&request)?;
             return Err(error);
@@ -54,6 +58,7 @@ fn publication_request<'a>(request: &'a CatalogBuild<'a>) -> StructureBuildReque
         fingerprint: request.fingerprint,
         attempt: request.attempt,
         validator: request.validator,
+        projection: CatalogProjection::Partition,
         cancel: request.cancel,
     }
 }
@@ -66,7 +71,7 @@ fn populate_and_seal(
     DataSourceRepo::new(source_conn)
         .upsert_source_local_metadata(request.case_id, request.source)?;
     super::catalog::enumerate_lvm_catalog(request.source, source_conn, request.cancel)?;
-    super::super::structure_publication::ensure_not_cancelled(request.cancel)?;
+    structure_publication::ensure_not_cancelled(request.cancel).map_err(map_publication_error)?;
     drop(open_lvm_volume_reader(
         request.plan,
         &AtomicBool::new(false),
@@ -74,47 +79,19 @@ fn populate_and_seal(
     request
         .attempt
         .refresh(request.case_conn, &request.source.id, request.fingerprint)
-        .map_err(LvmPlanError::from)?;
-    let digest = structure_publication::seal_catalog(publication, source_conn)?;
+        .map_err(map_publication_error)?;
+    let digest = structure_publication::seal_catalog(publication, source_conn)
+        .map_err(map_publication_error)?;
     source_db::finalize_source_build_db(source_conn)?;
     Ok(digest)
 }
 
 fn discard_build(request: &CatalogBuild<'_>) -> Result<(), LvmPlanError> {
-    source_db::discard_source_build_db(
+    structure_publication::discard_unpublished_catalog_build(
+        request.case_conn,
         request.case_root,
         &request.source.id,
         request.attempt.attempt_id(),
-    )?;
-    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
-        request.case_root,
-        &request.source.id.0,
-        request.attempt.attempt_id(),
-    )?;
-    let path = layout.build_path();
-    if path.exists() {
-        let parent = source_db::source_dir(request.case_root, &request.source.id).canonicalize()?;
-        let resolved = path.canonicalize()?;
-        if resolved.parent() != Some(parent.as_path()) {
-            return Err(LvmPlanError::InvalidPublication);
-        }
-        let _guard = source_kernel::storage_runtime::close_source_store_at_path(&path)?
-            .ok_or(LvmPlanError::InvalidPublication)?;
-        std::fs::remove_dir_all(resolved)?;
-    }
-    Ok(())
-}
-
-impl From<StructurePublicationError> for LvmPlanError {
-    fn from(error: StructurePublicationError) -> Self {
-        match error {
-            StructurePublicationError::Database(error) => Self::Database(error),
-            StructurePublicationError::Storage(error) => Self::Storage(error),
-            StructurePublicationError::Generation(error) => Self::Generation(error),
-            StructurePublicationError::Io(error) => Self::Io(error),
-            StructurePublicationError::InvalidPublication
-            | StructurePublicationError::Validation(_) => Self::InvalidPublication,
-            StructurePublicationError::Cancelled => Self::Cancelled,
-        }
-    }
+    )
+    .map_err(map_publication_error)
 }

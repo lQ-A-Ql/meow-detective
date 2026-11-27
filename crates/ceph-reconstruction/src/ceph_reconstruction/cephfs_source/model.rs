@@ -22,6 +22,7 @@ impl CephFsSourceCapability {
 }
 
 pub struct CephFsSourceMaterializationRequest<'a> {
+    pub cancel: &'a std::sync::atomic::AtomicBool,
     pub case_conn: &'a rusqlite::Connection,
     pub case_root: &'a Path,
     pub case_id: &'a CaseId,

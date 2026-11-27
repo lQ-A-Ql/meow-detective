@@ -5,7 +5,7 @@ use persistence_sqlite::repositories::processing_phase_repo::{
     ProcessingPhaseCompletion, ProcessingPhaseTransition,
 };
 
-use crate::cluster_service::structure_publication::{
+use persistence_source::publication::catalog_publication::{
     StructurePublicationAttempt, StructurePublicationError,
 };
 

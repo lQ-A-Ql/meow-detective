@@ -103,14 +103,16 @@ pub fn materialize_lvm_source_catalog_with_cancel(
                 return Err(LvmPlanError::InvalidPublication);
             }
             let validator = validator::LvmValidator { case_root };
-            crate::cluster_service::structure_publication::verify_publication(
+            persistence_source::publication::catalog_publication::verify_publication(
                 conn,
                 case_root,
                 &source,
                 &fingerprint,
                 &case_id,
+                persistence_source::publication::catalog_publication::CatalogProjection::Partition,
                 &validator,
-            )?;
+            )
+            .map_err(map_publication_error)?;
             return Ok(());
         }
         ProcessingPhaseClaim::Busy(_) => return Err(LvmPlanError::Busy),
@@ -131,7 +133,7 @@ pub fn materialize_lvm_source_catalog_with_cancel(
     match result {
         Ok(()) => Ok(()),
         Err(error) => {
-            use crate::cluster_service::structure_publication::StructurePublicationAttempt;
+            use persistence_source::publication::catalog_publication::StructurePublicationAttempt;
             let message = error.to_string();
             let cancelled =
                 cancel.load(Ordering::Acquire) || matches!(error, LvmPlanError::Cancelled);
@@ -141,7 +143,9 @@ pub fn materialize_lvm_source_catalog_with_cancel(
                 if cancelled { "pending" } else { "failed" },
                 Some(&message),
             )?;
-            attempt.finish_failed(&transaction, source_id, &fingerprint, &message, cancelled)?;
+            attempt
+                .finish_failed(&transaction, source_id, &fingerprint, &message, cancelled)
+                .map_err(map_publication_error)?;
             transaction.commit()?;
             Err(if cancelled {
                 LvmPlanError::Cancelled
@@ -192,5 +196,20 @@ fn ensure_not_cancelled(cancel: &AtomicBool) -> Result<(), LvmPlanError> {
         Err(LvmPlanError::Cancelled)
     } else {
         Ok(())
+    }
+}
+
+fn map_publication_error(
+    error: persistence_source::publication::catalog_publication::StructurePublicationError,
+) -> LvmPlanError {
+    use persistence_source::publication::catalog_publication::StructurePublicationError;
+    match error {
+        StructurePublicationError::Database(error) => LvmPlanError::Database(error),
+        StructurePublicationError::Storage(error) => LvmPlanError::Storage(error),
+        StructurePublicationError::Generation(error) => LvmPlanError::Generation(error),
+        StructurePublicationError::Io(error) => LvmPlanError::Io(error),
+        StructurePublicationError::InvalidPublication
+        | StructurePublicationError::Validation(_) => LvmPlanError::InvalidPublication,
+        StructurePublicationError::Cancelled => LvmPlanError::Cancelled,
     }
 }

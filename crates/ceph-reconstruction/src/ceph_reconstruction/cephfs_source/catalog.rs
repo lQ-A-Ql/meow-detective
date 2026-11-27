@@ -135,14 +135,14 @@ pub(super) fn defer_incomplete_catalog(
     Ok(())
 }
 
-pub(super) fn fail_catalog(
+pub(super) fn fail_catalog_message(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     attempt: &CatalogAttempt,
-    error: &CephFsSourceError,
-) {
-    let message = error.to_string();
-    if let Err(state_error) = DataSourceProcessingPhaseRepo::new(case_conn).finish(
+    message: &str,
+    cancelled: bool,
+) -> CephFsSourceResult<()> {
+    DataSourceProcessingPhaseRepo::new(case_conn).finish(
         data_source_id,
         ProcessingPhase::Catalog,
         ProcessingPhaseCompletion::new(
@@ -150,14 +150,12 @@ pub(super) fn fail_catalog(
             &attempt.input_fingerprint,
             &attempt.owner_id,
             &attempt.attempt_id,
-            ProcessingPhaseTransition::failed("{}", &message),
+            if cancelled {
+                ProcessingPhaseTransition::deferred("{}", Some(message))
+            } else {
+                ProcessingPhaseTransition::failed("{}", message)
+            },
         ),
-    ) {
-        tracing::warn!(
-            data_source_id = %data_source_id.0,
-            error = %state_error,
-            primary_error = %message,
-            "Failed to persist CephFS Catalog failure"
-        );
-    }
+    )?;
+    Ok(())
 }

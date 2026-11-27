@@ -2,16 +2,18 @@ use std::path::Path;
 
 use domain::{CaseId, DataSource, DataSourceId};
 use persistence_sqlite::repositories::{
-    catalog_publication_repo::CatalogPublicationRepo, datasource_repo::DataSourceRepo,
+    catalog_publication_repo::CatalogPublicationRepo,
+    datasource_repo::DataSourceRepo,
+    processing_phase_repo::{DataSourceProcessingPhaseRepo, ProcessingPhase},
 };
 
 use super::{
-    publish_catalog_readiness, ready_source_summary_if_current, record_catalog_failure,
-    start_catalog,
+    publication::{publication_request, RbdPublicationAttempt, RbdPublicationValidator},
+    ready_source_summary_if_current, record_catalog_failure, start_catalog,
 };
 use crate::derived_source_service::{
     catalog_manifest::{load_current_source_summary, verify_current_source_manifest_deep},
-    finalizer::{catalog_phase_is_current, queue_post_catalog_phases},
+    finalizer::{catalog_phase_is_current, ProcessingPhaseAttempt},
     DerivedSourceError, DerivedSourceResult, MaterializedRbdSource,
 };
 use ceph_reconstruction::ceph_reconstruction::load_lineage_fingerprint;
@@ -38,6 +40,29 @@ pub(super) fn reuse_existing_catalog(
         }
     }
     if !source_kernel::source_db::source_db_path(case_root, data_source_id).is_file() {
+        if CatalogPublicationRepo::new(case_conn)
+            .find(data_source_id)?
+            .is_some()
+        {
+            let fingerprint = load_lineage_fingerprint(case_conn, data_source_id)
+                .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+            let attempt = start_catalog(case_conn, data_source_id, &fingerprint)?;
+            let claim = DataSourceProcessingPhaseRepo::new(case_conn)
+                .find(data_source_id, ProcessingPhase::Catalog)?
+                .ok_or_else(|| {
+                    DerivedSourceError::InconsistentState("Catalog claim is missing".into())
+                })?;
+            if claim.attempt_id.as_deref() != Some(attempt.attempt_id()) {
+                return Err(DerivedSourceError::ProcessingBusy { phase: "catalog" });
+            }
+            persistence_source::publication::catalog_publication::restore_prepared_build(
+                case_conn,
+                case_root,
+                data_source_id,
+                &claim,
+            )?;
+            return recover_catalog(case_conn, case_root, case_id, existing, Some(&attempt));
+        }
         return Ok(None);
     }
     if let Some(summary) = recover_persisted_catalog(case_conn, case_root, case_id, existing)? {
@@ -54,6 +79,16 @@ pub(super) fn recover_persisted_catalog(
     case_root: &Path,
     case_id: &CaseId,
     data_source: DataSource,
+) -> DerivedSourceResult<Option<MaterializedRbdSource>> {
+    recover_catalog(case_conn, case_root, case_id, data_source, None)
+}
+
+fn recover_catalog(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    data_source: DataSource,
+    existing_attempt: Option<&ProcessingPhaseAttempt>,
 ) -> DerivedSourceResult<Option<MaterializedRbdSource>> {
     let data_source_id = data_source.id.clone();
     let lineage_fingerprint = load_lineage_fingerprint(case_conn, &data_source_id)
@@ -75,36 +110,71 @@ pub(super) fn recover_persisted_catalog(
     else {
         return Ok(None);
     };
-    if !verify_current_source_manifest_deep(&source_connection, &lineage_fingerprint, data_source)?
-    {
-        return Err(DerivedSourceError::InconsistentState(format!(
-            "persisted Catalog for {} does not match its source database",
-            data_source_id.0
-        )));
-    }
-    reconcile_catalog_publication(case_conn, &data_source_id, &lineage_fingerprint, &summary)?;
-
+    validate_recovery_catalog(&source_connection, &lineage_fingerprint, data_source)?;
+    let fingerprint =
+        crate::derived_source_service::catalog_manifest::catalog_fingerprint_for_source(
+            &lineage_fingerprint,
+        );
     if catalog_phase_is_current(case_conn, &data_source_id, &lineage_fingerprint)? {
-        publish_recovered_catalog_registration(case_conn, &data_source_id, &lineage_fingerprint)?;
+        let validator = RbdPublicationValidator { case_root };
+        persistence_source::publication::catalog_publication::verify_publication(
+            case_conn,
+            case_root,
+            &summary.data_source,
+            &fingerprint,
+            case_id,
+            persistence_source::publication::catalog_publication::CatalogProjection::Partition,
+            &validator,
+        )?;
         return Ok(Some(summary));
     }
 
-    let attempt = start_catalog(case_conn, &data_source_id, &lineage_fingerprint)?;
-    if let Err(error) = publish_catalog_readiness(
+    let acquired;
+    let attempt = match existing_attempt {
+        Some(attempt) => attempt,
+        None => {
+            acquired = start_catalog(case_conn, &data_source_id, &lineage_fingerprint)?;
+            &acquired
+        }
+    };
+    let validator = RbdPublicationValidator { case_root };
+    let publication_attempt = RbdPublicationAttempt {
+        attempt,
+        summary: &summary,
+        lineage_fingerprint: &lineage_fingerprint,
+    };
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let request = publication_request(
         case_conn,
+        case_root,
+        case_id,
         &summary.data_source,
-        &lineage_fingerprint,
-        &attempt,
-        &summary,
+        &fingerprint,
+        &publication_attempt,
+        &validator,
+        &cancel,
+    );
+    match persistence_source::publication::catalog_publication::recover_prepared_publication(
+        &request,
     ) {
-        record_catalog_failure(
-            case_conn,
-            &data_source_id,
-            &lineage_fingerprint,
-            &attempt,
-            &error,
-        );
-        return Err(error);
+        Ok(true) => {}
+        Ok(false) => {
+            return Err(DerivedSourceError::InconsistentState(format!(
+                "persisted Catalog for {} disappeared during recovery",
+                data_source_id.0
+            )))
+        }
+        Err(error) => {
+            let error: DerivedSourceError = error.into();
+            record_catalog_failure(
+                case_conn,
+                &data_source_id,
+                &lineage_fingerprint,
+                attempt,
+                &error,
+            );
+            return Err(error);
+        }
     }
     tracing::info!(
         data_source_id = %data_source_id.0,
@@ -113,71 +183,17 @@ pub(super) fn recover_persisted_catalog(
     Ok(Some(summary))
 }
 
-fn reconcile_catalog_publication(
-    case_conn: &rusqlite::Connection,
-    data_source_id: &DataSourceId,
-    lineage_fingerprint: &str,
-    summary: &MaterializedRbdSource,
+fn validate_recovery_catalog(
+    conn: &rusqlite::Connection,
+    fingerprint: &str,
+    source: DataSource,
 ) -> DerivedSourceResult<()> {
-    let publication = CatalogPublicationRepo::new(case_conn)
-        .find(data_source_id)?
-        .ok_or_else(|| {
-            DerivedSourceError::InconsistentState(format!(
-                "persisted Catalog for {} has no app database publication seal",
-                data_source_id.0
-            ))
-        })?;
-    let catalog_fingerprint =
-        source_kernel::derived_source_catalog::catalog_fingerprint(lineage_fingerprint);
-    let source_db_rel_path = source_kernel::source_db::canonical_source_db_rel_path(data_source_id);
-    let expected_seal = persistence_sqlite::repositories::catalog_publication_repo::seal_for(
-        &data_source_id.0,
-        &publication.attempt_id,
-        &catalog_fingerprint,
-        &source_db_rel_path,
-        &summary.catalog_digest,
-    );
-    if publication.input_fingerprint != catalog_fingerprint
-        || publication.source_db_rel_path != source_db_rel_path
-        || publication.catalog_digest != summary.catalog_digest
-        || publication.seal != expected_seal
-    {
+    let source_id = source.id.clone();
+    if !verify_current_source_manifest_deep(conn, fingerprint, source)? {
         return Err(DerivedSourceError::InconsistentState(format!(
-            "persisted Catalog publication seal for {} does not match its source database",
-            data_source_id.0
+            "persisted Catalog for {} does not match its source database",
+            source_id.0,
         )));
     }
-    match publication.state.as_str() {
-        "prepared" => {
-            CatalogPublicationRepo::new(case_conn).mark_published(
-                data_source_id,
-                &publication.attempt_id,
-                &publication.seal,
-            )?;
-        }
-        "published" => {}
-        state => {
-            return Err(DerivedSourceError::InconsistentState(format!(
-                "persisted Catalog publication for {} has unsupported state '{}'",
-                data_source_id.0, state
-            )));
-        }
-    }
-    Ok(())
-}
-
-fn publish_recovered_catalog_registration(
-    case_conn: &rusqlite::Connection,
-    data_source_id: &DataSourceId,
-    fingerprint: &str,
-) -> DerivedSourceResult<()> {
-    let transaction = case_conn
-        .unchecked_transaction()
-        .map_err(persistence_sqlite::DbError::from)?;
-    queue_post_catalog_phases(&transaction, data_source_id, fingerprint)?;
-    DataSourceRepo::new(&transaction).update_import_state(data_source_id, "ready", None)?;
-    transaction
-        .commit()
-        .map_err(persistence_sqlite::DbError::from)?;
     Ok(())
 }

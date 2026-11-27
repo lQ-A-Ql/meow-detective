@@ -3,14 +3,14 @@ use std::sync::atomic::AtomicBool;
 use std::time::Instant;
 
 use domain::{CaseId, DataSource, DataSourceId};
-use persistence_sqlite::repositories::catalog_publication_repo::CatalogPublicationRepo;
+use persistence_source::publication::catalog_publication::CatalogProjection;
 
 use source_kernel::source_db;
 
 use super::catalog_manifest::persist_current_source_manifest;
 use super::filesystem::build_catalog_on_connection;
 use super::{DerivedSourceError, DerivedSourceResult, MaterializedRbdSource};
-use crate::derived_source_service::finalizer::{refresh_catalog_claim, ProcessingPhaseAttempt};
+use crate::derived_source_service::finalizer::ProcessingPhaseAttempt;
 use ceph_reconstruction::ceph_reconstruction::{
     RadosReplicaSource, RbdImageDescriptor, RbdReplicaPolicy,
 };
@@ -42,7 +42,7 @@ pub(super) struct RbdCatalogBuildContext<'a> {
 
 pub(super) fn build_and_enumerate_source(
     request: CatalogBuildRequest<'_>,
-) -> DerivedSourceResult<MaterializedRbdSource> {
+) -> DerivedSourceResult<(MaterializedRbdSource, String)> {
     super::ensure_not_cancelled(request.cancel_token)?;
     let materialization_started = Instant::now();
     let attempt_id = request.catalog_attempt.attempt_id();
@@ -51,10 +51,7 @@ pub(super) fn build_and_enumerate_source(
         &request.data_source.id,
         attempt_id,
     )?;
-    let FjallBuildStorage {
-        existing: fjall_generation_exists,
-        source: fjall_source,
-    } = prepare_fjall_source(&request, &source_conn)?;
+    let fjall_source = prepare_fjall_source(&request, &source_conn)?;
     let summary = match build_catalog_on_connection(RbdCatalogBuildContext {
         source_conn: &source_conn,
         fjall_source: &fjall_source,
@@ -71,6 +68,7 @@ pub(super) fn build_and_enumerate_source(
             drop(fjall_source);
             drop(source_conn);
             discard_failed_source_build(
+                request.case_conn,
                 request.case_root,
                 &request.data_source.id,
                 attempt_id,
@@ -79,52 +77,34 @@ pub(super) fn build_and_enumerate_source(
             return Err(error);
         }
     };
-    if let Err(error) = finalize_source_generation(
-        source_conn,
-        fjall_source,
-        &request,
-        fjall_generation_exists,
-        &summary,
-    ) {
-        discard_failed_source_build(
-            request.case_root,
-            &request.data_source.id,
-            attempt_id,
-            &error,
-        );
-        return Err(error);
-    }
-    if let Err(error) = publish_claimed_source_build(
-        request.case_conn,
-        request.case_root,
-        &request.data_source.id,
-        request.lineage_fingerprint,
-        request.catalog_attempt,
-        &summary.catalog_digest,
-    ) {
-        discard_failed_source_build(
-            request.case_root,
-            &request.data_source.id,
-            attempt_id,
-            &error,
-        );
-        return Err(error);
-    }
+    let publication_digest =
+        match finalize_source_generation(source_conn, fjall_source, &request, &summary) {
+            Ok(digest) => digest,
+            Err(error) => {
+                discard_failed_source_build(
+                    request.case_conn,
+                    request.case_root,
+                    &request.data_source.id,
+                    attempt_id,
+                    &error,
+                );
+                return Err(error);
+            }
+        };
     tracing::info!(
         data_source_id = %request.data_source.id.0,
         total_elapsed_ms = materialization_started.elapsed().as_millis(),
         "Ceph RBD derived source catalog materialization completed"
     );
-    Ok(summary)
+    Ok((summary, publication_digest))
 }
 
 fn finalize_source_generation(
     source_conn: rusqlite::Connection,
     fjall_source: source_kernel::storage_runtime::ReadWriteSourceStorageHandle,
     request: &CatalogBuildRequest<'_>,
-    fjall_generation_exists: bool,
     summary: &MaterializedRbdSource,
-) -> DerivedSourceResult<()> {
+) -> DerivedSourceResult<String> {
     fjall_source
         .persist(persistence_source::fjall::PersistMode::SyncAll)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
@@ -135,37 +115,35 @@ fn finalize_source_generation(
         summary,
     )?;
     super::ensure_not_cancelled(request.cancel_token)?;
-    seal_fjall_partition_generation(
-        fjall_source.source_store(),
-        request,
-        fjall_generation_exists,
-        &summary.catalog_digest,
-    )?;
+    let publication_digest =
+        persistence_source::publication::catalog_publication::seal_catalog_generation(
+            &source_conn,
+            &request.data_source.id,
+            request.catalog_attempt.attempt_id(),
+            &super::catalog_manifest::catalog_fingerprint_for_source(request.lineage_fingerprint),
+            CatalogProjection::Partition,
+            request.cancel_token,
+        )?;
     source_db::finalize_source_build_db(&source_conn)?;
-    Ok(())
-}
-
-struct FjallBuildStorage {
-    existing: bool,
-    source: source_kernel::storage_runtime::ReadWriteSourceStorageHandle,
+    Ok(publication_digest)
 }
 
 fn prepare_fjall_source(
     request: &CatalogBuildRequest<'_>,
     conn: &rusqlite::Connection,
-) -> DerivedSourceResult<FjallBuildStorage> {
+) -> DerivedSourceResult<source_kernel::storage_runtime::ReadWriteSourceStorageHandle> {
     let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
         request.case_root,
         &request.data_source.id.0,
         request.catalog_attempt.attempt_id(),
     )
     .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let existing = layout.published_path().is_dir();
-    let root = if existing {
-        layout.published_path()
-    } else {
-        layout.build_path()
-    };
+    let root = layout.build_path();
+    if layout.published_path().exists() {
+        return Err(DerivedSourceError::InconsistentState(
+            "published RBD generation requires publication recovery".into(),
+        ));
+    }
     let name = root
         .file_name()
         .and_then(|name| name.to_str())
@@ -176,108 +154,23 @@ fn prepare_fjall_source(
     std::fs::create_dir_all(&root)?;
     let source = source_kernel::storage_runtime::open_source_read_write_at_path(&root)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    if existing {
-        import_core::import_pipeline::begin_partition_projection(
-            request.case_root,
-            &request.data_source.id,
-        )
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    }
-    Ok(FjallBuildStorage { existing, source })
-}
-
-fn seal_fjall_partition_generation(
-    source: &persistence_source::fjall::SourceStore,
-    request: &CatalogBuildRequest<'_>,
-    replace_published: bool,
-    catalog_digest: &str,
-) -> DerivedSourceResult<()> {
-    let (keyspace, key, marker) =
-        evidence_access::partition_storage_service::partition_projection_marker(
-            &request.data_source.id.0,
-        )
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    source
-        .write_envelope(
-            keyspace,
-            key,
-            &marker,
-            persistence_source::fjall::PersistMode::SyncAll,
-        )
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let projection_digest =
-        hex::encode(persistence_source::fjall::digest(catalog_digest.as_bytes()));
-    let seal = if replace_published {
-        persistence_source::fjall::replace_source_generation(
-            source,
-            &request.data_source.id.0,
-            request.catalog_attempt.attempt_id(),
-            &projection_digest,
-        )
-    } else {
-        persistence_source::fjall::seal_source_generation_with_control(
-            source,
-            &request.data_source.id.0,
-            request.catalog_attempt.attempt_id(),
-            &projection_digest,
-            request.cancel_token,
-            |_, _| {},
-        )
-    };
-    seal.map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    source
-        .database()
-        .persist(persistence_source::fjall::PersistMode::SyncAll)
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    super::ensure_not_cancelled(request.cancel_token)?;
-    Ok(())
-}
-
-pub(super) fn publish_claimed_source_build(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    data_source_id: &DataSourceId,
-    lineage_fingerprint: &str,
-    catalog_attempt: &ProcessingPhaseAttempt,
-    catalog_digest: &str,
-) -> DerivedSourceResult<std::path::PathBuf> {
-    refresh_catalog_claim(
-        case_conn,
-        data_source_id,
-        lineage_fingerprint,
-        catalog_attempt,
-    )?;
-    let source_db_rel_path = source_db::canonical_source_db_rel_path(data_source_id);
-    let catalog_fingerprint =
-        super::catalog_manifest::catalog_fingerprint_for_source(lineage_fingerprint);
-    let publication = CatalogPublicationRepo::new(case_conn).prepare(
-        data_source_id,
-        catalog_attempt.attempt_id(),
-        &catalog_fingerprint,
-        &source_db_rel_path,
-        catalog_digest,
-    )?;
-    let published_path =
-        source_db::publish_source_build_db(case_root, data_source_id, catalog_attempt.attempt_id())
-            .map_err(DerivedSourceError::Database)?;
-    CatalogPublicationRepo::new(case_conn)
-        .mark_published(
-            data_source_id,
-            catalog_attempt.attempt_id(),
-            &publication.seal,
-        )
-        .map_err(DerivedSourceError::Database)?;
-    Ok(published_path)
+    Ok(source)
 }
 
 fn discard_failed_source_build(
+    case_conn: &rusqlite::Connection,
     case_root: &Path,
     data_source_id: &DataSourceId,
     attempt_id: &str,
     primary_error: &DerivedSourceError,
 ) {
     if let Err(cleanup_error) =
-        source_db::discard_source_build_db(case_root, data_source_id, attempt_id)
+        persistence_source::publication::catalog_publication::discard_unpublished_catalog_build(
+            case_conn,
+            case_root,
+            data_source_id,
+            attempt_id,
+        )
     {
         tracing::warn!(
             data_source_id = %data_source_id.0,

@@ -2,6 +2,8 @@ use thiserror::Error;
 
 #[derive(Debug, Error)]
 pub enum CephFsSourceError {
+    #[error("CephFS publication was cancelled")]
+    Cancelled,
     #[error("CephFS derived source has invalid input: {0}")]
     InvalidInput(&'static str),
     #[error("CephFS namespace is incomplete and was retained without publication")]
@@ -38,6 +40,7 @@ pub enum CephFsSourceError {
 impl transport::ServiceErrorCategory for CephFsSourceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::Cancelled => transport::ErrorCategory::Cancelled,
             Self::InvalidInput(_) => transport::ErrorCategory::Validation,
             Self::IncompleteNamespace | Self::RetainedIncompleteSource => {
                 transport::ErrorCategory::Unsupported

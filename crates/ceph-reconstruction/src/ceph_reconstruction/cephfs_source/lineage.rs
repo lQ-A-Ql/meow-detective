@@ -7,7 +7,6 @@ use domain::{
 };
 use persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo;
 use persistence_sqlite::repositories::{
-    catalog_publication_repo::CatalogPublicationRepo,
     ceph_fs_lineage_repo::{
         cephfs_lineage_fingerprint, CephFsDerivedLineageAggregate, CephFsDerivedLineageRecord,
         CephFsDerivedLineageRepo, CephFsDerivedMapProvenanceRecord, CephFsDerivedPoolRecord,
@@ -17,7 +16,10 @@ use persistence_sqlite::repositories::{
 };
 use sha2::{Digest, Sha256};
 
-use super::{CephFsSourceError, CephFsSourceResult};
+use super::{
+    publication::{map_error, CephFsPublicationValidator},
+    CephFsSourceError, CephFsSourceResult,
+};
 use crate::ceph_reconstruction::{
     CephFsDescriptor, CephFsDescriptorState, CephFsMapProvenance, CephFsObjectSource,
     CephFsPoolBinding, CephFsPoolProvenance, CephFsPoolRole,
@@ -250,16 +252,20 @@ pub(super) fn load_runtime(
     }
     let catalog_fingerprint =
         super::catalog::catalog_input_fingerprint(&aggregate.lineage.lineage_fingerprint);
-    if !CatalogPublicationRepo::new(case_conn).is_published(
-        data_source_id,
+    let validator = CephFsPublicationValidator {
+        case_root,
+        lineage: &aggregate,
+    };
+    persistence_source::publication::catalog_publication::verify_publication(
+        case_conn,
+        case_root,
+        &source,
         &catalog_fingerprint,
-        &source_kernel::source_db::canonical_source_db_rel_path(data_source_id),
-        &manifest.projection_sha256,
-    )? {
-        return Err(CephFsSourceError::InconsistentState(
-            "CephFS Catalog publication seal is missing or stale".to_string(),
-        ));
-    }
+        case_id,
+        persistence_source::publication::catalog_publication::CatalogProjection::SourceOnly,
+        &validator,
+    )
+    .map_err(map_error)?;
     let resolved_pool_id = if requested_pool_id == -1 {
         descriptor
             .data_pools

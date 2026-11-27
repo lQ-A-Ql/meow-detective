@@ -26,6 +26,7 @@ use super::{
 pub(in crate::derived_source_service) struct ProcessingPhaseAttempt {
     phase: ProcessingPhase,
     attempt_id: String,
+    owner_id: String,
 }
 
 pub(in crate::derived_source_service) struct ProcessingPhaseHeartbeat {
@@ -68,6 +69,10 @@ impl ProcessingPhaseAttempt {
 
     pub(in crate::derived_source_service) fn attempt_id(&self) -> &str {
         &self.attempt_id
+    }
+
+    pub(in crate::derived_source_service) fn owner_id(&self) -> &str {
+        &self.owner_id
     }
 }
 
@@ -115,7 +120,11 @@ impl<'a> ProcessingPhaseRunner<'a> {
                 let attempt_id = record.attempt_id.clone().ok_or_else(|| {
                     DbError::System("claimed processing phase has no attempt ID".to_string())
                 })?;
-                PhaseClaim::Acquired(ProcessingPhaseAttempt { phase, attempt_id })
+                PhaseClaim::Acquired(ProcessingPhaseAttempt {
+                    phase,
+                    attempt_id,
+                    owner_id: self.owner_id.to_owned(),
+                })
             }
             ProcessingPhaseClaim::Ready(record) => PhaseClaim::Ready(outcome_from_record(record)),
             ProcessingPhaseClaim::Busy(record) => PhaseClaim::Busy(outcome_from_record(record)),

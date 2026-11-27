@@ -1,10 +1,14 @@
-use domain::{CaseId, DataSource, DataSourceId, DataSourceKind};
+use domain::{
+    structure::{AcquisitionId, SourceRevisionContent},
+    CaseId, DataSource, DataSourceId, DataSourceKind,
+};
 use persistence_sqlite::repositories::{
     ceph_fs_lineage_repo::{
         insert_cephfs_lineage_in_transaction, CephFsDerivedLineageAggregate,
         CephFsDerivedLineageRepo,
     },
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    source_revision_repo::SourceRevisionRepo,
 };
 
 use super::{CephFsSourceError, CephFsSourceResult};
@@ -23,6 +27,7 @@ pub(super) fn ensure_registration(
     match existing {
         Some(existing) => {
             validate_existing(case_conn, &existing, source, storage, lineage)?;
+            bind_parent_inputs(case_conn, case_id, &existing.id, lineage)?;
             Ok(existing)
         }
         None => {
@@ -52,9 +57,43 @@ fn insert_registration(
         .map_err(persistence_sqlite::DbError::from)?;
     DataSourceRepo::new(&transaction).insert_with_storage(case_id, source, storage)?;
     insert_cephfs_lineage_in_transaction(&transaction, lineage)?;
+    bind_parent_inputs(&transaction, case_id, &source.id, lineage)?;
     transaction
         .commit()
         .map_err(persistence_sqlite::DbError::from)?;
+    Ok(())
+}
+
+fn bind_parent_inputs(
+    conn: &rusqlite::Connection,
+    case_id: &CaseId,
+    source_id: &DataSourceId,
+    lineage: &CephFsDerivedLineageAggregate,
+) -> CephFsSourceResult<()> {
+    let mut source_ids = lineage
+        .pools
+        .iter()
+        .flat_map(|pool| pool.sources.iter())
+        .map(|source| source.source_data_source_id.as_str())
+        .chain(
+            lineage
+                .map_provenance
+                .iter()
+                .map(|source| source.source_data_source_id.as_str()),
+        )
+        .collect::<Vec<_>>();
+    source_ids.sort_unstable();
+    source_ids.dedup();
+    let revisions = SourceRevisionRepo::new(conn);
+    let inputs = source_ids
+        .into_iter()
+        .map(|parent| {
+            revisions
+                .current(&case_id.0, parent)
+                .map(|(reference, _)| reference)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    revisions.bind_inputs(&case_id.0, &source_id.0, &inputs)?;
     Ok(())
 }
 
@@ -113,4 +152,30 @@ pub(super) fn import_state(
                 "CephFS source storage metadata disappeared".to_string(),
             )
         })
+}
+
+pub(super) fn bind_derived_revision(
+    conn: &rusqlite::Connection,
+    case_id: &CaseId,
+    source_id: &DataSourceId,
+    logical_size: u64,
+    metadata_identity: String,
+) -> CephFsSourceResult<()> {
+    let revisions = SourceRevisionRepo::new(conn);
+    let inputs = revisions.inputs(&case_id.0, &source_id.0)?;
+    let acquisition = AcquisitionId(format!(
+        "ceph-fs:{}",
+        inputs
+            .iter()
+            .map(|input| input.source_id.as_str())
+            .collect::<Vec<_>>()
+            .join("\u{1f}")
+    ));
+    revisions.bind(
+        &case_id.0,
+        &source_id.0,
+        &SourceRevisionContent::derived(acquisition, logical_size, metadata_identity),
+        true,
+    )?;
+    Ok(())
 }

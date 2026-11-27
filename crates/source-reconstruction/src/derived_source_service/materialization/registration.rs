@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use domain::{
+    structure::{AcquisitionId, SourceRevisionContent},
     CaseId, DataSource, DataSourceId, DataSourceKind, DataSourcePlatform, DataSourceProvenance,
     DataSourceProvenanceStatus,
 };
@@ -9,12 +10,11 @@ use persistence_sqlite::repositories::{
         CephRbdLineageAggregate, CephRbdLineageRecord, CephRbdLineageRepo, CephRbdReplicaRecord,
     },
     datasource_repo::{DataSourceRepo, DataSourceStorage},
+    source_revision_repo::SourceRevisionRepo,
     storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
 };
 
-use ceph_reconstruction::ceph_reconstruction::{
-    load_lineage_fingerprint, RbdImageDescriptor, RbdReplicaPolicy,
-};
+use ceph_reconstruction::ceph_reconstruction::{RbdImageDescriptor, RbdReplicaPolicy};
 
 use super::{DerivedSourceError, DerivedSourceResult};
 
@@ -56,8 +56,14 @@ pub(super) fn validate_existing_registration(
             existing_source.id.0
         )));
     }
-    load_lineage_fingerprint(case_conn, &existing_source.id)
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))
+    let case_id = DataSourceRepo::new(case_conn).case_id(&existing_source.id)?;
+    SourceRevisionRepo::new(case_conn).require_current_inputs(&case_id.0, &existing_source.id.0)?;
+    let fingerprint = ceph_reconstruction::ceph_reconstruction::load_lineage_fingerprint(
+        case_conn,
+        &existing_source.id,
+    )
+    .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    Ok(fingerprint)
 }
 
 pub(super) fn build_data_source(
@@ -126,11 +132,57 @@ pub(super) fn register_derived_source(
         &transaction,
         &lineage,
     )?;
+    let fingerprint = bind_publication_revisions(
+        &transaction,
+        &data_source.id,
+        descriptor.metadata.image_size,
+        replica_records,
+    )?;
     transaction
         .commit()
         .map_err(persistence_sqlite::DbError::from)?;
-    load_lineage_fingerprint(case_conn, &data_source.id)
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))
+    Ok(fingerprint)
+}
+
+fn bind_publication_revisions(
+    conn: &rusqlite::Connection,
+    data_source_id: &DataSourceId,
+    logical_size: u64,
+    replicas: &[CephRbdReplicaRecord],
+) -> DerivedSourceResult<String> {
+    let case_id = DataSourceRepo::new(conn).case_id(data_source_id)?;
+    let revisions = SourceRevisionRepo::new(conn);
+    let mut inputs = replicas
+        .iter()
+        .map(|replica| {
+            revisions
+                .current(&case_id.0, &replica.source_data_source_id)
+                .map(|(reference, _)| reference)
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    inputs.sort_by(|left, right| left.source_id.cmp(&right.source_id));
+    inputs.dedup_by(|left, right| left.source_id == right.source_id);
+    revisions.bind_inputs(&case_id.0, &data_source_id.0, &inputs)?;
+    let fingerprint =
+        ceph_reconstruction::ceph_reconstruction::load_lineage_fingerprint(conn, data_source_id)
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let metadata_identity =
+        source_kernel::derived_source_catalog::catalog_fingerprint(&fingerprint);
+    let acquisition = AcquisitionId(format!(
+        "ceph-rbd:{}",
+        inputs
+            .iter()
+            .map(|input| input.source_id.as_str())
+            .collect::<Vec<_>>()
+            .join("\u{1f}")
+    ));
+    revisions.bind(
+        &case_id.0,
+        &data_source_id.0,
+        &SourceRevisionContent::derived(acquisition, logical_size, metadata_identity),
+        true,
+    )?;
+    Ok(fingerprint)
 }
 
 pub(super) fn lineage_aggregate(

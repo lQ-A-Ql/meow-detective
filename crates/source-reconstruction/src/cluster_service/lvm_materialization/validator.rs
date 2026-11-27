@@ -1,6 +1,6 @@
 use domain::{CaseId, DataSource};
 
-use crate::cluster_service::structure_publication::{
+use persistence_source::publication::catalog_publication::{
     StructurePublicationError, StructurePublicationValidator,
 };
 

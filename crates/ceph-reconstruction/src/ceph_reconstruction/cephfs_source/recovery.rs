@@ -3,14 +3,17 @@ use std::path::Path;
 use domain::DataSource;
 use persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceRepo;
 use persistence_sqlite::repositories::{
-    catalog_publication_repo::{seal_for, CatalogPublicationRepo},
     ceph_fs_lineage_repo::CephFsDerivedLineageAggregate,
     datasource_repo::DataSourceRepo,
+    processing_phase_repo::{DataSourceProcessingPhaseRepo, ProcessingPhase},
 };
 
 use super::{
-    catalog::{catalog_input_fingerprint, claim_catalog, complete_catalog, CatalogClaim},
-    materialization::{load_ready_summary, read_capability_record, validate_assembly_record},
+    catalog::{catalog_input_fingerprint, claim_catalog, CatalogAttempt, CatalogClaim},
+    materialization::{load_published_summary, read_capability_record, validate_assembly_record},
+    publication::{
+        map_error, publication_request, CephFsPublicationAttempt, CephFsPublicationValidator,
+    },
     CephFsSourceError, CephFsSourceResult, MaterializedCephFsSource,
 };
 
@@ -19,63 +22,101 @@ pub(super) fn recover_published_source(
     case_root: &Path,
     source: &DataSource,
     lineage: &CephFsDerivedLineageAggregate,
+    cancel: &std::sync::atomic::AtomicBool,
 ) -> CephFsSourceResult<Option<MaterializedCephFsSource>> {
     let source_path = source_kernel::source_db::source_db_path(case_root, &source.id);
-    if !source_path.is_file() {
-        return Ok(None);
-    }
+    let fingerprint = catalog_input_fingerprint(&lineage.lineage.lineage_fingerprint);
+    let restored = if !source_path.is_file() {
+        Some(restore_catalog_files(
+            case_conn,
+            case_root,
+            source,
+            &fingerprint,
+        )?)
+    } else {
+        None
+    };
     let Some(connection) = validate_published_database(case_root, case_conn, source, lineage)?
     else {
-        // An incomplete namespace is intentionally retained for diagnostics,
-        // but it is not a recoverable publication.  Keep the source visible as
-        // failed so the caller can require an explicit delete/re-import.
         return Ok(None);
     };
-    let Some(publication) = CatalogPublicationRepo::new(case_conn).find(&source.id)? else {
-        return Err(CephFsSourceError::StalePublication);
-    };
-    let catalog_fingerprint = catalog_input_fingerprint(&lineage.lineage.lineage_fingerprint);
-    let expected_rel_path = source_kernel::source_db::canonical_source_db_rel_path(&source.id);
-    let expected_seal = seal_for(
-        &source.id.0,
-        &publication.attempt_id,
-        &catalog_fingerprint,
-        &expected_rel_path,
-        &lineage.lineage.namespace_projection_sha256,
-    );
-    if publication.input_fingerprint != catalog_fingerprint
-        || publication.source_db_rel_path != expected_rel_path
-        || publication.catalog_digest != lineage.lineage.namespace_projection_sha256
-        || publication.seal != expected_seal
-    {
-        return Err(CephFsSourceError::StalePublication);
-    }
-    if publication.state == "prepared" {
-        CatalogPublicationRepo::new(case_conn).mark_published(
-            &source.id,
-            &publication.attempt_id,
-            &publication.seal,
-        )?;
-    } else if publication.state != "published" {
-        return Err(CephFsSourceError::StalePublication);
-    }
     drop(connection);
-    finish_recovered_catalog(
-        case_conn,
-        case_root,
-        source,
-        &lineage.lineage.lineage_fingerprint,
-    )?;
-    load_ready_summary(
-        case_conn,
-        case_root,
-        source,
-        &lineage.lineage.lineage_fingerprint,
-    )
-    .map(Some)
+    let summary = load_published_summary(case_conn, case_root, source, lineage)?;
+    let validator = CephFsPublicationValidator { case_root, lineage };
+    let case_id = DataSourceRepo::new(case_conn).case_id(&source.id)?;
+    let claim = match restored {
+        Some(attempt) => CatalogClaim::Acquired(attempt),
+        None => claim_catalog(case_conn, &source.id, &fingerprint)?,
+    };
+    match claim {
+        CatalogClaim::Ready => {
+            persistence_source::publication::catalog_publication::verify_publication(
+                case_conn,
+                case_root,
+                source,
+                &fingerprint,
+                &case_id,
+                persistence_source::publication::catalog_publication::CatalogProjection::SourceOnly,
+                &validator,
+            )
+            .map_err(map_error)?;
+            DataSourceRepo::new(case_conn).update_import_state(&source.id, "ready", None)?;
+        }
+        CatalogClaim::Acquired(attempt) => {
+            let publication_attempt = CephFsPublicationAttempt {
+                attempt: &attempt,
+                summary: &summary,
+            };
+            let request = publication_request(
+                case_conn,
+                case_root,
+                &case_id,
+                source,
+                &fingerprint,
+                &publication_attempt,
+                &validator,
+                cancel,
+            );
+            match persistence_source::publication::catalog_publication::recover_prepared_publication(
+                &request,
+            ) {
+                Ok(true) => {}
+                Ok(false) => {
+                    return Err(CephFsSourceError::InconsistentState(
+                        "published CephFS source disappeared during recovery".to_string(),
+                    ))
+                }
+                Err(error) => return Err(map_error(error)),
+            }
+        }
+    }
+    Ok(Some(summary))
 }
 
-fn validate_published_database(
+fn restore_catalog_files(
+    conn: &rusqlite::Connection,
+    case_root: &Path,
+    source: &DataSource,
+    fingerprint: &str,
+) -> CephFsSourceResult<CatalogAttempt> {
+    let attempt = match claim_catalog(conn, &source.id, fingerprint)? {
+        CatalogClaim::Acquired(attempt) => attempt,
+        CatalogClaim::Ready => return Err(CephFsSourceError::StalePublication),
+    };
+    let claim = DataSourceProcessingPhaseRepo::new(conn)
+        .find(&source.id, ProcessingPhase::Catalog)?
+        .ok_or(CephFsSourceError::StalePublication)?;
+    if claim.attempt_id.as_deref() != Some(attempt.attempt_id.as_str()) {
+        return Err(CephFsSourceError::ProcessingBusy);
+    }
+    persistence_source::publication::catalog_publication::restore_prepared_build(
+        conn, case_root, &source.id, &claim,
+    )
+    .map_err(map_error)?;
+    Ok(attempt)
+}
+
+pub(super) fn validate_published_database(
     case_root: &Path,
     case_conn: &rusqlite::Connection,
     source: &DataSource,
@@ -109,30 +150,4 @@ fn validate_published_database(
     validate_assembly_record(&connection, &lineage.lineage, &source.id.0, true)?;
     read_capability_record(&connection, &lineage.lineage, &source.id.0)?;
     Ok(Some(connection))
-}
-
-fn finish_recovered_catalog(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    source: &DataSource,
-    lineage_fingerprint: &str,
-) -> CephFsSourceResult<()> {
-    let catalog_fingerprint = catalog_input_fingerprint(lineage_fingerprint);
-    match claim_catalog(case_conn, &source.id, &catalog_fingerprint)? {
-        CatalogClaim::Ready => {
-            DataSourceRepo::new(case_conn).update_import_state(&source.id, "ready", None)?;
-        }
-        CatalogClaim::Acquired(attempt) => {
-            let summary = load_ready_summary(case_conn, case_root, source, lineage_fingerprint)?;
-            let transaction = case_conn
-                .unchecked_transaction()
-                .map_err(persistence_sqlite::DbError::from)?;
-            complete_catalog(&transaction, &source.id, &attempt, &summary)?;
-            DataSourceRepo::new(&transaction).update_import_state(&source.id, "ready", None)?;
-            transaction
-                .commit()
-                .map_err(persistence_sqlite::DbError::from)?;
-        }
-    }
-    Ok(())
 }

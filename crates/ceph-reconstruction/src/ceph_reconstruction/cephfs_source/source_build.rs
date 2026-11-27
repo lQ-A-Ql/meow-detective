@@ -19,6 +19,7 @@ use super::{
 };
 
 pub(super) struct CephFsSourceBuildRequest<'a> {
+    pub cancel: &'a std::sync::atomic::AtomicBool,
     pub case_root: &'a Path,
     pub case_id: &'a CaseId,
     pub source: &'a DataSource,
@@ -32,7 +33,7 @@ pub(super) struct CephFsSourceBuildRequest<'a> {
 
 pub(super) fn build_source_database(
     request: CephFsSourceBuildRequest<'_>,
-) -> CephFsSourceResult<MaterializedCephFsSource> {
+) -> CephFsSourceResult<(MaterializedCephFsSource, Option<String>)> {
     let connection = source_kernel::source_db::open_fresh_source_build_db(
         request.case_root,
         &request.source.id,
@@ -41,12 +42,30 @@ pub(super) fn build_source_database(
     let build = (|| {
         write_projection_metadata(&connection, &request)?;
         write_catalog_generation(&connection, &request)?;
+        let publication_digest = if request.projection.manifest.published {
+            Some(
+                persistence_source::publication::catalog_publication::seal_catalog_generation(
+                &connection,
+                &request.source.id,
+                request.attempt_id,
+                &super::catalog::catalog_input_fingerprint(request.lineage_fingerprint),
+                persistence_source::publication::catalog_publication::CatalogProjection::SourceOnly,
+                request.cancel,
+            )
+                .map_err(super::publication::map_error)?,
+            )
+        } else {
+            None
+        };
         source_kernel::source_db::finalize_source_build_db(&connection)?;
-        Ok(summary(
-            request.source,
-            request.projection,
-            request.file_entries,
-            request.capability,
+        Ok((
+            summary(
+                request.source,
+                request.projection,
+                request.file_entries,
+                request.capability,
+            ),
+            publication_digest,
         ))
     })();
     drop(connection);
@@ -89,7 +108,6 @@ fn write_catalog_generation(
             &request.source.name,
             request.file_entries,
         )?;
-        publish_native_catalog(connection, request)?;
     } else if !request.file_entries.is_empty() {
         return Err(CephFsSourceError::InconsistentState(
             "incomplete CephFS namespace wrote file tree rows".to_string(),
@@ -97,51 +115,6 @@ fn write_catalog_generation(
     } else {
         remove_incomplete_source_build(request)?;
     }
-    Ok(())
-}
-
-fn publish_native_catalog(
-    connection: &rusqlite::Connection,
-    request: &CephFsSourceBuildRequest<'_>,
-) -> CephFsSourceResult<()> {
-    let store = persistence_source::detail::open_store_for_write(connection)?.ok_or_else(|| {
-        CephFsSourceError::InconsistentState("CephFS native source store is missing".to_string())
-    })?;
-    let projection_digest = hex::encode(persistence_source::fjall::digest(
-        request.projection.manifest.projection_sha256.as_bytes(),
-    ));
-    persistence_source::fjall::seal_source_generation_with_control(
-        &store,
-        &request.source.id.0,
-        request.attempt_id,
-        &projection_digest,
-        &std::sync::atomic::AtomicBool::new(false),
-        |_, _| {},
-    )
-    .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
-    let key = persistence_source::fjall::encode_key(
-        "projection",
-        &[persistence_source::fjall::KeyPart::Text(
-            request.source.id.0.clone(),
-        )],
-    )
-    .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
-    let marker = persistence_source::fjall::VersionedEnvelope::new(
-        "source_projection_complete",
-        1,
-        format!("projection:{}", request.source.id.0),
-        &request.source.id.0,
-        1,
-        request.source.id.0.as_bytes().to_vec(),
-    );
-    store
-        .write_envelope(
-            persistence_source::fjall::KeyspaceName::Meta,
-            key,
-            &marker,
-            persistence_source::fjall::PersistMode::SyncAll,
-        )
-        .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
     Ok(())
 }
 

@@ -18,7 +18,7 @@ pub(super) fn enumerate_lvm_catalog(
         )
         .into());
     }
-    let workers = enumeration_workers(&source.source_path, cancel)?;
+    let (workers, _workspace) = enumeration_workspace(&source.source_path, cancel)?;
     persistence_source::detail::open_store_for_write(source_conn)?;
     let storage = source_kernel::source_db::open_fjall_source_for_build(source_conn, &source.id)?;
     evidence_access::partition_storage_service::replace_from_probe(
@@ -67,10 +67,10 @@ pub(super) fn enumerate_lvm_catalog(
     Ok(())
 }
 
-fn enumeration_workers(
+fn enumeration_workspace(
     descriptor_path: &std::path::Path,
     cancel: &AtomicBool,
-) -> Result<usize, LvmPlanError> {
+) -> Result<(usize, source_kernel::resource_budget::ResourcePermit), LvmPlanError> {
     let plan = lvm::read_lvm_descriptor(descriptor_path)?;
     let pool = source_kernel::resource_budget::global_pool();
     let used = pool.snapshot().0;
@@ -86,7 +86,7 @@ fn enumeration_workers(
         .clamp(1, 4)
         .min(metadata_workers.min(memory_workers).max(1) as usize);
     let readers = plan.sources.len() as u64;
-    let _permit = source_kernel::resource_budget::global_pool()
+    let permit = source_kernel::resource_budget::global_pool()
         .acquire(
             source_kernel::resource_budget::Resources {
                 bytes: source_kernel::resource_budget::ENUMERATION_BYTES
@@ -99,5 +99,5 @@ fn enumeration_workers(
             Some(cancel),
         )
         .map_err(|error| std::io::Error::other(error.to_string()))?;
-    Ok(workers)
+    Ok((workers, permit))
 }

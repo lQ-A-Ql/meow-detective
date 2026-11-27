@@ -62,22 +62,11 @@ fn populate_and_seal(
 }
 
 fn discard_build(request: &CatalogBuild<'_>) -> Result<(), MdRaidPlanError> {
-    source_db::discard_source_build_db(request.case_root, &request.source.id, &request.attempt.id)?;
-    let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
+    persistence_source::publication::catalog_publication::discard_unpublished_catalog_build(
+        request.case_conn,
         request.case_root,
-        &request.source.id.0,
+        &request.source.id,
         &request.attempt.id,
-    )?;
-    let path = layout.build_path();
-    if path.exists() {
-        let parent = source_db::source_dir(request.case_root, &request.source.id).canonicalize()?;
-        let resolved = path.canonicalize()?;
-        if resolved.parent() != Some(parent.as_path()) {
-            return Err(MdRaidPlanError::InvalidPublication);
-        }
-        let _guard = source_kernel::storage_runtime::close_source_store_at_path(&path)?
-            .ok_or(MdRaidPlanError::InvalidPublication)?;
-        std::fs::remove_dir_all(resolved)?;
-    }
-    Ok(())
+    )
+    .map_err(publication::map_publication_error)
 }

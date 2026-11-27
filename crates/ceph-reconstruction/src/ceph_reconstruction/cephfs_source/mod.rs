@@ -8,6 +8,7 @@ mod presence_gate;
 mod preview;
 mod projection;
 mod projection_validation;
+mod publication;
 mod recovery;
 mod registration;
 mod source_build;

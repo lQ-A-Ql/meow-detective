@@ -263,12 +263,6 @@ fn native_collection_publishes_independent_lvm_source_with_preview_and_lifecycle
         .unwrap();
     connection
         .execute(
-            "DELETE FROM structure_view_attempts WHERE derived_source_id=?1",
-            [&logical.id.0],
-        )
-        .unwrap();
-    connection
-        .execute(
             "UPDATE data_source_catalog_publications
              SET state='prepared', published_at=NULL
              WHERE data_source_id=?1",

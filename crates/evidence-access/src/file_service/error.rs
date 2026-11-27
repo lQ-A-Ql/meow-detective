@@ -85,6 +85,9 @@ impl From<ceph_reconstruction::ceph_reconstruction::CephFsSourceError> for FileS
         use ceph_reconstruction::ceph_reconstruction::CephFsSourceError;
 
         match error {
+            CephFsSourceError::Cancelled => {
+                Self::Io(io::Error::new(io::ErrorKind::Interrupted, error))
+            }
             CephFsSourceError::InvalidInput(message) => Self::InvalidInput(message.to_string()),
             CephFsSourceError::IncompleteNamespace
             | CephFsSourceError::RetainedIncompleteSource => Self::Unsupported(error.to_string()),

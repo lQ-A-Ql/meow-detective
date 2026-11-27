@@ -83,8 +83,12 @@ impl<'a> CephRbdLineageRepo<'a> {
         derived_data_source_id: &str,
     ) -> DbResult<Option<CephRbdLineageAggregate>> {
         validate_identifier("derived data-source ID", derived_data_source_id)?;
-        let transaction = self.conn.unchecked_transaction()?;
-        let Some(stored) = transaction
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        let Some(stored) = self.conn
             .query_row(
                 "SELECT derived_data_source_id, parent_ceph_scope_id, parent_storage_object_id, image_name, image_id,
                         object_prefix, image_size, object_order, features, stripe_unit,
@@ -98,15 +102,19 @@ impl<'a> CephRbdLineageRepo<'a> {
             )
             .optional()?
         else {
-            transaction.commit()?;
+            if let Some(transaction) = transaction {
+                transaction.commit()?;
+            }
             return Ok(None);
         };
 
         let lineage = decode_lineage(stored)?;
-        let replicas = find_replicas_on(&transaction, derived_data_source_id)?;
+        let replicas = find_replicas_on(self.conn, derived_data_source_id)?;
         let aggregate = CephRbdLineageAggregate { lineage, replicas };
         validate_aggregate(&aggregate)?;
-        transaction.commit()?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
         Ok(Some(aggregate))
     }
 

@@ -1,5 +1,6 @@
 use persistence_sqlite::repositories::{
     catalog_publication_repo::CatalogPublicationRepo,
+    ceph_fs_lineage_repo::CephFsDerivedLineageAggregate,
     datasource_repo::DataSourceRepo,
     linux_topology_artifact_repo::{LinuxTopologyArtifactRecord, LinuxTopologyArtifactRepo},
     storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
@@ -9,16 +10,19 @@ use rusqlite::OptionalExtension;
 use super::{
     capability::derive_source_capability,
     catalog::{
-        catalog_input_fingerprint, claim_catalog, complete_catalog, defer_incomplete_catalog,
-        fail_catalog, refresh_catalog, CatalogClaim,
+        catalog_input_fingerprint, claim_catalog, defer_incomplete_catalog, fail_catalog_message,
+        refresh_catalog, CatalogClaim,
     },
     lineage::{
         build_data_source, build_lineage, derived_source_id, source_storage, CephFsLineageEvidence,
     },
     presence_gate::validate_presence,
     projection::{build_file_entries, build_namespace_projection},
+    publication::{
+        map_error, publication_request, CephFsPublicationAttempt, CephFsPublicationValidator,
+    },
     recovery::recover_published_source,
-    registration::{ensure_registration, import_state},
+    registration::{bind_derived_revision, ensure_registration, import_state},
     source_build::{build_source_database, CephFsSourceBuildRequest},
     CephFsSourceError, CephFsSourceMaterializationRequest, CephFsSourceResult,
     MaterializedCephFsSource,
@@ -27,9 +31,13 @@ use super::{
 pub fn materialize_cephfs_source(
     request: CephFsSourceMaterializationRequest<'_>,
 ) -> CephFsSourceResult<MaterializedCephFsSource> {
+    persistence_source::publication::catalog_publication::ensure_not_cancelled(request.cancel)
+        .map_err(map_error)?;
     validate_ceph_scope(&request)?;
     validate_presence(request.presence, request.descriptor)?;
     let namespace = ceph_wire::assemble_cephfs_namespace(request.namespace_assembly_input.clone())?;
+    persistence_source::publication::catalog_publication::ensure_not_cancelled(request.cancel)
+        .map_err(map_error)?;
     let data_source_id = derived_source_id(&request.ceph_scope_id.0, &request.descriptor.identity)?;
     let projection = build_namespace_projection(
         &data_source_id,
@@ -69,17 +77,20 @@ pub fn materialize_cephfs_source(
     )?;
     register_cephfs_artifact(&request, &source)?;
     if import_state(request.case_conn, &data_source_id)? == "ready" {
-        return load_ready_summary(
+        return load_ready_summary(request.case_conn, request.case_root, &source);
+    }
+    if source_kernel::source_db::source_db_path(request.case_root, &data_source_id).exists()
+        || CatalogPublicationRepo::new(request.case_conn)
+            .find(&data_source_id)?
+            .is_some()
+    {
+        if let Some(summary) = recover_published_source(
             request.case_conn,
             request.case_root,
             &source,
-            &lineage.lineage.lineage_fingerprint,
-        );
-    }
-    if source_kernel::source_db::source_db_path(request.case_root, &data_source_id).exists() {
-        if let Some(summary) =
-            recover_published_source(request.case_conn, request.case_root, &source, &lineage)?
-        {
+            &lineage,
+            request.cancel,
+        )? {
             return Ok(summary);
         }
         return Err(CephFsSourceError::RetainedIncompleteSource);
@@ -88,12 +99,7 @@ pub fn materialize_cephfs_source(
     let attempt = match claim_catalog(request.case_conn, &data_source_id, &catalog_fingerprint)? {
         CatalogClaim::Acquired(attempt) => attempt,
         CatalogClaim::Ready => {
-            return load_ready_summary(
-                request.case_conn,
-                request.case_root,
-                &source,
-                &lineage.lineage.lineage_fingerprint,
-            )
+            return load_ready_summary(request.case_conn, request.case_root, &source)
         }
     };
     let result = run_catalog_attempt(
@@ -104,12 +110,13 @@ pub fn materialize_cephfs_source(
             attempt: &attempt,
             projection: &projection,
             namespace: &namespace,
+            lineage: &lineage,
             lineage_fingerprint: &lineage.lineage.lineage_fingerprint,
             capability,
         },
     );
     if let Err(error) = &result {
-        record_catalog_failure(&request, &data_source_id, &attempt, error);
+        record_catalog_failure(&request, &data_source_id, &attempt, error)?;
     }
     result
 }
@@ -155,6 +162,7 @@ struct CatalogRun<'a> {
     projection:
         &'a persistence_source::repositories::ceph_fs_namespace_repo::CephFsNamespaceProjection,
     namespace: &'a ceph_wire::CephFsNamespaceAssembly,
+    lineage: &'a CephFsDerivedLineageAggregate,
     lineage_fingerprint: &'a str,
     capability: super::CephFsSourceCapability,
 }
@@ -169,6 +177,7 @@ fn run_catalog_attempt(
         attempt,
         projection,
         namespace,
+        lineage,
         lineage_fingerprint,
         capability,
     } = run;
@@ -177,7 +186,8 @@ fn run_catalog_attempt(
     } else {
         Vec::new()
     };
-    let result = build_source_database(CephFsSourceBuildRequest {
+    let (result, publication_digest) = build_source_database(CephFsSourceBuildRequest {
+        cancel: request.cancel,
         case_root: request.case_root,
         case_id: request.case_id,
         source,
@@ -188,9 +198,23 @@ fn run_catalog_attempt(
         capability,
         lineage_fingerprint,
     })?;
+    persistence_source::publication::catalog_publication::ensure_not_cancelled(request.cancel)
+        .map_err(map_error)?;
+    bind_derived_revision(
+        request.case_conn,
+        request.case_id,
+        data_source_id,
+        result.total_size,
+        result.catalog_digest.clone(),
+    )?;
     refresh_catalog(request.case_conn, data_source_id, attempt)?;
     if result.published {
-        publish_complete(request, attempt, &result)
+        let publication_digest = publication_digest.ok_or_else(|| {
+            CephFsSourceError::InconsistentState(
+                "published CephFS generation has no receipt".to_string(),
+            )
+        })?;
+        publish_complete(request, attempt, &result, &publication_digest, lineage)
     } else {
         preserve_incomplete(request, attempt, &result)
     }
@@ -201,60 +225,65 @@ fn record_catalog_failure(
     data_source_id: &domain::DataSourceId,
     attempt: &super::catalog::CatalogAttempt,
     error: &CephFsSourceError,
-) {
-    fail_catalog(request.case_conn, data_source_id, attempt, error);
-    let _ = DataSourceRepo::new(request.case_conn).update_import_state(
+) -> CephFsSourceResult<()> {
+    let cancelled = matches!(error, CephFsSourceError::Cancelled);
+    let transaction = request
+        .case_conn
+        .unchecked_transaction()
+        .map_err(persistence_sqlite::DbError::from)?;
+    fail_catalog_message(
+        &transaction,
         data_source_id,
-        "failed",
+        attempt,
+        &error.to_string(),
+        cancelled,
+    )?;
+    DataSourceRepo::new(&transaction).update_import_state(
+        data_source_id,
+        if cancelled { "pending" } else { "failed" },
         Some(&error.to_string()),
-    );
-    if let Err(cleanup_error) = source_kernel::source_db::discard_source_build_db(
+    )?;
+    transaction
+        .commit()
+        .map_err(persistence_sqlite::DbError::from)?;
+    persistence_source::publication::catalog_publication::discard_unpublished_catalog_build(
+        request.case_conn,
         request.case_root,
         data_source_id,
         &attempt.attempt_id,
-    ) {
-        tracing::warn!(
-            data_source_id = %data_source_id.0,
-            error = %cleanup_error,
-            primary_error = %error,
-            "Failed to discard CephFS source build database"
-        );
-    }
+    )
+    .map_err(map_error)?;
+    Ok(())
 }
 
 fn publish_complete(
     request: &CephFsSourceMaterializationRequest<'_>,
     attempt: &super::catalog::CatalogAttempt,
     summary: &MaterializedCephFsSource,
+    publication_digest: &str,
+    lineage: &CephFsDerivedLineageAggregate,
 ) -> CephFsSourceResult<MaterializedCephFsSource> {
-    let data_source_id = &summary.data_source.id;
-    let rel_path = source_kernel::source_db::canonical_source_db_rel_path(data_source_id);
-    let publication = CatalogPublicationRepo::new(request.case_conn).prepare(
-        data_source_id,
-        &attempt.attempt_id,
-        &attempt.input_fingerprint,
-        &rel_path,
-        &summary.catalog_digest,
-    )?;
-    source_kernel::source_db::publish_source_build_db(
+    let validator = CephFsPublicationValidator {
+        case_root: request.case_root,
+        lineage,
+    };
+    let publication_attempt = CephFsPublicationAttempt { attempt, summary };
+    let fingerprint = catalog_input_fingerprint(&lineage.lineage.lineage_fingerprint);
+    let publication = publication_request(
+        request.case_conn,
         request.case_root,
-        data_source_id,
-        &attempt.attempt_id,
-    )?;
-    CatalogPublicationRepo::new(request.case_conn).mark_published(
-        data_source_id,
-        &attempt.attempt_id,
-        &publication.seal,
-    )?;
-    let transaction = request
-        .case_conn
-        .unchecked_transaction()
-        .map_err(persistence_sqlite::DbError::from)?;
-    complete_catalog(&transaction, data_source_id, attempt, summary)?;
-    DataSourceRepo::new(&transaction).update_import_state(data_source_id, "ready", None)?;
-    transaction
-        .commit()
-        .map_err(persistence_sqlite::DbError::from)?;
+        request.case_id,
+        &summary.data_source,
+        &fingerprint,
+        &publication_attempt,
+        &validator,
+        request.cancel,
+    );
+    persistence_source::publication::catalog_publication::publish_build(
+        &publication,
+        publication_digest,
+    )
+    .map_err(map_error)?;
     Ok(summary.clone())
 }
 
@@ -288,7 +317,6 @@ pub(super) fn load_ready_summary(
     case_conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     source: &domain::DataSource,
-    lineage_fingerprint: &str,
 ) -> CephFsSourceResult<MaterializedCephFsSource> {
     let lineage =
         persistence_sqlite::repositories::ceph_fs_lineage_repo::CephFsDerivedLineageRepo::new(
@@ -298,6 +326,31 @@ pub(super) fn load_ready_summary(
         .ok_or_else(|| {
             CephFsSourceError::InconsistentState("CephFS lineage is missing".to_string())
         })?;
+    let summary = load_published_summary(case_conn, case_root, source, &lineage)?;
+    let fingerprint = catalog_input_fingerprint(&lineage.lineage.lineage_fingerprint);
+    let validator = CephFsPublicationValidator {
+        case_root,
+        lineage: &lineage,
+    };
+    persistence_source::publication::catalog_publication::verify_publication(
+        case_conn,
+        case_root,
+        source,
+        &fingerprint,
+        &DataSourceRepo::new(case_conn).case_id(&source.id)?,
+        persistence_source::publication::catalog_publication::CatalogProjection::SourceOnly,
+        &validator,
+    )
+    .map_err(map_error)?;
+    Ok(summary)
+}
+
+pub(super) fn load_published_summary(
+    case_conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    source: &domain::DataSource,
+    lineage: &CephFsDerivedLineageAggregate,
+) -> CephFsSourceResult<MaterializedCephFsSource> {
     let db_path =
         source_kernel::source_db::registered_source_db_path(case_conn, case_root, &source.id)?;
     source_kernel::source_db::verify_finalized_source_db(&db_path, &source.id)?;
@@ -323,16 +376,7 @@ pub(super) fn load_ready_summary(
     }
     validate_assembly_record(&connection, &lineage.lineage, &source.id.0, true)?;
     let capability = read_capability_record(&connection, &lineage.lineage, &source.id.0)?;
-    let fingerprint = catalog_input_fingerprint(lineage_fingerprint);
-    let rel_path = source_kernel::source_db::canonical_source_db_rel_path(&source.id);
-    if !manifest.published
-        || !CatalogPublicationRepo::new(case_conn).is_published(
-            &source.id,
-            &fingerprint,
-            &rel_path,
-            &lineage.lineage.namespace_projection_sha256,
-        )?
-    {
+    if !manifest.published {
         return Err(CephFsSourceError::StalePublication);
     }
     Ok(MaterializedCephFsSource {

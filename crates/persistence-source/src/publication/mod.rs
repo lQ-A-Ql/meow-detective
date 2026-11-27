@@ -2,6 +2,7 @@
 
 mod analysis_gc;
 pub mod build;
+pub mod catalog_publication;
 mod gc_scheduler;
 
 pub use analysis_gc::{
