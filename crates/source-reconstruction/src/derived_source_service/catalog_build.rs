@@ -84,20 +84,15 @@ pub(super) fn build_and_enumerate_source(
     fjall_source
         .persist(persistence_source::fjall::PersistMode::SyncAll)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let source_finalize = (|| {
-        persist_current_source_manifest(
-            &source_conn,
-            &fjall_source,
-            request.lineage_fingerprint,
-            &summary,
-        )?;
-        super::ensure_not_cancelled(request.cancel_token)?;
-        source_db::finalize_source_build_db(&source_conn)?;
-        Ok::<_, DerivedSourceError>(())
-    })();
-    drop(fjall_source);
-    drop(source_conn);
-    if let Err(error) = source_finalize {
+    let source_manifest = persist_current_source_manifest(
+        &source_conn,
+        &fjall_source,
+        request.lineage_fingerprint,
+        &summary,
+    );
+    if let Err(error) = source_manifest {
+        drop(fjall_source);
+        drop(source_conn);
         discard_failed_source_build(
             request.case_root,
             &request.data_source.id,
@@ -106,14 +101,60 @@ pub(super) fn build_and_enumerate_source(
         );
         return Err(error);
     }
-    publish_fjall_partition_generation(
+    if let Err(error) = super::ensure_not_cancelled(request.cancel_token) {
+        drop(fjall_source);
+        drop(source_conn);
+        discard_failed_source_build(
+            request.case_root,
+            &request.data_source.id,
+            attempt_id,
+            &error,
+        );
+        return Err(error);
+    }
+    drop(fjall_source);
+    if let Err(error) = seal_fjall_partition_generation(
         &request.data_source.id,
         attempt_id,
-        &fjall_layout,
         &fjall_target_root,
         fjall_generation_exists,
         &summary.catalog_digest,
-    )?;
+    ) {
+        drop(source_conn);
+        discard_failed_source_build(
+            request.case_root,
+            &request.data_source.id,
+            attempt_id,
+            &error,
+        );
+        return Err(error);
+    }
+    if let Err(error) =
+        source_db::finalize_source_build_db(&source_conn).map_err(DerivedSourceError::Database)
+    {
+        drop(source_conn);
+        discard_failed_source_build(
+            request.case_root,
+            &request.data_source.id,
+            attempt_id,
+            &error,
+        );
+        return Err(error);
+    }
+    drop(source_conn);
+    if let Err(error) = publish_fjall_partition_generation(
+        &fjall_layout,
+        &fjall_target_root,
+        fjall_generation_exists,
+    ) {
+        discard_failed_source_build(
+            request.case_root,
+            &request.data_source.id,
+            attempt_id,
+            &error,
+        );
+        return Err(error);
+    }
     if let Err(error) = publish_claimed_source_build(
         request.case_conn,
         request.case_root,
@@ -186,10 +227,9 @@ fn prepare_fjall_source(
     })
 }
 
-fn publish_fjall_partition_generation(
+fn seal_fjall_partition_generation(
     data_source_id: &DataSourceId,
     attempt_id: &str,
-    layout: &persistence_source::fjall::SourceBuildLayout,
     target_root: &std::path::Path,
     replace_published: bool,
     catalog_digest: &str,
@@ -204,6 +244,17 @@ fn publish_fjall_partition_generation(
         persistence_source::fjall::DatabaseConfig::default(),
     )
     .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    let (keyspace, key, marker) =
+        evidence_access::partition_storage_service::partition_projection_marker(&data_source_id.0)
+            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
+    source
+        .write_envelope(
+            keyspace,
+            key,
+            &marker,
+            persistence_source::fjall::PersistMode::SyncAll,
+        )
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     let projection_digest =
         hex::encode(persistence_source::fjall::digest(catalog_digest.as_bytes()));
     let seal = if replace_published {
@@ -224,22 +275,25 @@ fn publish_fjall_partition_generation(
         )
     };
     seal.map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    let (keyspace, key, marker) =
-        evidence_access::partition_storage_service::partition_projection_marker(&data_source_id.0)
-            .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
-    source
-        .write_envelope(
-            keyspace,
-            key,
-            &marker,
-            persistence_source::fjall::PersistMode::SyncAll,
-        )
-        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     source
         .database()
         .persist(persistence_source::fjall::PersistMode::SyncAll)
         .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     drop(source);
+    drop(_close_guard);
+    Ok(())
+}
+
+fn publish_fjall_partition_generation(
+    layout: &persistence_source::fjall::SourceBuildLayout,
+    target_root: &std::path::Path,
+    replace_published: bool,
+) -> DerivedSourceResult<()> {
+    let _close_guard = source_kernel::storage_runtime::close_source_store_at_path(target_root)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?
+        .ok_or_else(|| {
+            DerivedSourceError::Reconstruction("Fjall source build is still in use".to_owned())
+        })?;
     if !replace_published {
         persistence_source::fjall::publish_source_generation(target_root, layout.published_path())
             .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
