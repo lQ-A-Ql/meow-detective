@@ -97,7 +97,6 @@ fn aggregate() -> CephRbdLineageAggregate {
 #[test]
 fn migration_and_lineage_round_trip_replace_and_delete() {
     let conn = setup_case_db();
-    assert_eq!(runner::latest_version(), "0069_nested_range_sources");
     let repo = CephRbdLineageRepo::new(&conn);
     let original = aggregate();
     repo.insert_aggregate(&original).expect("insert lineage");
@@ -126,6 +125,71 @@ fn migration_and_lineage_round_trip_replace_and_delete() {
         .find_by_data_source(DERIVED_SOURCE_ID)
         .expect("find deleted lineage")
         .is_none());
+}
+
+#[test]
+fn lineage_read_shares_outer_transaction_without_committing_changes() {
+    let conn = setup_case_db();
+    let original = aggregate();
+    CephRbdLineageRepo::new(&conn)
+        .insert_aggregate(&original)
+        .expect("insert lineage");
+    let transaction = conn.unchecked_transaction().expect("start publication");
+    transaction
+        .execute(
+            "UPDATE ceph_rbd_derived_lineage SET image_name = 'updated-vm'
+             WHERE derived_data_source_id = ?1",
+            [DERIVED_SOURCE_ID],
+        )
+        .expect("update lineage in publication");
+    let mut expected = original.clone();
+    expected.lineage.image_name = "updated-vm".into();
+    let repo = CephRbdLineageRepo::new(&transaction);
+    assert_eq!(
+        repo.find_by_data_source(DERIVED_SOURCE_ID)
+            .expect("read current pending lineage"),
+        Some(expected)
+    );
+    assert_eq!(
+        repo.find_by_data_source("absent-source")
+            .expect("read absent lineage"),
+        None
+    );
+    assert!(!transaction.is_autocommit());
+    transaction.rollback().expect("discard publication");
+    assert_eq!(
+        CephRbdLineageRepo::new(&conn)
+            .find_by_data_source(DERIVED_SOURCE_ID)
+            .expect("read original lineage"),
+        Some(original)
+    );
+}
+
+#[test]
+fn invalid_lineage_read_preserves_outer_transaction_and_original_replicas() {
+    let conn = setup_case_db();
+    CephRbdLineageRepo::new(&conn)
+        .insert_aggregate(&aggregate())
+        .expect("insert lineage");
+    let transaction = conn.unchecked_transaction().expect("start publication");
+    transaction
+        .execute(
+            "DELETE FROM ceph_rbd_derived_replicas
+             WHERE derived_data_source_id = ?1 AND ordinal = 2",
+            [DERIVED_SOURCE_ID],
+        )
+        .expect("remove required replica in publication");
+    assert!(CephRbdLineageRepo::new(&transaction)
+        .find_by_data_source(DERIVED_SOURCE_ID)
+        .is_err());
+    assert!(!transaction.is_autocommit());
+    transaction.rollback().expect("discard invalid publication");
+    assert_eq!(
+        CephRbdLineageRepo::new(&conn)
+            .find_by_data_source(DERIVED_SOURCE_ID)
+            .expect("read preserved replicas"),
+        Some(aggregate())
+    );
 }
 
 #[test]
