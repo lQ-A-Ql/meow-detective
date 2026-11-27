@@ -126,5 +126,6 @@ fn map_content_error(error: ContentError) -> MdRaidPlanError {
         ContentError::Changed => MdRaidPlanError::SourceContentChanged,
         ContentError::InvalidIdentity => MdRaidPlanError::InvalidContentIdentity,
         ContentError::Io(error) => MdRaidPlanError::Io(error),
+        error => MdRaidPlanError::Io(std::io::Error::other(error)),
     }
 }

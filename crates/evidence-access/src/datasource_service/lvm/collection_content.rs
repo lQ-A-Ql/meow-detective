@@ -93,11 +93,10 @@ impl CollectionContent {
                     Some(cancel),
                 )
                 .map_err(source_kernel::resource_budget::ResourceError::into_io)?;
-            let mut reader = factory.open_reader_with_cancel(cancel)?;
-            let identity = content::capture_reader(
+            let identity = content::capture_factory(
                 &source.source_path,
                 &source.source_kind,
-                &mut *reader,
+                &factory,
                 cancel,
             )?;
             factory.validate_snapshot()?;

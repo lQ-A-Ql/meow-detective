@@ -1,7 +1,7 @@
 use super::*;
 use crate::datasource_service;
 use std::fs::{File, FileTimes, OpenOptions};
-use std::io::{Read, Seek, Write};
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
 #[test]

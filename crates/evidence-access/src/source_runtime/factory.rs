@@ -168,7 +168,7 @@ fn e01_factory(
         granularity: 512,
         capabilities: ReaderCapabilities {
             independent_cursor: true,
-            max_concurrent_readers: 4,
+            max_concurrent_readers: usize::MAX,
             stable_snapshot: true,
         },
         route,
@@ -195,7 +195,11 @@ fn raw_factory(
         return Err(crate::resource_budget::ResourceError::Limit.into_io());
     }
     let metadata_bytes = snapshot.metadata_bytes().max(65536);
-    let readers = if template.info().kind == "raw" { 4 } else { 1 };
+    let readers = if template.info().kind == "raw" {
+        usize::MAX
+    } else {
+        1
+    };
     drop(template);
     let metadata = Arc::new(
         parse
