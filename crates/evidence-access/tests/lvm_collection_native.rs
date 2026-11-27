@@ -11,6 +11,9 @@ use evidence_access::datasource_service::{
 };
 use sha2::{Digest, Sha256};
 
+// Each case owns a full content scan and retained plans in the process-wide pool.
+static COLLECTION_BUDGET: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 fn sources(root: &Path) -> Vec<LvmDiscoverySource> {
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../testdata/fixtures/public-small/lvm-native/shared-ext4");
@@ -31,6 +34,7 @@ fn sources(root: &Path) -> Vec<LvmDiscoverySource> {
 
 #[test]
 fn native_cross_pv_view_has_one_stable_owner_and_matches_the_kernel_digest() {
+    let _budget = COLLECTION_BUDGET.lock().unwrap();
     let workspace = tempfile::tempdir().unwrap();
     let mut sources = sources(workspace.path());
     let cancel = AtomicBool::new(false);
@@ -111,6 +115,7 @@ fn native_cross_pv_view_has_one_stable_owner_and_matches_the_kernel_digest() {
 
 #[test]
 fn native_collection_rejects_duplicate_pv_and_invalidates_changed_members() {
+    let _budget = COLLECTION_BUDGET.lock().unwrap();
     let workspace = tempfile::tempdir().unwrap();
     let mut sources = sources(workspace.path());
     let cancel = AtomicBool::new(false);
@@ -144,6 +149,7 @@ fn native_collection_rejects_duplicate_pv_and_invalidates_changed_members() {
 
 #[test]
 fn collection_admission_propagates_thin_transaction_failure() {
+    let _budget = COLLECTION_BUDGET.lock().unwrap();
     let workspace = tempfile::tempdir().unwrap();
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(
         "../../testdata/fixtures/public-small/lvm-native/thin/pv-transaction-conflict.raw.gz",
@@ -170,6 +176,7 @@ fn collection_admission_propagates_thin_transaction_failure() {
 
 #[test]
 fn collection_content_detects_replacement_with_unchanged_length_and_timestamps() {
+    let _budget = COLLECTION_BUDGET.lock().unwrap();
     use std::io::{Seek, SeekFrom, Write};
     let workspace = tempfile::tempdir().unwrap();
     let sources = sources(workspace.path());
@@ -244,6 +251,7 @@ fn collection_content_detects_replacement_with_unchanged_length_and_timestamps()
 
 #[test]
 fn independently_complete_cloned_vgs_keep_separate_content_and_physical_owners() {
+    let _budget = COLLECTION_BUDGET.lock().unwrap();
     use std::io::{Seek, SeekFrom, Write};
     let workspace = tempfile::tempdir().unwrap();
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
