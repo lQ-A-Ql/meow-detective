@@ -210,7 +210,8 @@ Kubernetes 清单保留固定数量且顺序稳定的候选，同时统计全部
 集合内容 fingerprint 写入来源恢复记录，中断恢复拒绝不同内容或缺失绑定的计划。
 MD 成员发现复用集合直接探测和 VG 展开期间保留的原生 MD 元数据，
 派生目录阶段消费同一计划，不重新探测镜像、汇集 PV 或展开 VG。
-重复输入、重复 PV UUID、冲突 committed metadata 和 thin 打开错误会终止共享计划准备。
+单来源内完整的 VG 分别保留来源身份，允许不同主机的克隆磁盘具有相同 PV/VG UUID；
+跨来源补齐 VG 时拒绝重复 PV 身份，冲突 committed metadata 和 thin 打开错误会终止准备。
 `evidence-access --test lvm_collection_native` 和
 `app-services --test lvm_collection_import_native` 使用 LVM2/mkfs.ext4 原生镜像，
 覆盖没有 metadata copy 的 PV、相同坐标上的多个 PV、反向成员顺序、

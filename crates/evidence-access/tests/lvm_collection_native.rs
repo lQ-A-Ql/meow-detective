@@ -234,3 +234,65 @@ fn collection_content_detects_replacement_with_unchanged_length_and_timestamps()
         Err(CollectionPlanError::Cancelled)
     ));
 }
+
+#[test]
+fn independently_complete_cloned_vgs_keep_separate_content_and_physical_owners() {
+    use std::io::{Seek, SeekFrom, Write};
+    let workspace = tempfile::tempdir().unwrap();
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/fixtures/public-small/lvm-native/thin/pv.raw.gz");
+    let first = workspace.path().join("node-a.raw");
+    std::io::copy(
+        &mut flate2::read::GzDecoder::new(File::open(fixture).unwrap()),
+        &mut File::create(&first).unwrap(),
+    )
+    .unwrap();
+    let second = workspace.path().join("node-b.raw");
+    std::fs::copy(&first, &second).unwrap();
+    let mut changed = File::options()
+        .read(true)
+        .write(true)
+        .open(&second)
+        .unwrap();
+    changed.seek(SeekFrom::End(-1)).unwrap();
+    let mut byte = [0];
+    changed.read_exact(&mut byte).unwrap();
+    changed.seek(SeekFrom::End(-1)).unwrap();
+    changed.write_all(&[byte[0] ^ 0x80]).unwrap();
+    drop(changed);
+    let sources = [
+        LvmDiscoverySource::new(&first, DataSourceKind::Raw),
+        LvmDiscoverySource::new(&second, DataSourceKind::Raw),
+    ];
+    let plan = ImageCollectionPlan::prepare(&sources, &AtomicBool::new(false)).unwrap();
+    assert_ne!(
+        plan.source_content(&first, &DataSourceKind::Raw)
+            .unwrap()
+            .logical_sha256,
+        plan.source_content(&second, &DataSourceKind::Raw)
+            .unwrap()
+            .logical_sha256
+    );
+    for (index, source) in sources.iter().enumerate() {
+        let probe = plan
+            .member_probe(index, &source.source_path, &source.source_kind)
+            .unwrap();
+        assert!(!plan.is_shared_member(index));
+        assert!(probe
+            .partitions
+            .iter()
+            .any(|partition| partition.status == PartitionStatus::Expanded));
+        for partition in probe
+            .partitions
+            .iter()
+            .filter(|partition| partition.lvm_identity.is_some())
+        {
+            let identity = partition.lvm_identity.as_ref().unwrap();
+            assert_eq!(identity.pv_sources.len(), 1);
+            assert_eq!(
+                Path::new(&identity.pv_sources[0].source_path),
+                source.source_path.canonicalize().unwrap()
+            );
+        }
+    }
+}

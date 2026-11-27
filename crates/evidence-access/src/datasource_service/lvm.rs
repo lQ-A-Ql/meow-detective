@@ -1,6 +1,7 @@
 mod collection;
 mod collection_access;
 mod collection_content;
+mod collection_groups;
 mod collection_memory;
 mod diagnostics;
 mod discovery;

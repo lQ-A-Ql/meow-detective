@@ -108,14 +108,8 @@ impl ImageCollectionPlan {
         let snapshot = SourceSnapshot::merged(&source_snapshots);
         let content = super::collection_content::CollectionContent::capture(&canonical, cancel)?;
         let (mut probes, pv_infos, mut md_members) = inspect_sources(&canonical, &content, cancel)?;
-        let groups = discovery::collect_metadata_groups(&pv_infos)?;
-        let keys = pv_infos
-            .iter()
-            .map(|info| source_identity::lvm_pv_source_key(&info.source))
-            .collect();
         let mut warnings = Vec::new();
-        let (complete, _) =
-            discovery::complete_metadata_groups(&pv_infos, &groups, &keys, &mut warnings);
+        let complete = super::collection_groups::complete_groups(&pv_infos, &mut warnings)?;
         let mut shared_members = vec![false; canonical.len()];
         for group in complete {
             check_cancel(cancel)?;
@@ -254,8 +248,8 @@ fn inspect_sources(
     let mut probes = Vec::with_capacity(canonical.len());
     let mut pv_infos = Vec::new();
     let mut md_members = Vec::new();
-    let mut uuids = HashSet::new();
     for source in canonical {
+        let mut uuids = HashSet::new();
         check_cancel(cancel)?;
         let factory = content.factory(&source.source_path, &source.source_kind, cancel)?;
         let mut reader = factory.open_reader_with_cancel(cancel)?;
