@@ -234,6 +234,7 @@ fn finalize(
             ctx.source_connection()?,
             &source.id.0,
         )?;
+        super::source_revision::publish_observations(ctx, source, &digest)?;
         mark_projection_committed(ctx.conn, &ctx.job_id.0, &digest)?;
         Ok(message)
     });

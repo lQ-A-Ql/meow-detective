@@ -2,19 +2,23 @@ use std::{
     fs::File,
     io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
-    sync::atomic::AtomicBool,
+    sync::atomic::{AtomicBool, Ordering},
 };
 
 use domain::{
-    structure::{ByteRange, ReadIntent},
+    structure::{ByteRange, ReadIntent, ReadPriority, ReadVerification, SourceRevisionRef},
     DataSourceKind,
 };
 use evidence_access::{
     datasource_service::{CollectionPlanError, ImageCollectionPlan, LvmDiscoverySource},
     mdraid::discover_mdraid_from_collection,
-    structure_access::{open_verified_view, plan_target_access, AccessTarget, TargetAccessError},
+    structure_access::{
+        open_verified_view, plan_target_access, verify_derived_view, AccessTarget,
+        TargetAccessError, TargetAccessRequest,
+    },
 };
 use evidence_core::EvidenceReader;
+use sha2::{Digest, Sha256};
 
 fn native_members(workspace: &Path) -> Vec<PathBuf> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -42,8 +46,44 @@ fn workspace() -> tempfile::TempDir {
         .unwrap()
 }
 
+fn source_revision(source_id: &str) -> SourceRevisionRef {
+    SourceRevisionRef {
+        case_id: "case-access".into(),
+        source_id: source_id.into(),
+        revision: 1,
+    }
+}
+
+fn request<'a>(
+    target: AccessTarget<'a>,
+    source_id: &str,
+    ranges: Option<Vec<ByteRange>>,
+    intent: ReadIntent,
+) -> TargetAccessRequest<'a> {
+    TargetAccessRequest {
+        target,
+        source_revision: source_revision(source_id),
+        ranges,
+        intent,
+        priority: ReadPriority::Interactive,
+        deadline_unix_ms: None,
+        reorderable: true,
+        consumers: vec!["structure-access-test".into()],
+        verification: ReadVerification::ContentDigest,
+        attempt: None,
+    }
+}
+
+fn oracle() -> Vec<u8> {
+    std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../testdata/fixtures/public-small/mdraid/oracle.bin"),
+    )
+    .unwrap()
+}
+
 #[test]
-fn native_md_range_matches_kernel_oracle_and_has_independent_cursor() {
+fn native_md_ranges_match_oracle_have_independent_cursors_and_verify_digest() {
     let workspace = workspace();
     let paths = native_members(workspace.path());
     let sources = paths
@@ -53,24 +93,22 @@ fn native_md_range_matches_kernel_oracle_and_has_independent_cursor() {
     let cancel = AtomicBool::new(false);
     let collection = ImageCollectionPlan::prepare(&sources, &cancel).unwrap();
     let native = discover_mdraid_from_collection(&collection, &cancel).unwrap();
-    assert_eq!(native.len(), 1);
+    let expected = oracle();
     let range = ByteRange::new(4093, 8177).unwrap();
     let access = plan_target_access(
-        AccessTarget::MdRaid(&native[0]),
-        Some(range),
-        ReadIntent::ContentRead,
+        request(
+            AccessTarget::MdRaid(&native[0]),
+            "md-access",
+            Some(vec![range]),
+            ReadIntent::ContentRead,
+        ),
         &cancel,
     )
     .unwrap();
-    assert_eq!(access.demand().capability.range, range);
-    assert!(access.demand().target_fingerprint.starts_with("mdraid-v1:"));
+    assert_eq!(access.demand().ranges.ranges(), &[range]);
+    assert!(access.demand().ranges.target_size() >= range.end());
     let mut view = open_verified_view(access, &cancel).unwrap();
-    assert_eq!(view.info().size, 8177);
-    let expected = std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../testdata/fixtures/public-small/mdraid/oracle.bin"),
-    )
-    .unwrap();
+    assert_eq!(view.info().size, range.length());
     let mut actual = Vec::new();
     view.read_to_end(&mut actual).unwrap();
     assert_eq!(actual, expected[4093..12270]);
@@ -79,9 +117,12 @@ fn native_md_range_matches_kernel_oracle_and_has_independent_cursor() {
     assert_eq!(view.read(&mut last).unwrap(), 1);
     assert_eq!(last[0], expected[12269]);
     let second = plan_target_access(
-        AccessTarget::MdRaid(&native[0]),
-        Some(range),
-        ReadIntent::ContentRead,
+        request(
+            AccessTarget::MdRaid(&native[0]),
+            "md-access",
+            Some(vec![range]),
+            ReadIntent::ContentRead,
+        ),
         &cancel,
     )
     .unwrap();
@@ -92,6 +133,85 @@ fn native_md_range_matches_kernel_oracle_and_has_independent_cursor() {
     assert_eq!(view.stream_position().unwrap(), range.length());
     drop(second);
     drop(view);
+    let expected_digest = hex::encode(Sha256::digest(&expected[4093..12270]));
+    let verification = plan_target_access(
+        request(
+            AccessTarget::MdRaid(&native[0]),
+            "md-access",
+            Some(vec![range]),
+            ReadIntent::ContentRead,
+        ),
+        &cancel,
+    )
+    .unwrap();
+    assert_eq!(
+        verify_derived_view(verification, &expected_digest, &cancel).unwrap(),
+        expected_digest
+    );
+    let mismatch = plan_target_access(
+        request(
+            AccessTarget::MdRaid(&native[0]),
+            "md-access",
+            Some(vec![range]),
+            ReadIntent::ContentRead,
+        ),
+        &cancel,
+    )
+    .unwrap();
+    assert!(matches!(
+        verify_derived_view(mismatch, &"0".repeat(64), &cancel),
+        Err(TargetAccessError::DigestMismatch { .. })
+    ));
+    drop(collection);
+    workspace.close().unwrap();
+}
+
+#[test]
+fn multiple_ranges_are_merged_and_read_as_one_ordered_view() {
+    let workspace = workspace();
+    let paths = native_members(workspace.path());
+    let sources = paths
+        .iter()
+        .map(|path| LvmDiscoverySource::new(path, DataSourceKind::Raw))
+        .collect::<Vec<_>>();
+    let cancel = AtomicBool::new(false);
+    let collection = ImageCollectionPlan::prepare(&sources, &cancel).unwrap();
+    let native = discover_mdraid_from_collection(&collection, &cancel).unwrap();
+    let expected = oracle();
+    let ranges = vec![
+        ByteRange::new(300, 20).unwrap(),
+        ByteRange::new(0, 10).unwrap(),
+        ByteRange::new(315, 10).unwrap(),
+    ];
+    let access = plan_target_access(
+        request(
+            AccessTarget::MdRaid(&native[0]),
+            "md-access",
+            Some(ranges),
+            ReadIntent::ContentRead,
+        ),
+        &cancel,
+    )
+    .unwrap();
+    assert_eq!(
+        access.demand().ranges.ranges(),
+        &[
+            ByteRange::new(0, 10).unwrap(),
+            ByteRange::new(300, 25).unwrap()
+        ]
+    );
+    let mut view = open_verified_view(access, &cancel).unwrap();
+    assert_eq!(view.info().size, 35);
+    let mut actual = vec![0; 35];
+    view.read_exact(&mut actual).unwrap();
+    let mut expected_view = expected[..10].to_vec();
+    expected_view.extend_from_slice(&expected[300..325]);
+    assert_eq!(actual, expected_view);
+    view.seek(SeekFrom::Start(10)).unwrap();
+    let mut second = vec![0; 5];
+    view.read_exact(&mut second).unwrap();
+    assert_eq!(second, expected[300..305]);
+    assert!(view.seek(SeekFrom::Start(36)).is_err());
     drop(collection);
     workspace.close().unwrap();
 }
@@ -114,14 +234,20 @@ fn collection_ranges_reject_unknown_members_bounds_cancellation_and_content_chan
     };
     let oversized = ByteRange::new(0, std::fs::metadata(&paths[0]).unwrap().len() + 1).unwrap();
     assert!(matches!(
-        plan_target_access(target(), Some(oversized), ReadIntent::ContentRead, &cancel),
+        plan_target_access(
+            request(
+                target(),
+                "collection-source",
+                Some(vec![oversized]),
+                ReadIntent::ContentRead
+            ),
+            &cancel
+        ),
         Err(TargetAccessError::Range(_))
     ));
     assert!(matches!(
         plan_target_access(
-            target(),
-            None,
-            ReadIntent::ContentRead,
+            request(target(), "collection-source", None, ReadIntent::ContentRead),
             &AtomicBool::new(true)
         ),
         Err(TargetAccessError::Cancelled)
@@ -130,13 +256,16 @@ fn collection_ranges_reject_unknown_members_bounds_cancellation_and_content_chan
     std::fs::copy(&paths[0], &unknown).unwrap();
     assert!(matches!(
         plan_target_access(
-            AccessTarget::CollectionSource {
-                collection: &collection,
-                path: &unknown,
-                kind: &kind
-            },
-            None,
-            ReadIntent::ContentRead,
+            request(
+                AccessTarget::CollectionSource {
+                    collection: &collection,
+                    path: &unknown,
+                    kind: &kind
+                },
+                "collection-source",
+                None,
+                ReadIntent::ContentRead
+            ),
             &cancel
         ),
         Err(TargetAccessError::Collection(
@@ -144,8 +273,16 @@ fn collection_ranges_reject_unknown_members_bounds_cancellation_and_content_chan
         ))
     ));
     let range = ByteRange::new(4093, 8177).unwrap();
-    let access =
-        plan_target_access(target(), Some(range), ReadIntent::ContentRead, &cancel).unwrap();
+    let access = plan_target_access(
+        request(
+            target(),
+            "collection-source",
+            Some(vec![range]),
+            ReadIntent::ContentRead,
+        ),
+        &cancel,
+    )
+    .unwrap();
     let mut view = open_verified_view(access, &cancel).unwrap();
     let mut expected = File::open(&paths[0]).unwrap();
     expected.seek(SeekFrom::Start(range.start())).unwrap();
@@ -156,8 +293,16 @@ fn collection_ranges_reject_unknown_members_bounds_cancellation_and_content_chan
     assert_eq!(actual, expected_bytes);
     drop(expected);
     drop(view);
-    let access =
-        plan_target_access(target(), Some(range), ReadIntent::ContentRead, &cancel).unwrap();
+    let access = plan_target_access(
+        request(
+            target(),
+            "collection-source",
+            Some(vec![range]),
+            ReadIntent::ContentRead,
+        ),
+        &cancel,
+    )
+    .unwrap();
     let mut view = open_verified_view(access, &cancel).unwrap();
     use std::io::Write;
     let mut changed = std::fs::OpenOptions::new()
@@ -186,17 +331,17 @@ fn md_full_view_empty_eof_and_read_cancellation_preserve_boundaries() {
     let collection = ImageCollectionPlan::prepare(&sources, &cancel).unwrap();
     let native = discover_mdraid_from_collection(&collection, &cancel).unwrap();
     let access = plan_target_access(
-        AccessTarget::MdRaid(&native[0]),
-        None,
-        ReadIntent::MetadataInspection,
+        request(
+            AccessTarget::MdRaid(&native[0]),
+            "md-access",
+            None,
+            ReadIntent::MetadataInspection,
+        ),
         &cancel,
     )
     .unwrap();
-    let size = access.demand().capability.target_size;
-    assert_eq!(
-        access.demand().capability.range,
-        ByteRange::new(0, size).unwrap()
-    );
+    let size = access.demand().ranges.target_size();
+    assert!(access.demand().ranges.is_full());
     let mut full = open_verified_view(access, &cancel).unwrap();
     assert_eq!(full.info().size, size);
     assert_eq!(full.seek(SeekFrom::End(0)).unwrap(), size);
@@ -204,26 +349,16 @@ fn md_full_view_empty_eof_and_read_cancellation_preserve_boundaries() {
     assert!(full.seek(SeekFrom::Start(0)).is_ok());
     assert_eq!(full.read(&mut []).unwrap(), 0);
     let empty = plan_target_access(
-        AccessTarget::MdRaid(&native[0]),
-        Some(ByteRange::new(size, 0).unwrap()),
-        ReadIntent::ContentRead,
-        &cancel,
-    )
-    .unwrap();
-    let mut empty = open_verified_view(empty, &cancel).unwrap();
-    assert_eq!(empty.info().size, 0);
-    assert_eq!(empty.read(&mut [0; 1]).unwrap(), 0);
-    assert!(empty.seek(SeekFrom::End(-1)).is_err());
-    assert!(matches!(
-        plan_target_access(
+        request(
             AccessTarget::MdRaid(&native[0]),
-            Some(ByteRange::new(size, 1).unwrap()),
+            "md-access",
+            Some(vec![ByteRange::new(size, 0).unwrap()]),
             ReadIntent::ContentRead,
-            &cancel
         ),
-        Err(TargetAccessError::Range(_))
-    ));
-    cancel.store(true, std::sync::atomic::Ordering::Release);
+        &cancel,
+    );
+    assert!(matches!(empty, Err(TargetAccessError::Range(_))));
+    cancel.store(true, Ordering::Release);
     let error = full.read_to_end(&mut Vec::new()).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::Other);
     assert!(matches!(
@@ -232,8 +367,6 @@ fn md_full_view_empty_eof_and_read_cancellation_preserve_boundaries() {
     ));
     assert!(full.seek(SeekFrom::Start(0)).is_err());
     assert!(full.reserve_work(1).is_err());
-    assert!(empty.read(&mut [0; 1]).is_err());
-    drop(empty);
     drop(full);
     drop(collection);
     workspace.close().unwrap();
@@ -250,13 +383,16 @@ fn collection_truncation_keeps_unexpected_eof_error() {
     let cancel = AtomicBool::new(false);
     let collection = ImageCollectionPlan::prepare(&sources, &cancel).unwrap();
     let access = plan_target_access(
-        AccessTarget::CollectionSource {
-            collection: &collection,
-            path: &paths[0],
-            kind: &DataSourceKind::Raw,
-        },
-        Some(ByteRange::new(0, 4096).unwrap()),
-        ReadIntent::ContentRead,
+        request(
+            AccessTarget::CollectionSource {
+                collection: &collection,
+                path: &paths[0],
+                kind: &DataSourceKind::Raw,
+            },
+            "collection-source",
+            Some(vec![ByteRange::new(0, 4096).unwrap()]),
+            ReadIntent::ContentRead,
+        ),
         &cancel,
     )
     .unwrap();

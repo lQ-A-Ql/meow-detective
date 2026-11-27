@@ -69,7 +69,8 @@ fn native_md_ext4_uses_shared_filesystem_discovery_and_bounded_reads() {
         Err(evidence_access::mdraid::MdRaidPlanError::InvalidContentIdentity),
     ));
     std::fs::write(&descriptor, serde_json::to_vec_pretty(&plans[0]).unwrap()).unwrap();
-    let probe = probe_mdraid_filesystems(&descriptor).unwrap();
+    let probe =
+        probe_mdraid_filesystems(&descriptor, &std::sync::atomic::AtomicBool::new(false)).unwrap();
     assert_eq!(probe.candidates.len(), 1);
     assert_eq!(
         probe.candidates[0].kind,
@@ -209,7 +210,8 @@ fn native_lvm_members_include_a_pv_without_metadata_and_preserve_file_bytes() {
         14 * 1024 * 1024
     );
     let descriptor = write_mdraid_descriptor(workspace.path(), &plans[0]).unwrap();
-    let probe = probe_mdraid_filesystems(&descriptor).unwrap();
+    let probe =
+        probe_mdraid_filesystems(&descriptor, &std::sync::atomic::AtomicBool::new(false)).unwrap();
     assert_eq!(probe.candidates.len(), 1);
     let filesystem = open_mdraid_filesystem(&descriptor, &probe.candidates[0]).unwrap();
     let expected = std::fs::read(root.join("mdraid/oracle.bin")).unwrap();

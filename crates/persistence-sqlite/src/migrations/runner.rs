@@ -196,6 +196,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0072_storage_object_versions",
         include_str!("scripts/0072_storage_object_versions.sql"),
     ),
+    (
+        "0073_structure_core_s01",
+        include_str!("scripts/0073_structure_core_s01.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

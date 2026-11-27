@@ -6,15 +6,19 @@
 //! repositories in [`crate::repositories`] build on this module.
 
 mod mapping;
+mod observations;
 mod open;
 mod read;
 mod write;
 
 pub use mapping::{artifact_record, file_entry, file_record, timeline_record};
+pub use observations::{
+    observation_detail_digest, read_observation_detail, write_observation_detail,
+};
 pub(crate) use open::require_owner;
 pub use open::{
     bind_generation, bind_generation_if_current, configure_source_fjall, configure_source_identity,
-    open_store, open_store_for_write, require_source_store, source_id,
+    generation_name, open_store, open_store_for_write, require_source_store, source_id,
 };
 pub use read::partition_index;
 pub use write::{

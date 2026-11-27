@@ -1,6 +1,4 @@
-use domain::structure::{
-    NativeObservation, NativeVersion, ObservationLocation, SourceRevisionContent, SourceRevisionRef,
-};
+use domain::structure::{DigestVerification, SourceRevisionContent, SourceRevisionRef};
 use persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo;
 
 fn setup() -> rusqlite::Connection {
@@ -16,53 +14,26 @@ fn setup() -> rusqlite::Connection {
 }
 
 fn content() -> SourceRevisionContent {
-    SourceRevisionContent {
-        logical_size: 4096,
-        metadata_identity: Some("metadata-a".into()),
-        logical_sha256: Some("a".repeat(64)),
-    }
-}
-
-fn observations() -> Vec<NativeObservation> {
-    vec![NativeObservation {
-        native_identity: "lvm-pv:uuid".into(),
-        version: NativeVersion::LvmLabel,
-        location: ObservationLocation::SourceWindow {
-            byte_offset: 0,
-            byte_length: 2048,
-        },
-        parser_version: "fs-lvm/label-v1".into(),
-        native_checksum_verified: true,
-        details: serde_json::json!({"pvSize":4096}),
-    }]
+    SourceRevisionContent::captured(4096, Some("metadata-a".into()), "a".repeat(64))
 }
 
 #[test]
 fn immutable_revision_reuses_identical_facts_and_rejects_stale_reference() {
     let conn = setup();
     let repo = SourceRevisionRepo::new(&conn);
-    let original = repo
-        .bind("case-a", "source-a", &content(), &observations(), true)
-        .unwrap();
+    let original = repo.bind("case-a", "source-a", &content(), true).unwrap();
     assert_eq!(original.revision, 1);
     assert_eq!(
-        repo.bind("case-a", "source-a", &content(), &observations(), false)
-            .unwrap(),
+        repo.bind("case-a", "source-a", &content(), false).unwrap(),
         original
     );
-    assert_eq!(repo.observations(&original).unwrap(), observations());
     let mut changed = content();
     changed.logical_sha256 = Some("b".repeat(64));
-    assert!(repo
-        .bind("case-a", "source-a", &changed, &observations(), false)
-        .is_err());
-    let next = repo
-        .bind("case-a", "source-a", &changed, &observations(), true)
-        .unwrap();
+    assert!(repo.bind("case-a", "source-a", &changed, false).is_err());
+    let next = repo.bind("case-a", "source-a", &changed, true).unwrap();
     assert_eq!(next.revision, 2);
     assert!(repo.require_current(&original).is_err());
     repo.require_current(&next).unwrap();
-    assert_eq!(repo.observations(&original).unwrap(), observations());
     assert!(conn
         .execute("UPDATE source_revisions SET content_json='{}'", [])
         .is_err());
@@ -72,34 +43,23 @@ fn immutable_revision_reuses_identical_facts_and_rejects_stale_reference() {
 fn case_boundary_and_invalid_range_or_digest_are_rejected() {
     let conn = setup();
     let repo = SourceRevisionRepo::new(&conn);
-    assert!(repo
-        .bind("case-b", "source-a", &content(), &observations(), true)
-        .is_err());
-    assert!(repo
-        .bind("case-a", "missing", &content(), &[], true)
-        .is_err());
-    let first = repo
-        .bind("case-a", "source-a", &content(), &observations(), true)
-        .unwrap();
+    assert!(repo.bind("case-b", "source-a", &content(), true).is_err());
+    assert!(repo.bind("case-a", "missing", &content(), true).is_err());
+    let first = repo.bind("case-a", "source-a", &content(), true).unwrap();
     let mut wrong_case = first.clone();
     wrong_case.case_id = "case-b".into();
-    assert!(repo.observations(&wrong_case).is_err());
-    let mut invalid = observations();
-    invalid[0].location = ObservationLocation::SourceWindow {
-        byte_offset: u64::MAX,
-        byte_length: 2048,
-    };
-    assert!(repo
-        .bind("case-a", "source-a", &content(), &invalid, true)
-        .is_err());
+    assert!(repo.require_current(&wrong_case).is_err());
     let mut invalid_digest = content();
     invalid_digest.logical_sha256 = Some("x".repeat(64));
     assert!(repo
-        .bind("case-a", "source-a", &invalid_digest, &[], true)
+        .bind("case-a", "source-a", &invalid_digest, true)
         .is_err());
-    let second = repo
-        .bind("case-b", "source-b", &content(), &observations(), true)
-        .unwrap();
+    let mut inconsistent = content();
+    inconsistent.logical_sha256_status = DigestVerification::Missing;
+    assert!(repo
+        .bind("case-a", "source-a", &inconsistent, true)
+        .is_err());
+    let second = repo.bind("case-b", "source-b", &content(), true).unwrap();
     assert_eq!(second.revision, 1);
     assert_ne!(first, second);
     assert!(repo
@@ -119,12 +79,8 @@ fn fixed_inputs_reject_rebinding_cycles_and_parent_changes() {
     )
     .unwrap();
     let repo = SourceRevisionRepo::new(&conn);
-    let parent = repo
-        .bind("case-a", "source-a", &content(), &observations(), true)
-        .unwrap();
-    let derived = repo
-        .bind("case-a", "derived", &content(), &[], true)
-        .unwrap();
+    let parent = repo.bind("case-a", "source-a", &content(), true).unwrap();
+    let derived = repo.bind("case-a", "derived", &content(), true).unwrap();
     repo.bind_inputs("case-a", "derived", std::slice::from_ref(&parent))
         .unwrap();
     repo.bind_inputs("case-a", "derived", std::slice::from_ref(&parent))
@@ -139,9 +95,7 @@ fn fixed_inputs_reject_rebinding_cycles_and_parent_changes() {
         .is_err());
     let mut changed = content();
     changed.logical_sha256 = Some("b".repeat(64));
-    let updated = repo
-        .bind("case-a", "source-a", &changed, &observations(), true)
-        .unwrap();
+    let updated = repo.bind("case-a", "source-a", &changed, true).unwrap();
     assert!(repo.require_current_inputs("case-a", "derived").is_err());
     assert!(repo.bind_inputs("case-a", "derived", &[updated]).is_err());
     conn.execute("DELETE FROM cases WHERE id='case-a'", [])
@@ -163,7 +117,7 @@ fn source_revision(conn: &rusqlite::Connection, source_id: &str) -> SourceRevisi
     )
     .unwrap();
     SourceRevisionRepo::new(conn)
-        .bind("case-a", source_id, &content(), &[], true)
+        .bind("case-a", source_id, &content(), true)
         .unwrap()
 }
 
@@ -171,15 +125,13 @@ fn source_revision(conn: &rusqlite::Connection, source_id: &str) -> SourceRevisi
 fn stale_ancestor_invalidates_descendants_and_preserves_unrelated_branch() {
     let conn = setup();
     let repo = SourceRevisionRepo::new(&conn);
-    let physical = repo
-        .bind("case-a", "source-a", &content(), &[], true)
-        .unwrap();
+    let physical = repo.bind("case-a", "source-a", &content(), true).unwrap();
     let middle = source_revision(&conn, "middle");
     let derived = source_revision(&conn, "derived");
     let unrelated = source_revision(&conn, "unrelated");
     let other_parent = source_revision(&conn, "other-parent");
     repo.bind_inputs("case-a", "middle", &[physical]).unwrap();
-    repo.bind_inputs("case-a", "derived", &[middle.clone()])
+    repo.bind_inputs("case-a", "derived", std::slice::from_ref(&middle))
         .unwrap();
     repo.bind_inputs("case-a", "unrelated", &[other_parent])
         .unwrap();
@@ -187,8 +139,7 @@ fn stale_ancestor_invalidates_descendants_and_preserves_unrelated_branch() {
     repo.require_current_inputs("case-a", "derived").unwrap();
     let mut replacement = content();
     replacement.logical_sha256 = Some("b".repeat(64));
-    repo.bind("case-a", "source-a", &replacement, &[], true)
-        .unwrap();
+    repo.bind("case-a", "source-a", &replacement, true).unwrap();
     assert!(repo.require_current(&middle).is_err());
     assert!(repo.require_current(&derived).is_err());
     assert!(repo.require_current_inputs("case-a", "derived").is_err());
@@ -204,9 +155,7 @@ fn stale_ancestor_invalidates_descendants_and_preserves_unrelated_branch() {
 fn shared_ancestor_dag_is_valid_and_mixed_revisions_are_rejected() {
     let conn = setup();
     let repo = SourceRevisionRepo::new(&conn);
-    let physical = repo
-        .bind("case-a", "source-a", &content(), &[], true)
-        .unwrap();
+    let physical = repo.bind("case-a", "source-a", &content(), true).unwrap();
     let left = source_revision(&conn, "left");
     let right = source_revision(&conn, "right");
     source_revision(&conn, "derived");
@@ -219,9 +168,7 @@ fn shared_ancestor_dag_is_valid_and_mixed_revisions_are_rejected() {
     repo.require_current_inputs("case-a", "derived").unwrap();
     let mut replacement = content();
     replacement.logical_sha256 = Some("b".repeat(64));
-    let updated = repo
-        .bind("case-a", "source-a", &replacement, &[], true)
-        .unwrap();
+    let updated = repo.bind("case-a", "source-a", &replacement, true).unwrap();
     source_revision(&conn, "new-branch");
     repo.bind_inputs("case-a", "new-branch", &[updated])
         .unwrap();
@@ -244,9 +191,7 @@ fn persisted_cycles_cross_case_and_missing_ancestors_are_rejected() {
     )
     .unwrap();
     assert!(repo.require_current_inputs("case-a", "first").is_err());
-    let foreign = repo
-        .bind("case-b", "source-b", &content(), &[], true)
-        .unwrap();
+    let foreign = repo.bind("case-b", "source-b", &content(), true).unwrap();
     source_revision(&conn, "foreign-middle");
     source_revision(&conn, "foreign-root");
     conn.execute(
@@ -262,9 +207,7 @@ fn persisted_cycles_cross_case_and_missing_ancestors_are_rejected() {
     assert!(repo
         .require_current_inputs("case-a", "foreign-root")
         .is_err());
-    let parent = repo
-        .bind("case-a", "source-a", &content(), &[], true)
-        .unwrap();
+    let parent = repo.bind("case-a", "source-a", &content(), true).unwrap();
     let middle = source_revision(&conn, "missing-middle");
     source_revision(&conn, "missing-root");
     repo.bind_inputs("case-a", "missing-middle", &[parent])

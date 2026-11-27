@@ -29,6 +29,7 @@ pub mod partition_query_service;
 pub mod partition_storage_service;
 pub mod source_runtime;
 pub mod structure_access;
+pub mod structure_observation;
 pub mod text_service;
 
 #[cfg(test)]

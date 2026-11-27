@@ -10,16 +10,14 @@ use crate::file_service::{
 
 pub fn probe_mdraid_filesystems(
     path: &Path,
+    cancel: &std::sync::atomic::AtomicBool,
 ) -> Result<ImageFilesystemProbe, super::MdRaidPlanError> {
     let native_plan = super::read_mdraid_descriptor(path)?;
-    let cancel = std::sync::atomic::AtomicBool::new(false);
-    let access = crate::structure_access::plan_target_access(
+    let access = crate::structure_access::plan_discovery_access(
         crate::structure_access::AccessTarget::MdRaid(&native_plan),
-        None,
-        domain::structure::ReadIntent::MetadataInspection,
-        &cancel,
+        cancel,
     )?;
-    let mut reader = crate::structure_access::open_verified_view(access, &cancel)?;
+    let mut reader = crate::structure_access::open_discovery_view(access, cancel)?;
     let mut probe = datasource_service::detect_image_filesystem(&mut reader)?;
     datasource_service::expand_lvm_pool_candidates(
         &mut probe,
@@ -57,7 +55,8 @@ pub(crate) fn open_mdraid_partition(
 ) -> Result<Box<dyn FileSystemReader + Send>, FileServiceError> {
     super::persisted_inputs::validate(&domain::DataSourceId(source_id.to_owned()), path)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
-    let probe = probe_mdraid_filesystems(path)
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let probe = probe_mdraid_filesystems(path, &cancel)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
     let candidates = probe
         .candidates

@@ -62,5 +62,6 @@ pub mod source_revision_repo;
 pub mod storage_control_repo;
 pub mod storage_object_repo;
 pub mod storage_recovery_repo;
+pub mod structure_observation_repo;
 pub mod timeline_facets_repo;
 pub mod timeline_projection_repo;

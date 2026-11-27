@@ -5,9 +5,17 @@ mod observation;
 mod range;
 mod read_demand;
 
-pub use identity::{CollectionMemberVerification, SourceRevisionContent, SourceRevisionRef};
+pub use identity::{
+    AcquisitionId, CollectionMemberVerification, DigestVerification, NativeObjectId,
+    RevisionConsistency, SourceRevisionContent, SourceRevisionRef, StructureIdentityError,
+};
 pub use native_version::{MdMetadataVersion, NativeVersion};
-pub use object_version::StorageObjectVersion;
-pub use observation::{NativeObservation, ObservationLocation};
-pub use range::{ByteRange, ByteRangeError};
-pub use read_demand::{RangeReadCapability, ReadDemand, ReadIntent};
+pub use object_version::{ObjectVersionId, StorageObjectVersion, StorageObjectVersionKind};
+pub use observation::{
+    NativeObservation, ObservationDetail, ObservationId, ObservationIndex, ObservationIndexError,
+    ObservationLocation,
+};
+pub use range::{ByteRange, ByteRangeError, ByteRangeSet, ByteRangeSetError};
+pub use read_demand::{
+    ReadDemand, ReadDemandError, ReadIntent, ReadPriority, ReadVerification, StructureAttemptRef,
+};

@@ -1,5 +1,5 @@
 use crate::{DbError, DbResult};
-use domain::structure::{NativeObservation, SourceRevisionContent, SourceRevisionRef};
+use domain::structure::{SourceRevisionContent, SourceRevisionRef};
 use rusqlite::{params, Connection, OptionalExtension};
 
 mod ancestors;
@@ -18,33 +18,29 @@ impl<'a> SourceRevisionRepo<'a> {
         case_id: &str,
         source_id: &str,
         content: &SourceRevisionContent,
-        observations: &[NativeObservation],
         allow_new_revision: bool,
     ) -> DbResult<SourceRevisionRef> {
-        validate(content, observations)?;
+        content
+            .validate()
+            .map_err(|error| DbError::System(error.to_string()))?;
         let content = serde_json::to_string(content).map_err(json_error)?;
-        let observations = serde_json::to_string(observations).map_err(json_error)?;
         let transaction = self
             .conn
             .is_autocommit()
             .then(|| self.conn.unchecked_transaction())
             .transpose()?;
         require_case(self.conn, case_id, source_id)?;
-        let prior: Option<(u64, String, String)> = self
+        let prior: Option<(u64, String)> = self
             .conn
             .query_row(
-                "SELECT revision, content_json, observations_json FROM source_revisions
+                "SELECT revision, content_json FROM source_revisions
              WHERE source_id = ?1 ORDER BY revision DESC LIMIT 1",
                 [source_id],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| Ok((row.get(0)?, row.get(1)?)),
             )
             .optional()?;
         let revision = match prior {
-            Some((revision, known_content, known_observations))
-                if known_content == content && known_observations == observations =>
-            {
-                revision
-            }
+            Some((revision, known_content)) if known_content == content => revision,
             Some(_) if !allow_new_revision => {
                 return Err(DbError::System("source revision changed".into()))
             }
@@ -55,9 +51,9 @@ impl<'a> SourceRevisionRepo<'a> {
                     .filter(|value| *value <= i64::MAX as u64)
                     .ok_or_else(|| DbError::System("source revision overflow".into()))?;
                 self.conn.execute(
-                    "INSERT INTO source_revisions (source_id, revision, content_json, observations_json)
-                     VALUES (?1, ?2, ?3, ?4)",
-                    params![source_id, revision, content, observations],
+                    "INSERT INTO source_revisions (source_id, revision, content_json)
+                     VALUES (?1, ?2, ?3)",
+                    params![source_id, revision, content],
                 )?;
                 revision
             }
@@ -119,16 +115,6 @@ impl<'a> SourceRevisionRepo<'a> {
             },
             serde_json::from_str(&json).map_err(json_error)?,
         ))
-    }
-
-    pub fn observations(&self, reference: &SourceRevisionRef) -> DbResult<Vec<NativeObservation>> {
-        require_case(self.conn, &reference.case_id, &reference.source_id)?;
-        let json: String = self.conn.query_row(
-            "SELECT observations_json FROM source_revisions WHERE source_id = ?1 AND revision = ?2",
-            params![reference.source_id, reference.revision],
-            |row| row.get(0),
-        )?;
-        serde_json::from_str(&json).map_err(json_error)
     }
 
     pub fn bind_inputs(
@@ -237,38 +223,4 @@ fn require_case(conn: &Connection, case_id: &str, source_id: &str) -> DbResult<(
 
 fn json_error(error: serde_json::Error) -> DbError {
     DbError::System(format!("invalid source revision JSON: {error}"))
-}
-
-fn validate(content: &SourceRevisionContent, observations: &[NativeObservation]) -> DbResult<()> {
-    if content.logical_sha256.as_ref().is_some_and(|digest| {
-        digest.len() != 64
-            || !digest
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    }) {
-        return Err(DbError::System("invalid logical SHA-256".into()));
-    }
-    for observation in observations {
-        if observation.native_identity.is_empty() || observation.parser_version.is_empty() {
-            return Err(DbError::System(
-                "native observation identity is missing".into(),
-            ));
-        }
-        if let domain::structure::ObservationLocation::SourceWindow {
-            byte_offset,
-            byte_length,
-        } = observation.location
-        {
-            if byte_length == 0
-                || byte_offset
-                    .checked_add(byte_length)
-                    .is_none_or(|end| end > content.logical_size)
-            {
-                return Err(DbError::System(
-                    "native observation range exceeds source".into(),
-                ));
-            }
-        }
-    }
-    Ok(())
 }

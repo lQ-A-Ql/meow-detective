@@ -60,7 +60,7 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     .unwrap();
     let case = case_service::create_case(workspace.path(), "Native MD filesystem", None).unwrap();
     let connection = case.connection().unwrap();
-    let inputs = register_inputs(&connection, &case.meta.id, &shared, &plans[0], "physical");
+    let inputs = register_inputs(&connection, &case.meta.id, &plans[0], "physical");
     persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
         .insert(
             &case.meta.id,
@@ -183,13 +183,7 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .id,
         source.id,
     );
-    let independent_inputs = register_inputs(
-        &connection,
-        &case.meta.id,
-        &shared,
-        &plans[0],
-        "independent",
-    );
+    let independent_inputs = register_inputs(&connection, &case.meta.id, &plans[0], "independent");
     let independent_import = registered_collection(
         &connection,
         &case.meta.id,
@@ -389,15 +383,8 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .logical_sha256
             .clone(),
     );
-    let facts = revisions.observations(changed_parent).unwrap();
     revisions
-        .bind(
-            &case.meta.id.0,
-            &changed_parent.source_id,
-            &content,
-            &facts,
-            true,
-        )
+        .bind(&case.meta.id.0, &changed_parent.source_id, &content, true)
         .unwrap();
     assert!(revisions
         .require_current_inputs(&case.meta.id.0, &source.id.0)
@@ -441,6 +428,39 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         std::fs::read(&source.source_path).unwrap(),
         descriptor_bytes
     );
+    let object_repo =
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&connection);
+    let original_version = object_repo
+        .version_for_source(&case.meta.id.0, &source.id.0)
+        .unwrap()
+        .unwrap();
+    let replacement_version = object_repo
+        .version_for_source(&case.meta.id.0, &replacement.id.0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        original_version.storage_object_id,
+        replacement_version.storage_object_id
+    );
+    assert_ne!(original_version.id, replacement_version.id);
+    assert_eq!(
+        object_repo
+            .versions_for_object(&case.meta.id.0, &original_version.storage_object_id)
+            .unwrap()
+            .len(),
+        2
+    );
+    let (_, output_revision) = revisions
+        .current(&case.meta.id.0, &replacement.id.0)
+        .unwrap();
+    assert_eq!(
+        output_revision.metadata_identity.as_deref(),
+        Some(replacement_version.id.0.as_str())
+    );
+    assert_eq!(
+        output_revision.metadata_identity_status,
+        domain::structure::DigestVerification::Recorded
+    );
     assert_eq!(
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
             .find_by_case(&case.meta.id)
@@ -453,7 +473,6 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
 fn register_inputs(
     conn: &rusqlite::Connection,
     case_id: &domain::CaseId,
-    shared: &evidence_access::datasource_service::ImageCollectionPlan,
     plan: &evidence_access::mdraid::MdRaidArrayPlan,
     acquisition: &str,
 ) -> Vec<domain::structure::SourceRevisionRef> {
@@ -475,14 +494,11 @@ fn register_inputs(
                 .bind(
                     &case_id.0,
                     &source.id.0,
-                    &domain::structure::SourceRevisionContent {
-                        logical_size: content.logical_size,
-                        metadata_identity: None,
-                        logical_sha256: Some(content.logical_sha256.clone()),
-                    },
-                    shared
-                        .native_observations(&source.source_path, &source.kind)
-                        .unwrap(),
+                    &domain::structure::SourceRevisionContent::captured(
+                        content.logical_size,
+                        None,
+                        content.logical_sha256.clone(),
+                    ),
                     true,
                 )
                 .unwrap();

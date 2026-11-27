@@ -69,12 +69,11 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
                 .bind(
                     &case_id.0,
                     &source.id.0,
-                    &domain::structure::SourceRevisionContent {
-                        logical_size: content.logical_size,
-                        metadata_identity: None,
-                        logical_sha256: Some(content.logical_sha256.clone()),
-                    },
-                    &[],
+                    &domain::structure::SourceRevisionContent::captured(
+                        content.logical_size,
+                        None,
+                        content.logical_sha256.clone(),
+                    ),
                     true,
                 )
                 .unwrap();

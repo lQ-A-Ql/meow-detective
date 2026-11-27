@@ -104,7 +104,12 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
             revision: 1,
         };
         revisions.require_current(&reference).unwrap();
-        let facts = revisions.observations(&reference).unwrap();
+        let facts = evidence_access::structure_observation::read_source_observations(
+            &connection,
+            &case.case_root,
+            &reference,
+        )
+        .unwrap();
         assert!(facts
             .iter()
             .any(|fact| matches!(fact.version, domain::structure::NativeVersion::LvmLabel)));
@@ -215,6 +220,28 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
             "ready"
         );
     }
+    let objects =
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&connection);
+    let vg_id: String = connection
+        .query_row(
+            "SELECT id FROM storage_objects
+             WHERE case_id=?1 AND object_kind='volume_group'",
+            [&case.meta.id.0],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let vg_versions = objects
+        .versions_for_object(&case.meta.id.0, &vg_id)
+        .unwrap();
+    assert_eq!(vg_versions.len(), 1);
+    assert!(vg_versions.iter().all(|version| {
+        version.version_kind == domain::structure::StorageObjectVersionKind::NativeObservation
+            && version.consistency == domain::structure::RevisionConsistency::Coherent
+    }));
+    assert_eq!(
+        objects.find(&vg_id).unwrap().unwrap().identity_state,
+        "proven"
+    );
     assert_eq!(logical_views, 1);
     assert_eq!(evidence_files, 1);
     assert_eq!(committed_metadata_sources, 1);

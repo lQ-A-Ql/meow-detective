@@ -26,7 +26,7 @@ pub(super) fn enumerate_mdraid_catalog(
         .clamp(1, 4)
         .min(metadata_workers.min(memory_workers).max(1) as usize);
     let _budget = acquire_budget(source, workers, cancel)?;
-    let probe = evidence_access::mdraid::probe_mdraid_filesystems(&source.source_path)?;
+    let probe = evidence_access::mdraid::probe_mdraid_filesystems(&source.source_path, cancel)?;
     if !probe
         .candidates
         .iter()

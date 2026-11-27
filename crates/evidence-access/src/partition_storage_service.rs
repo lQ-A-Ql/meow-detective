@@ -62,10 +62,8 @@ pub fn replace_from_probe(
                     .filter(|identity| !identity.pv_sources.is_empty())
                     .map(|identity| {
                         serde_json::to_string(
-                            &crate::file_service::preview_lvm_identity_from_datasource(
-                                identity,
-                            )
-                            .pv_sources,
+                            &crate::file_service::preview_lvm_identity_from_datasource(identity)
+                                .pv_sources,
                         )
                     })
                     .transpose()?,

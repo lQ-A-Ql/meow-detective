@@ -8,7 +8,10 @@ pub(super) struct StorageRebuild<'a> {
 
 impl<'a> StorageRebuild<'a> {
     pub fn prepare(conn: &'a Connection, name: &str) -> DbResult<Self> {
-        let enabled = name == "0072_storage_object_versions";
+        let enabled = matches!(
+            name,
+            "0072_storage_object_versions" | "0073_structure_core_s01"
+        );
         if enabled {
             if !conn.is_autocommit() {
                 return Err(DbError::Migration(

@@ -91,6 +91,15 @@ pub fn source_id(conn: &Connection) -> DbResult<Option<String>> {
     }
 }
 
+pub fn generation_name(conn: &Connection) -> DbResult<String> {
+    conn.query_row(
+        "SELECT value FROM source_meta WHERE key = ?1",
+        [FJALL_ROOT_KEY],
+        |row| row.get(0),
+    )
+    .map_err(Into::into)
+}
+
 pub(crate) fn require_owner(conn: &Connection, requested: &str) -> DbResult<()> {
     if source_id(conn)?.as_deref() != Some(requested) {
         return Err(DbError::System("source detail owner mismatch".into()));
