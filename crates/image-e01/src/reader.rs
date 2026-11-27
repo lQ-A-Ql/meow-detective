@@ -26,6 +26,8 @@ pub struct E01Reader {
     pub(crate) chunk_cache_bytes: usize,
     pub(crate) chunk_cache_enabled: bool,
     pub(crate) last_chunk_read: Option<u64>,
+    pub(crate) metrics: evidence_core::reader::EvidenceReadMetrics,
+    pub(crate) decoder: flate2::Decompress,
     pub(crate) resource_metadata: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
     pub(crate) resource_admission: Option<Arc<dyn evidence_core::reader::ReaderAdmission>>,
     pub(crate) _resource_reader: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
@@ -66,6 +68,8 @@ impl E01Reader {
             chunk_cache_bytes: 0,
             chunk_cache_enabled: true,
             last_chunk_read: None,
+            metrics: Default::default(),
+            decoder: flate2::Decompress::new(true),
             resource_metadata: None,
             resource_admission: None,
             _resource_reader: None,
@@ -130,6 +134,8 @@ impl E01Reader {
             chunk_cache_bytes: 0,
             chunk_cache_enabled: true,
             last_chunk_read: None,
+            metrics: Default::default(),
+            decoder: flate2::Decompress::new(true),
             resource_metadata: self.resource_metadata.clone(),
             resource_admission: self.resource_admission.clone(),
             _resource_reader: resource_reader,
@@ -138,10 +144,7 @@ impl E01Reader {
 
     /// Disable per-reader sequential chunk caching for bounded parallel scans.
     pub fn without_chunk_cache(mut self) -> Self {
-        self.chunk_cache_enabled = false;
-        self.chunk_cache.clear();
-        self.chunk_cache_order.clear();
-        self.chunk_cache_bytes = 0;
+        self.configure_content_scan();
         self
     }
 
@@ -155,8 +158,10 @@ impl E01Reader {
     }
 
     fn read_chunk_uncached(&mut self, idx: u64) -> io::Result<Vec<u8>> {
+        let index_started = std::time::Instant::now();
         let (segment, offset, compressed, stored_size) =
             self.chunk_table.lookup(idx, &mut self.segment_files)?;
+        self.metrics.index_nanos += index_started.elapsed().as_nanos() as u64;
         let chunk_size = self.chunk_size_bytes();
         let chunk_start = idx.checked_mul(chunk_size).ok_or_else(|| {
             io::Error::new(io::ErrorKind::InvalidData, "E01 chunk offset overflow")
@@ -187,13 +192,28 @@ impl E01Reader {
         }
 
         let file = &mut self.segment_files[segment];
+        let io_started = std::time::Instant::now();
+        self.metrics.metadata_checks += 1;
         validate_stored_range(file, &context)?;
         file.seek(SeekFrom::Start(offset))
             .map_err(|error| context.source_error("seek source chunk", error))?;
         if compressed {
-            return read_compressed_chunk(file, &context);
+            let raw = read_stored_bytes(file, &context, context.stored_size)?;
+            self.metrics.io_nanos += io_started.elapsed().as_nanos() as u64;
+            self.metrics.stored_reads += 1;
+            self.metrics.stored_bytes += stored_size;
+            let decode_started = std::time::Instant::now();
+            let result = decode_compressed_chunk(&mut self.decoder, &raw, &context);
+            self.metrics.decode_nanos += decode_started.elapsed().as_nanos() as u64;
+            self.metrics.decoded_chunks += 1;
+            self.metrics.decoded_bytes += expected_size;
+            return result;
         }
-        read_uncompressed_chunk(file, &context)
+        let result = read_uncompressed_chunk(file, &context);
+        self.metrics.io_nanos += io_started.elapsed().as_nanos() as u64;
+        self.metrics.stored_reads += 1;
+        self.metrics.stored_bytes += expected_size;
+        result
     }
 
     fn read_chunk_cached(&mut self, idx: u64, sequential: bool) -> io::Result<Arc<[u8]>> {
@@ -310,13 +330,13 @@ fn validate_stored_range(file: &std::fs::File, context: &ChunkReadContext) -> io
     Ok(())
 }
 
-struct ChunkReadContext {
-    index: u64,
-    segment: usize,
-    offset: u64,
-    stored_size: u64,
-    expected_size: usize,
-    codec: &'static str,
+pub(crate) struct ChunkReadContext {
+    pub(crate) index: u64,
+    pub(crate) segment: usize,
+    pub(crate) offset: u64,
+    pub(crate) stored_size: u64,
+    pub(crate) expected_size: usize,
+    pub(crate) codec: &'static str,
 }
 
 impl ChunkReadContext {
@@ -341,8 +361,9 @@ impl ChunkReadContext {
     }
 }
 
-fn read_compressed_chunk(
-    file: &mut std::fs::File,
+pub(crate) fn decode_compressed_chunk(
+    decoder: &mut flate2::Decompress,
+    raw: &[u8],
     context: &ChunkReadContext,
 ) -> io::Result<Vec<u8>> {
     if context.stored_size == 0 {
@@ -351,20 +372,23 @@ fn read_compressed_chunk(
             "compressed chunk has zero stored length",
         ));
     }
-    let raw = read_stored_bytes(file, context, context.stored_size)?;
-    let decoder = flate2::read::ZlibDecoder::new(&raw[..]);
-    let limit = u64::try_from(context.expected_size)
-        .unwrap_or(u64::MAX)
-        .saturating_add(1);
+    decoder.reset(true);
     let mut decoded = Vec::new();
     decoded
         .try_reserve_exact(context.expected_size.saturating_add(1))
         .map_err(|error| context.error(io::ErrorKind::OutOfMemory, error))?;
-    decoder
-        .take(limit)
-        .read_to_end(&mut decoded)
-        .map_err(|error| context.source_error("deflate decode", error))?;
-    if decoded.len() != context.expected_size {
+    let status = decoder
+        .decompress_vec(raw, &mut decoded, flate2::FlushDecompress::Finish)
+        .map_err(|error| {
+            context.error(
+                io::ErrorKind::InvalidData,
+                format!("deflate decode failed: {error}"),
+            )
+        })?;
+    if status != flate2::Status::StreamEnd
+        || decoded.len() != context.expected_size
+        || decoder.total_in() != raw.len() as u64
+    {
         return Err(context.error(
             io::ErrorKind::InvalidData,
             format!("deflate output length was {}", decoded.len()),
@@ -438,6 +462,15 @@ impl Seek for E01Reader {
 }
 
 impl EvidenceReader for E01Reader {
+    fn read_metrics(&self) -> evidence_core::reader::EvidenceReadMetrics {
+        self.metrics
+    }
+    fn configure_content_scan(&mut self) {
+        self.chunk_cache_enabled = false;
+        self.chunk_cache.clear();
+        self.chunk_cache_order.clear();
+        self.chunk_cache_bytes = 0;
+    }
     fn reserve_work(
         &self,
         bytes: u64,

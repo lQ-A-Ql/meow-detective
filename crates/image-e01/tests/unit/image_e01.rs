@@ -648,3 +648,37 @@ fn reader_from_test_entries(
         files,
     )
 }
+
+#[test]
+fn native_scan_has_no_speculative_reads_and_reuses_decoder_after_checksum_error() {
+    use evidence_core::EvidenceReader;
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/fixtures/public-small/e01/tiny.E01");
+    let mut reader = E01Reader::open(&fixture).unwrap();
+    reader.configure_content_scan();
+    let chunk_size = reader.chunk_size_bytes();
+    let mut bytes = vec![0; chunk_size as usize];
+    reader.read_exact(&mut bytes).unwrap();
+    assert_eq!(reader.read_metrics().stored_reads, 1);
+    let mut encoded = Vec::new();
+    let mut encoder = flate2::write::ZlibEncoder::new(&mut encoded, flate2::Compression::default());
+    encoder.write_all(&bytes).unwrap();
+    encoder.finish().unwrap();
+    let context = crate::reader::ChunkReadContext {
+        index: 0,
+        segment: 0,
+        offset: 0,
+        stored_size: encoded.len() as u64,
+        expected_size: bytes.len(),
+        codec: "deflate",
+    };
+    let mut decoder = flate2::Decompress::new(true);
+    let last = encoded.len() - 1;
+    encoded[last] ^= 0x80;
+    assert!(crate::reader::decode_compressed_chunk(&mut decoder, &encoded, &context).is_err());
+    encoded[last] ^= 0x80;
+    assert_eq!(
+        crate::reader::decode_compressed_chunk(&mut decoder, &encoded, &context).unwrap(),
+        bytes
+    );
+}

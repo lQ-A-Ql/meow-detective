@@ -3,6 +3,8 @@ use std::path::PathBuf;
 
 mod admission;
 mod factory;
+mod metrics;
+pub use metrics::EvidenceReadMetrics;
 mod fixed_vhd;
 pub use admission::{ReaderAdmission, ReaderAllocationScope, ReaderResourceHold};
 mod partition_window;
@@ -23,6 +25,13 @@ pub struct ReaderInfo {
 
 pub trait EvidenceReader: Read + Seek + Send {
     fn info(&self) -> &ReaderInfo;
+
+    fn read_metrics(&self) -> EvidenceReadMetrics {
+        EvidenceReadMetrics::default()
+    }
+
+    /// Sequential scan callers own buffering and do not consume speculative bytes.
+    fn configure_content_scan(&mut self) {}
 
     /// Preferred physical read size for callers that maintain an aligned
     /// metadata cache. Zero means that the reader has no explicit preference.

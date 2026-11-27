@@ -105,6 +105,8 @@ impl E01OpenPlan {
             chunk_cache_bytes: 0,
             chunk_cache_enabled: true,
             last_chunk_read: None,
+            metrics: Default::default(),
+            decoder: flate2::Decompress::new(true),
             resource_metadata: self.resource_metadata.clone(),
             resource_admission: self.resource_admission.clone(),
             _resource_reader: resource_reader,

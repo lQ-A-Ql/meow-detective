@@ -59,6 +59,7 @@ windows-sys.workspace = true
 libc.workspace = true
 
 [dev-dependencies]
+tracing-subscriber.workspace = true
 img-parts.workspace = true
 riff.workspace = true
 rusqlite = { workspace = true, features = ["functions"] }

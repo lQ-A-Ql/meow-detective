@@ -157,3 +157,73 @@ fn running_parallel_scan_cancels_and_releases_all_reader_and_buffer_permits() {
         before
     );
 }
+
+#[test]
+#[ignore = "requires FORENSICS_PVE_CLUSTER_ROOT; bounded 2 GiB E01 stage profile"]
+fn private_pve_content_stage_profile() {
+    use evidence_core::{EvidenceReaderFactory, ReaderCapabilities};
+    struct Prefix(SharedReaderFactory);
+    impl EvidenceReaderFactory for Prefix {
+        fn open_reader(&self) -> std::io::Result<Box<dyn EvidenceReader>> {
+            Ok(Box::new(evidence_core::PartitionWindowReader::new(
+                self.0.open_reader()?,
+                0,
+                Some(self.logical_size()),
+            )?))
+        }
+        fn logical_size(&self) -> u64 {
+            self.0.logical_size().min(2 * 1024 * 1024 * 1024)
+        }
+        fn preferred_read_granularity(&self) -> usize {
+            self.0.preferred_read_granularity()
+        }
+        fn capabilities(&self) -> ReaderCapabilities {
+            self.0.capabilities()
+        }
+        fn validate_snapshot(&self) -> std::io::Result<()> {
+            self.0.validate_snapshot()
+        }
+    }
+    let _logging = tracing::subscriber::set_default(
+        tracing_subscriber::fmt()
+            .with_ansi(false)
+            .with_writer(std::io::stderr)
+            .finish(),
+    );
+    let root = std::path::PathBuf::from(
+        std::env::var_os("FORENSICS_PVE_CLUSTER_ROOT").expect("set private collection root"),
+    );
+    let path = root.join("server03/server03-disk02.E01");
+    let inner = crate::source_runtime::open_factory(&path, &DataSourceKind::E01).unwrap();
+    let factory: SharedReaderFactory = Arc::new(Prefix(inner.clone()));
+    let mut independent = image_e01::E01Reader::open(&path)
+        .unwrap()
+        .without_chunk_cache();
+    let native_chunk_bytes = independent.preferred_read_granularity() as u64;
+    let mut digest = Sha256::new();
+    let mut buffer = vec![0; CONTENT_CHUNK_BYTES];
+    for _ in 0..factory.logical_size() / CONTENT_CHUNK_BYTES as u64 {
+        independent.read_exact(&mut buffer).unwrap();
+        digest.update(&buffer);
+    }
+    let expected = hex::encode(digest.finalize());
+    {
+        let factory: SharedReaderFactory = Arc::new(Prefix(inner.clone()));
+        for workers in [4, 16] {
+            let result = scan::scan(&factory, None, &AtomicBool::new(false), workers).unwrap();
+            eprintln!(
+                "profile workers={workers} digest={} metrics={:?}",
+                result.digest, result.telemetry
+            );
+            assert_eq!(result.digest, expected);
+            assert_eq!(
+                result.telemetry.logical_read_bytes.load(Ordering::Relaxed),
+                result.size
+            );
+            assert_eq!(
+                result.telemetry.reader.lock().unwrap().stored_reads,
+                result.size.div_ceil(native_chunk_bytes)
+            );
+        }
+    }
+}

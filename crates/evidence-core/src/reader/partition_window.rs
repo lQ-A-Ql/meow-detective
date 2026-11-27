@@ -95,6 +95,12 @@ impl Seek for PartitionWindowReader {
 }
 
 impl EvidenceReader for PartitionWindowReader {
+    fn read_metrics(&self) -> super::EvidenceReadMetrics {
+        self.inner.read_metrics()
+    }
+    fn configure_content_scan(&mut self) {
+        self.inner.configure_content_scan();
+    }
     fn reserve_work(
         &self,
         bytes: u64,

@@ -8,6 +8,7 @@ use domain::DataSourceKind;
 mod factory;
 mod reader;
 mod scan;
+mod telemetry;
 pub use factory::VerifiedFactory;
 pub(crate) use reader::ContentVerifiedReader;
 

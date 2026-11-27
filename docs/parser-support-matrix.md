@@ -190,9 +190,13 @@ MD 目录与预览共用文件系统探测及打开入口。EXT4 已有公开端
 集合成员登记后，案件数据库保存不可变source revision、逻辑摘要和原生观察。
 运行时与发布检查使用该revision；MD保存固定父source/revision引用，
 登记、目录复用、发布和文件预览均拒绝过期父版本。
+MD使用正式`md_raid`存储对象及不可变版本，保存adapter版本、原生events与映射摘要；
+该版本复用实际父来源revision，删除派生来源同时清理所属版本及对象。
 PV标签、VG seqno与MD events复用现有解析器结果；没有VG metadata副本的PV
 只记录自身标签事实，无法定位原始范围的观察明确保存范围缺口。
 E01 摘要覆盖解压后的逻辑字节；原始 E01 容器摘要由独立来源哈希流程管理。
+完整内容扫描关闭E01预读并复用各reader的flate2解压状态；原生checksum、table页、
+输入输出长度验证保持有效。阶段记录区分读取、解压、摘要、准入和通道等待。
 派生源按内容身份保存独立 descriptor，通过处理阶段、generation 和发布凭据验证目录复用。
 旧 descriptor 格式需要重新导入。
 同一来源的分区探测结果供直接 MD 与 PV 发现共同使用。LVM committed metadata
