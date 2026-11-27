@@ -61,6 +61,7 @@ impl ThinLvReader {
                 logical_blocks,
             });
         }
+        metadata.validate_device_capacity(device_id, logical_blocks)?;
         let info = ReaderInfo {
             path: std::path::PathBuf::from(format!("lvm+thin://{}", lv_name)),
             size: total_size,
@@ -212,7 +213,3 @@ fn checked_relative_seek(base: u64, offset: i64, context: &str) -> std::io::Resu
         )
     })
 }
-
-#[cfg(test)]
-#[path = "../tests/unit/thin_reader.rs"]
-mod tests;

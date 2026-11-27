@@ -209,11 +209,15 @@ Kubernetes 清单保留固定数量且顺序稳定的候选，同时统计全部
 稀疏区域补零及完整 16 MiB 逻辑字节摘要。
 其中 transaction 冲突镜像的二进制 metadata 能通过原生 `thin_check`，
 包含它的 LVM pool 声明另一个 transaction，应用在打开 thin LV 时拒绝。
-这些修改只检查现有解析结果之间的一致性。
+读取入口还验证 superblock 与全部可达 mapping/details B-tree 节点的 CRC32C、
+version 2、needs-check/未知状态、incompatible features、节点容量与父节点键值范围、
+循环与深度、设备集合和映射数量、transaction/time 关系，以及逻辑和物理数据容量。
+CRC32C 使用 `crc32c 0.6.8` 的 MIT 授权实现，格式约束参考 Linux
+`dm-thin-metadata.c`、persistent-data B-tree 和 thin-provisioning-tools 的公开实现。
+原生工具生成的三设备多层树包含每设备 1024 个稀疏映射，测试全部映射和间隙。
 
-thin 二进制 metadata 的 checksum、version、feature 与完整树一致性验证仍未完成；
-尚未确认可直接复用且满足 MIT 条件的格式解析实现。
-当前 thin 能力保持 Experimental，不能据此声明 metadata 完整性已经通过。
+当前 thin 能力保持 Experimental；space-map 分配位图与引用计数的全局交叉验证、
+持有 metadata snapshot 的独立恢复，以及全部 thin snapshot 变体尚未覆盖。
 
 ## 5. 容器邮件解析器 (V3 计划)
 

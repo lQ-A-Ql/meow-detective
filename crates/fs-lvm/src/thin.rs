@@ -6,6 +6,8 @@ use evidence_core::EvidenceReader;
 
 use crate::error::{LvmError, Result};
 
+mod integrity;
+
 const METADATA_BLOCK_SIZE: usize = 4096;
 const METADATA_BLOCK_SIZE_U64: u64 = METADATA_BLOCK_SIZE as u64;
 const THIN_SUPERBLOCK_MAGIC: u64 = 27_022_010;
@@ -21,11 +23,13 @@ type SharedReader = Arc<Mutex<Box<dyn EvidenceReader>>>;
 
 #[derive(Debug, Clone)]
 pub struct ThinSuperblock {
+    pub time: u32,
     pub transaction_id: u64,
     pub mapping_root: u64,
     pub details_root: u64,
     pub data_block_size_sectors: u32,
     pub nr_metadata_blocks: u64,
+    pub nr_data_blocks: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -63,6 +67,10 @@ impl ThinMetadata {
             let mut guard = lock_mutex(&reader, "thin metadata reader")?;
             read_superblock(&mut **guard)?
         };
+        {
+            let mut guard = lock_mutex(&reader, "thin metadata reader")?;
+            integrity::validate_trees(&mut **guard, &superblock)?;
+        }
         Ok(Self {
             reader,
             superblock,
@@ -104,6 +112,18 @@ impl ThinMetadata {
         btree_lookup_block_time(&mut **reader, mapping_root, thin_block)
     }
 
+    pub(crate) fn validate_device_capacity(
+        &self,
+        device_id: u64,
+        logical_blocks: u64,
+    ) -> Result<()> {
+        let root = self.mapping_root_for_device(device_id)?.ok_or_else(|| {
+            metadata_error(format!("thin device {device_id} has no mapping tree"))
+        })?;
+        let mut reader = lock_mutex(&self.reader, "thin metadata reader")?;
+        integrity::validate_device_capacity(&mut **reader, &self.superblock, root, logical_blocks)
+    }
+
     fn mapping_root_for_device(&self, device_id: u64) -> Result<Option<u64>> {
         {
             let mapping_roots = lock_mutex(&self.mapping_roots, "thin mapping root cache")?;
@@ -122,6 +142,7 @@ impl ThinMetadata {
 
 fn read_superblock(reader: &mut dyn EvidenceReader) -> Result<ThinSuperblock> {
     let block = read_metadata_block(reader, THIN_SUPERBLOCK_LOCATION)?;
+    integrity::validate_superblock(&block)?;
     let magic = read_u64(&block, 32, "thin superblock magic")?;
     if magic != THIN_SUPERBLOCK_MAGIC {
         return Err(metadata_error(format!(
@@ -154,8 +175,10 @@ fn read_superblock(reader: &mut dyn EvidenceReader) -> Result<ThinSuperblock> {
             "thin metadata roots must be non-zero".to_string(),
         ));
     }
-    if nr_metadata_blocks > 0
-        && (mapping_root >= nr_metadata_blocks || details_root >= nr_metadata_blocks)
+    if nr_metadata_blocks == 0
+        || nr_metadata_blocks > reader.info().size / METADATA_BLOCK_SIZE_U64
+        || mapping_root >= nr_metadata_blocks
+        || details_root >= nr_metadata_blocks
     {
         return Err(metadata_error(format!(
             "thin metadata root outside metadata device: mapping_root={mapping_root}, details_root={details_root}, nr_metadata_blocks={nr_metadata_blocks}"
@@ -163,11 +186,13 @@ fn read_superblock(reader: &mut dyn EvidenceReader) -> Result<ThinSuperblock> {
     }
 
     Ok(ThinSuperblock {
+        time: read_u32(&block, 44, "thin time")?,
         transaction_id: read_u64(&block, 48, "thin transaction id")?,
         mapping_root,
         details_root,
         data_block_size_sectors,
         nr_metadata_blocks,
+        nr_data_blocks: read_u64(&block, 64, "thin data device block count")?,
     })
 }
 
@@ -259,6 +284,7 @@ fn parse_node_header(
     expected_leaf_value_size: u32,
     is_root: bool,
 ) -> Result<NodeHeader> {
+    integrity::validate_checksum(block, loc, 121_107)?;
     let flags = read_u32(block, 4, "thin btree node flags")?;
     let is_leaf = match flags {
         INTERNAL_NODE_FLAG => false,
@@ -278,7 +304,7 @@ fn parse_node_header(
     let nr_entries = read_u32(block, 16, "thin btree node entries")?;
     let max_entries = read_u32(block, 20, "thin btree node max entries")?;
     let value_size = read_u32(block, 24, "thin btree node value size")?;
-    if max_entries == 0 {
+    if max_entries == 0 || max_entries % 3 != 0 {
         return Err(metadata_error(format!(
             "thin metadata node {loc} has zero max_entries"
         )));
@@ -288,9 +314,16 @@ fn parse_node_header(
             "thin metadata node {loc} entries {nr_entries} exceed max_entries {max_entries}"
         )));
     }
-    if is_leaf && value_size != expected_leaf_value_size {
+    if value_size != if is_leaf { expected_leaf_value_size } else { 8 } {
         return Err(metadata_error(format!(
             "thin metadata leaf {loc} value_size {value_size} does not match expected {expected_leaf_value_size}"
+        )));
+    }
+    let capacity =
+        (METADATA_BLOCK_SIZE_U64 - NODE_HEADER_SIZE as u64) / (8 + u64::from(value_size));
+    if u64::from(max_entries) > capacity {
+        return Err(metadata_error(format!(
+            "thin metadata node {loc} capacity exceeds its block"
         )));
     }
     let values_offset = values_offset(max_entries)?;

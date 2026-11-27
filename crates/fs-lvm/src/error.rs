@@ -63,6 +63,22 @@ pub enum LvmError {
     #[error("thin pool transaction ID is missing from LVM metadata")]
     MissingThinPoolTransaction,
 
+    #[error("thin metadata block {block} checksum mismatch: expected {expected:#010x}, computed {actual:#010x}")]
+    ThinChecksum {
+        block: u64,
+        expected: u32,
+        actual: u32,
+    },
+
+    #[error("unsupported thin metadata version {version}")]
+    ThinVersion { version: u32 },
+
+    #[error("thin metadata requires checking or has unsupported flags {flags:#010x}")]
+    ThinFlags { flags: u32 },
+
+    #[error("unsupported thin metadata incompatible features {flags:#010x}")]
+    ThinFeatures { flags: u32 },
+
     #[error("thin device {device_id} transaction {actual} exceeds pool transaction {maximum}")]
     ThinDeviceTransaction {
         device_id: u64,
