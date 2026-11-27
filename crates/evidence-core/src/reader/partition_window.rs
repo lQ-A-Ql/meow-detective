@@ -95,6 +95,12 @@ impl Seek for PartitionWindowReader {
 }
 
 impl EvidenceReader for PartitionWindowReader {
+    fn reserve_work(
+        &self,
+        bytes: u64,
+    ) -> io::Result<Option<std::sync::Arc<dyn super::ReaderResourceHold>>> {
+        self.inner.reserve_work(bytes)
+    }
     fn info(&self) -> &ReaderInfo {
         &self.info
     }

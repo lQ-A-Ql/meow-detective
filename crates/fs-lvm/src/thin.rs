@@ -1,12 +1,17 @@
 use std::collections::HashMap;
 use std::io::SeekFrom;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 
 use evidence_core::EvidenceReader;
 
 use crate::error::{LvmError, Result};
 
+mod access;
 mod integrity;
+mod space_map;
+mod superblock;
+use access::{checked_add, checked_mul, lock_mutex, metadata_error, read_u32, read_u64};
+use superblock::read_superblock;
 
 const METADATA_BLOCK_SIZE: usize = 4096;
 const METADATA_BLOCK_SIZE_U64: u64 = METADATA_BLOCK_SIZE as u64;
@@ -30,6 +35,17 @@ pub struct ThinSuperblock {
     pub data_block_size_sectors: u32,
     pub nr_metadata_blocks: u64,
     pub nr_data_blocks: u64,
+    pub metadata_snapshot: u64,
+    pub data_space_map: SpaceMapRoot,
+    pub metadata_space_map: SpaceMapRoot,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct SpaceMapRoot {
+    pub blocks: u64,
+    pub allocated: u64,
+    pub bitmap_root: u64,
+    pub overflow_root: u64,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -61,6 +77,19 @@ pub struct ThinMetadata {
 }
 
 impl ThinMetadata {
+    pub(crate) fn open_for_pool(
+        mut reader: Box<dyn EvidenceReader>,
+        expected: u64,
+    ) -> Result<Self> {
+        let actual = read_superblock(reader.as_mut())?.transaction_id;
+        if actual != expected {
+            return Err(LvmError::ThinPoolTransactionMismatch { expected, actual });
+        }
+        let metadata = Self::open(reader)?;
+        metadata.validate_pool_transaction(expected)?;
+        Ok(metadata)
+    }
+
     pub fn open(reader: Box<dyn EvidenceReader>) -> Result<Self> {
         let reader = Arc::new(Mutex::new(reader));
         let superblock = {
@@ -70,6 +99,7 @@ impl ThinMetadata {
         {
             let mut guard = lock_mutex(&reader, "thin metadata reader")?;
             integrity::validate_trees(&mut **guard, &superblock)?;
+            space_map::validate(&mut **guard, &superblock)?;
         }
         Ok(Self {
             reader,
@@ -138,62 +168,6 @@ impl ThinMetadata {
         }
         Ok(root)
     }
-}
-
-fn read_superblock(reader: &mut dyn EvidenceReader) -> Result<ThinSuperblock> {
-    let block = read_metadata_block(reader, THIN_SUPERBLOCK_LOCATION)?;
-    integrity::validate_superblock(&block)?;
-    let magic = read_u64(&block, 32, "thin superblock magic")?;
-    if magic != THIN_SUPERBLOCK_MAGIC {
-        return Err(metadata_error(format!(
-            "thin metadata superblock magic mismatch: expected {THIN_SUPERBLOCK_MAGIC}, got {magic}"
-        )));
-    }
-    let block_number = read_u64(&block, 8, "thin superblock block number")?;
-    if block_number != THIN_SUPERBLOCK_LOCATION {
-        return Err(metadata_error(format!(
-            "thin metadata superblock stored block number {block_number}, expected 0"
-        )));
-    }
-    let mapping_root = read_u64(&block, 320, "thin mapping root")?;
-    let details_root = read_u64(&block, 328, "thin details root")?;
-    let data_block_size_sectors = read_u32(&block, 336, "thin data block size")?;
-    let metadata_block_size_sectors = read_u32(&block, 340, "thin metadata block size")?;
-    let nr_metadata_blocks = read_u64(&block, 344, "thin metadata block count")?;
-    if metadata_block_size_sectors != 8 {
-        return Err(metadata_error(format!(
-            "unsupported thin metadata block size {metadata_block_size_sectors} sectors"
-        )));
-    }
-    if data_block_size_sectors == 0 {
-        return Err(metadata_error(
-            "thin metadata data_block_size is zero".to_string(),
-        ));
-    }
-    if mapping_root == 0 || details_root == 0 {
-        return Err(metadata_error(
-            "thin metadata roots must be non-zero".to_string(),
-        ));
-    }
-    if nr_metadata_blocks == 0
-        || nr_metadata_blocks > reader.info().size / METADATA_BLOCK_SIZE_U64
-        || mapping_root >= nr_metadata_blocks
-        || details_root >= nr_metadata_blocks
-    {
-        return Err(metadata_error(format!(
-            "thin metadata root outside metadata device: mapping_root={mapping_root}, details_root={details_root}, nr_metadata_blocks={nr_metadata_blocks}"
-        )));
-    }
-
-    Ok(ThinSuperblock {
-        time: read_u32(&block, 44, "thin time")?,
-        transaction_id: read_u64(&block, 48, "thin transaction id")?,
-        mapping_root,
-        details_root,
-        data_block_size_sectors,
-        nr_metadata_blocks,
-        nr_data_blocks: read_u64(&block, 64, "thin data device block count")?,
-    })
 }
 
 fn btree_lookup_u64(reader: &mut dyn EvidenceReader, root: u64, key: u64) -> Result<Option<u64>> {
@@ -450,50 +424,4 @@ fn read_metadata_block(
     reader.seek(SeekFrom::Start(offset))?;
     reader.read_exact(&mut buf)?;
     Ok(buf)
-}
-
-fn read_u32(data: &[u8], offset: usize, context: &str) -> Result<u32> {
-    let end = offset
-        .checked_add(4)
-        .ok_or_else(|| metadata_error(format!("{context} offset overflows usize")))?;
-    let bytes = data
-        .get(offset..end)
-        .ok_or_else(|| metadata_error(format!("{context} is outside buffer")))?;
-    let bytes = bytes
-        .try_into()
-        .map_err(|_| metadata_error(format!("{context} must be exactly 4 bytes")))?;
-    Ok(u32::from_le_bytes(bytes))
-}
-
-fn read_u64(data: &[u8], offset: usize, context: &str) -> Result<u64> {
-    let end = offset
-        .checked_add(8)
-        .ok_or_else(|| metadata_error(format!("{context} offset overflows usize")))?;
-    let bytes = data
-        .get(offset..end)
-        .ok_or_else(|| metadata_error(format!("{context} is outside buffer")))?;
-    let bytes = bytes
-        .try_into()
-        .map_err(|_| metadata_error(format!("{context} must be exactly 8 bytes")))?;
-    Ok(u64::from_le_bytes(bytes))
-}
-
-fn checked_add(lhs: u64, rhs: u64, context: &str) -> Result<u64> {
-    lhs.checked_add(rhs)
-        .ok_or_else(|| metadata_error(format!("{context} overflows u64")))
-}
-
-fn checked_mul(lhs: u64, rhs: u64, context: &str) -> Result<u64> {
-    lhs.checked_mul(rhs)
-        .ok_or_else(|| metadata_error(format!("{context} overflows u64")))
-}
-
-fn metadata_error(message: String) -> LvmError {
-    LvmError::MetadataParseError { line: 0, message }
-}
-
-fn lock_mutex<'a, T>(mutex: &'a Mutex<T>, context: &str) -> Result<MutexGuard<'a, T>> {
-    mutex
-        .lock()
-        .map_err(|_| metadata_error(format!("{context} lock poisoned")))
 }

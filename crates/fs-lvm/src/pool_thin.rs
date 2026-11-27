@@ -104,8 +104,8 @@ impl LvmPool {
         let metadata_reader: Box<dyn EvidenceReader> =
             Box::new(self.open_mapped_volume(metadata_index)?);
         let data_reader: Box<dyn EvidenceReader> = Box::new(self.open_mapped_volume(data_index)?);
-        let thin_metadata = ThinMetadata::open(metadata_reader)?;
-        thin_metadata.validate_pool_transaction(
+        let thin_metadata = ThinMetadata::open_for_pool(
+            metadata_reader,
             pool_deps
                 .transaction_id
                 .ok_or(LvmError::MissingThinPoolTransaction)?,

@@ -458,7 +458,7 @@
       "category": "Linux LVM/PVE",
       "item": "LVM thin/cache/RAID/snapshot/VDO/writecache",
       "status": "partial",
-      "summary": "direct linear/striped 与基础 dm-thin 只读映射已实现；thin 验证 superblock/全部可达映射与设备树 CRC32C、version/features/state、transaction/time、节点结构、设备集合、映射数量和逻辑/物理容量。space-map 分配与引用计数交叉验证、持有 metadata snapshot 的独立恢复尚未覆盖。cache、RAID、snapshot、VDO、writecache 仍不支持并拒绝打开",
+      "summary": "direct linear/striped 与基础 dm-thin 只读映射已实现；thin 验证 CRC32C、version/features/state、transaction/time、树结构、设备集合、映射数量与容量，并交叉验证 data/metadata space-map 分配及引用计数，包含持有 metadata snapshot 的共享引用。校验内存上限为 256 MiB。持有 snapshot 独立恢复、大型 metadata 性能与全部 thin snapshot 变体尚未覆盖。cache、RAID、snapshot、VDO、writecache 仍不支持并拒绝打开",
       "affectedChains": [
         "LVM"
       ],

@@ -219,6 +219,18 @@ impl Seek for LvReader {
 }
 
 impl EvidenceReader for LvReader {
+    fn reserve_work(
+        &self,
+        bytes: u64,
+    ) -> std::io::Result<Option<std::sync::Arc<dyn evidence_core::reader::ReaderResourceHold>>>
+    {
+        self.device_readers
+            .first()
+            .ok_or_else(|| std::io::Error::other("LVM reader has no physical source"))?
+            .lock()
+            .map_err(|_| std::io::Error::other("LVM source lock poisoned"))?
+            .reserve_work(bytes)
+    }
     fn info(&self) -> &ReaderInfo {
         &self.info
     }

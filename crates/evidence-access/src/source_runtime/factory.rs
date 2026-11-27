@@ -43,11 +43,12 @@ where
             .map(|(budget, _)| evidence_core::reader::ReaderAdmission::acquire(budget))
             .transpose()?;
         let reader = Box::new((self.opener)()?) as Box<dyn EvidenceReader>;
-        if let (Some(hold), Some((_, metadata))) = (hold, &self.resources) {
+        if let (Some(hold), Some((budget, metadata))) = (hold, &self.resources) {
             Ok(Box::new(super::resources::BudgetedReader {
                 reader,
                 _hold: hold,
                 _metadata: metadata.clone(),
+                budget: budget.clone(),
             }))
         } else {
             Ok(reader)

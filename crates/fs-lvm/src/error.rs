@@ -79,6 +79,17 @@ pub enum LvmError {
     #[error("unsupported thin metadata incompatible features {flags:#010x}")]
     ThinFeatures { flags: u32 },
 
+    #[error("thin space-map verification exceeds its memory budget")]
+    ThinVerificationBudget,
+
+    #[error("thin space-map reference mismatch (metadata={metadata}, block={block}): expected {expected}, found {actual}")]
+    ThinSpaceMapReference {
+        metadata: bool,
+        block: u64,
+        expected: u32,
+        actual: u32,
+    },
+
     #[error("thin device {device_id} transaction {actual} exceeds pool transaction {maximum}")]
     ThinDeviceTransaction {
         device_id: u64,

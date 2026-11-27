@@ -439,6 +439,14 @@ impl Seek for E01Reader {
 }
 
 impl EvidenceReader for E01Reader {
+    fn reserve_work(
+        &self,
+        bytes: u64,
+    ) -> io::Result<Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>> {
+        self.resource_admission
+            .as_ref()
+            .map_or(Ok(None), |admission| admission.reserve_work(bytes))
+    }
     fn info(&self) -> &ReaderInfo {
         &self.info
     }

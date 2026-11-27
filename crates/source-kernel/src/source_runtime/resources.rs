@@ -79,6 +79,21 @@ pub struct ReaderBudget {
     pub route: ResourceRoute,
 }
 impl ReaderAdmission for ReaderBudget {
+    fn reserve_work(&self, bytes: u64) -> io::Result<Option<Arc<dyn ReaderResourceHold>>> {
+        if let Some(scope) = self.route.scope() {
+            return scope.acquire_work(bytes, 0).map(Some);
+        }
+        global_pool()
+            .acquire(
+                Resources {
+                    bytes,
+                    ..Default::default()
+                },
+                None,
+            )
+            .map(|permit| Some(Arc::new(permit) as Arc<dyn ReaderResourceHold>))
+            .map_err(ResourceError::into_io)
+    }
     fn acquire(&self) -> io::Result<Arc<dyn ReaderResourceHold>> {
         if self.bytes > 192 * MIB {
             return Err(ResourceError::Limit.into_io());
@@ -107,6 +122,9 @@ pub struct CaseReaderAdmission {
     pub cancel: Arc<AtomicBool>,
 }
 impl ReaderAdmission for CaseReaderAdmission {
+    fn reserve_work(&self, bytes: u64) -> io::Result<Option<Arc<dyn ReaderResourceHold>>> {
+        self.budget.reserve_work(bytes)
+    }
     fn acquire(&self) -> io::Result<Arc<dyn ReaderResourceHold>> {
         loop {
             if self.cancel.load(Ordering::Acquire) {
@@ -188,6 +206,7 @@ pub struct BudgetedReader {
     pub reader: Box<dyn EvidenceReader>,
     pub _hold: Arc<dyn ReaderResourceHold>,
     pub _metadata: Arc<dyn ReaderResourceHold>,
+    pub budget: ReaderBudget,
 }
 impl std::io::Read for BudgetedReader {
     fn read(&mut self, b: &mut [u8]) -> io::Result<usize> {
@@ -200,6 +219,9 @@ impl std::io::Seek for BudgetedReader {
     }
 }
 impl EvidenceReader for BudgetedReader {
+    fn reserve_work(&self, bytes: u64) -> io::Result<Option<Arc<dyn ReaderResourceHold>>> {
+        self.budget.reserve_work(bytes)
+    }
     fn info(&self) -> &ReaderInfo {
         self.reader.info()
     }

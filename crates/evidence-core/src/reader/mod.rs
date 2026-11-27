@@ -29,4 +29,10 @@ pub trait EvidenceReader: Read + Seek + Send {
     fn preferred_read_granularity(&self) -> usize {
         0
     }
+    fn reserve_work(
+        &self,
+        _bytes: u64,
+    ) -> std::io::Result<Option<std::sync::Arc<dyn ReaderResourceHold>>> {
+        Ok(None)
+    }
 }

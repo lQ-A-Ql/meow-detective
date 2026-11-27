@@ -43,6 +43,11 @@ impl EvidenceReaderFactory for RawFactory {
         let reader = Box::new(RawImageReader::open(&self.path)?) as Box<dyn EvidenceReader>;
         match (hold, &self.metadata) {
             (Some(hold), Some(metadata)) => Ok(Box::new(BudgetedReader {
+                budget: ReaderBudget {
+                    bytes: self.reader_bytes,
+                    handles: 1,
+                    route: self.route.clone(),
+                },
                 reader,
                 _hold: hold,
                 _metadata: metadata.clone(),
@@ -83,6 +88,31 @@ fn source_file(temp: &tempfile::TempDir) -> PathBuf {
     let path = temp.path().join("source.raw");
     std::fs::write(&path, [0; 512]).unwrap();
     path
+}
+
+#[test]
+fn reader_verification_uses_its_workspace_and_releases_the_memory() {
+    let temp = tempfile::tempdir().unwrap();
+    let path = source_file(&temp);
+    let root = ResourcePool::new(Resources {
+        bytes: 1536 * MIB,
+        workers: 12,
+        ..Default::default()
+    });
+    let workspace = root.workspace(&AtomicBool::new(false)).unwrap();
+    let factory = build_factory(&path, MIB, true);
+    factory.bind_reader_scope(Arc::new(
+        crate::source_runtime::resources::WorkspaceAdmission(workspace.pool()),
+    ));
+    let reader = factory.open_reader().unwrap();
+    let proof = reader.reserve_work(256 * MIB).unwrap().unwrap();
+    assert_eq!(workspace.pool().snapshot().0.bytes, 257 * MIB);
+    drop(proof);
+    assert_eq!(workspace.pool().snapshot().0.bytes, MIB);
+    drop(reader);
+    assert_eq!(workspace.pool().snapshot().0.bytes, 0);
+    drop(workspace);
+    assert_eq!(root.snapshot().0, Resources::default());
 }
 
 fn lease(case: &str, path: &Path) -> SourcePublicationLease {

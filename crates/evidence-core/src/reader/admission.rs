@@ -4,6 +4,9 @@ pub trait ReaderResourceHold: Send + Sync {}
 impl<T: Send + Sync> ReaderResourceHold for T {}
 pub trait ReaderAdmission: Send + Sync {
     fn acquire(&self) -> io::Result<Arc<dyn ReaderResourceHold>>;
+    fn reserve_work(&self, _bytes: u64) -> io::Result<Option<Arc<dyn ReaderResourceHold>>> {
+        Ok(None)
+    }
 }
 pub trait ReaderAllocationScope: Send + Sync {
     fn active(&self) -> bool;

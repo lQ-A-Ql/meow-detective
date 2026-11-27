@@ -17,8 +17,8 @@ pub(super) fn validate_checksum(
     Ok(())
 }
 
-pub(super) fn validate_superblock(block: &[u8; METADATA_BLOCK_SIZE]) -> Result<()> {
-    validate_checksum(block, 0, 160_774)?;
+pub(super) fn validate_superblock(block: &[u8; METADATA_BLOCK_SIZE], location: u64) -> Result<()> {
+    validate_checksum(block, location, 160_774)?;
     let version = read_u32(block, 40, "thin version")?;
     if version != 2 {
         return Err(LvmError::ThinVersion { version });
