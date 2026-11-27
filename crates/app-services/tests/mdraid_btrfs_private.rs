@@ -27,7 +27,10 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         .find(|array| array.name == "mac:0")
         .expect("discover mac:0");
 
-    let temporary = tempfile::tempdir().expect("temporary directory");
+    let scratch =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/test-workspaces");
+    std::fs::create_dir_all(&scratch).expect("test workspace directory");
+    let temporary = tempfile::tempdir_in(scratch).expect("temporary directory");
     let case_root = temporary.path().join("case");
     std::fs::create_dir_all(&case_root).expect("case root");
     let conn = persistence_sqlite::connection::open_or_create(&case_root.join("app.db"))
@@ -48,6 +51,7 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         .expect("create case");
 
     let started = Instant::now();
+    let mut inputs = Vec::new();
     for (index, content) in array.source_content.iter().enumerate() {
         let source = domain::DataSource {
             id: domain::DataSourceId(format!("physical-{index}")),
@@ -60,21 +64,23 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         DataSourceRepo::new(&conn)
             .insert(&case_id, &source)
             .unwrap();
-        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&conn)
-            .bind(
-                &case_id.0,
-                &source.id.0,
-                &domain::structure::SourceRevisionContent {
-                    logical_size: content.logical_size,
-                    metadata_identity: None,
-                    logical_sha256: Some(content.logical_sha256.clone()),
-                },
-                &[],
-                true,
-            )
-            .unwrap();
+        let reference =
+            persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&conn)
+                .bind(
+                    &case_id.0,
+                    &source.id.0,
+                    &domain::structure::SourceRevisionContent {
+                        logical_size: content.logical_size,
+                        metadata_identity: None,
+                        logical_sha256: Some(content.logical_sha256.clone()),
+                    },
+                    &[],
+                    true,
+                )
+                .unwrap();
+        inputs.push(reference);
     }
-    let source = materialize_mdraid_array(&conn, &case_root, &case_id, &array)
+    let source = materialize_mdraid_array(&conn, &case_root, &case_id, &array, &inputs)
         .expect("materialize MD RAID Btrfs");
     let elapsed = started.elapsed();
     let source_path = app_services::source_db::source_db_path(&case_root, &source.id);

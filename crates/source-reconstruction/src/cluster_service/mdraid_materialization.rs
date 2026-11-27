@@ -2,8 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use domain::{CaseId, DataSource, DataSourceId};
 use evidence_access::mdraid::{
-    discover_mdraid_from_collection, mdraid_array_fingerprint, open_mdraid_reader,
-    verify_mdraid_source_content, MdRaidArrayPlan, MdRaidPlanError,
+    discover_mdraid_from_collection, mdraid_array_fingerprint, open_mdraid_reader, MdRaidArrayPlan,
+    MdRaidPlanError,
 };
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
@@ -25,8 +25,16 @@ pub fn materialize_mdraid_array(
     case_root: &std::path::Path,
     case_id: &CaseId,
     plan: &MdRaidArrayPlan,
+    inputs: &[domain::structure::SourceRevisionRef],
 ) -> Result<DataSource, MdRaidPlanError> {
-    materialize_mdraid_array_with_cancel(conn, case_root, case_id, plan, &AtomicBool::new(false))
+    materialize_mdraid_array_with_cancel(
+        conn,
+        case_root,
+        case_id,
+        plan,
+        inputs,
+        &AtomicBool::new(false),
+    )
 }
 
 fn materialize_mdraid_array_with_cancel(
@@ -34,10 +42,11 @@ fn materialize_mdraid_array_with_cancel(
     case_root: &std::path::Path,
     case_id: &CaseId,
     plan: &MdRaidArrayPlan,
+    inputs: &[domain::structure::SourceRevisionRef],
     cancel: &AtomicBool,
 ) -> Result<DataSource, MdRaidPlanError> {
     ensure_not_cancelled(cancel)?;
-    let source = registration::register_mdraid_array(conn, case_root, case_id, plan)?;
+    let source = registration::register_mdraid_array(conn, case_root, case_id, plan, inputs)?;
     materialize_mdraid_source_catalog_with_cancel(conn, case_root, &source.id, cancel)?;
     Ok(source)
 }
@@ -74,13 +83,15 @@ pub fn materialize_mdraid_source_catalog_with_cancel(
     }
     let plan = evidence_access::mdraid::read_mdraid_descriptor(&source.source_path)?;
     let fingerprint = mdraid_array_fingerprint(&plan)?;
-    if source.id != registration::source_id(&plan, &fingerprint) {
+    let registered_inputs =
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
+            .inputs(&case_id.0, &source.id.0)?;
+    if source.id != registration::source_id(&plan, &fingerprint, &registered_inputs) {
         return Err(MdRaidPlanError::InvalidPublication);
     }
     inputs::validate(conn, &source)?;
     object_version::validate(conn, &case_id.0, &source.id.0, &fingerprint)?;
     drop(open_mdraid_reader(&plan)?);
-    verify_mdraid_source_content(&plan, cancel)?;
     let owner = uuid::Uuid::new_v4().to_string();
     let claim = DataSourceProcessingPhaseRepo::new(conn).claim(
         &source.id,
@@ -139,12 +150,14 @@ pub fn materialize_linux_evidence_set_mdraid(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,
+    import: &super::LinuxEvidenceSetImportPlan,
     plan: &ImageCollectionPlan,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
     materialize_linux_evidence_set_mdraid_with_cancel(
         conn,
         case_root,
         case_id,
+        import,
         plan,
         &AtomicBool::new(false),
     )
@@ -154,13 +167,17 @@ pub fn materialize_linux_evidence_set_mdraid_with_cancel(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     case_id: &CaseId,
+    import: &super::LinuxEvidenceSetImportPlan,
     plan: &ImageCollectionPlan,
     cancel: &AtomicBool,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
     ensure_not_cancelled(cancel)?;
     discover_mdraid_from_collection(plan, cancel)?
         .iter()
-        .map(|array| materialize_mdraid_array_with_cancel(conn, case_root, case_id, array, cancel))
+        .map(|array| {
+            let inputs = inputs::from_collection(conn, case_id, import, array)?;
+            materialize_mdraid_array_with_cancel(conn, case_root, case_id, array, &inputs, cancel)
+        })
         .collect()
 }
 

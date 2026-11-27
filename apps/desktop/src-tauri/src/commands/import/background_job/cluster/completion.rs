@@ -96,6 +96,7 @@ fn materialize_nested_mdraid_catalogs(
         connection,
         &job.case_root,
         &job.case_id,
+        &job.plan,
         collection,
         cancel_token,
     ) {

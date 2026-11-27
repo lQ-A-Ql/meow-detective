@@ -9,10 +9,15 @@ use evidence_access::mdraid::{
 };
 use persistence_sqlite::repositories::datasource_repo::{DataSourceRepo, DataSourceStorage};
 
-pub(super) fn source_id(plan: &MdRaidArrayPlan, fingerprint: &str) -> DataSourceId {
-    DataSourceId(format!(
-        "mdraid-{}-{fingerprint}",
-        hex::encode(plan.array_uuid)
+pub(super) fn source_id(
+    plan: &MdRaidArrayPlan,
+    fingerprint: &str,
+    inputs: &[domain::structure::SourceRevisionRef],
+) -> DataSourceId {
+    DataSourceId(evidence_access::mdraid::registered_source_id(
+        &plan.array_uuid,
+        fingerprint,
+        inputs,
     ))
 }
 
@@ -21,12 +26,13 @@ pub(super) fn register_mdraid_array(
     case_root: &std::path::Path,
     case_id: &CaseId,
     plan: &MdRaidArrayPlan,
+    inputs: &[domain::structure::SourceRevisionRef],
 ) -> Result<DataSource, MdRaidPlanError> {
+    super::inputs::validate_registered(conn, case_id, plan, inputs)?;
     let logical_size = open_mdraid_reader(plan)?.logical_size();
     let fingerprint = mdraid_array_fingerprint(plan)?;
-    let id = source_id(plan, &fingerprint);
+    let id = source_id(plan, &fingerprint, inputs);
     let repo = DataSourceRepo::new(conn);
-    let inputs = super::inputs::resolve(conn, case_id, plan)?;
     if let Some(existing) = repo
         .find_by_case(case_id)?
         .into_iter()
@@ -40,7 +46,7 @@ pub(super) fn register_mdraid_array(
             return Err(MdRaidPlanError::InvalidPublication);
         }
         persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
-            .bind_inputs(&case_id.0, &existing.id.0, &inputs)?;
+            .bind_inputs(&case_id.0, &existing.id.0, inputs)?;
         super::object_version::validate(conn, &case_id.0, &existing.id.0, &fingerprint)?;
         return Ok(existing);
     }
@@ -73,7 +79,7 @@ pub(super) fn register_mdraid_array(
         &DataSourceStorage::source_db(&source.id.0, Some("linux"), Some("mdraid".to_string())),
     )?;
     persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&transaction)
-        .bind_inputs(&case_id.0, &source.id.0, &inputs)?;
+        .bind_inputs(&case_id.0, &source.id.0, inputs)?;
     super::object_version::bind(&transaction, case_id, &source, plan, &fingerprint)?;
     transaction.commit()?;
     Ok(source)

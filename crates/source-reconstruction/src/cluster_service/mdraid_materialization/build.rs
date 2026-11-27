@@ -1,9 +1,7 @@
 use std::{path::Path, sync::atomic::AtomicBool};
 
 use domain::{CaseId, DataSource};
-use evidence_access::mdraid::{
-    open_mdraid_reader, verify_mdraid_source_content, MdRaidArrayPlan, MdRaidPlanError,
-};
+use evidence_access::mdraid::{open_mdraid_reader, MdRaidArrayPlan, MdRaidPlanError};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;
 use source_kernel::source_db;
 
@@ -55,7 +53,6 @@ fn populate_and_seal(
     )?;
     ensure_not_cancelled(request.cancel)?;
     drop(open_mdraid_reader(request.plan)?);
-    verify_mdraid_source_content(request.plan, request.cancel)?;
     request
         .attempt
         .refresh(request.case_conn, &request.source.id, request.fingerprint)?;

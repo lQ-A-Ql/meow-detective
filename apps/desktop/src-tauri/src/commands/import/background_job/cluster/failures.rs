@@ -106,6 +106,7 @@ fn materialize_mdraid_after_member_failures(
         connection,
         &job.case_root,
         &job.case_id,
+        &job.plan,
         collection,
         cancel_token,
     ) {

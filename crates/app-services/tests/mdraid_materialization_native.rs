@@ -20,7 +20,9 @@ fn native_multi_pv_lvm_md_ext4_catalog_publishes_and_previews_through_file_ident
 fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     let fixtures =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../testdata/fixtures/public-small");
-    let workspace = tempfile::tempdir().unwrap();
+    let scratch = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/test-workspaces");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let workspace = tempfile::tempdir_in(scratch).unwrap();
     let mut paths = Vec::new();
     for index in 0..2 {
         let path = workspace.path().join(format!("member-{index}.raw"));
@@ -58,12 +60,71 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     .unwrap();
     let case = case_service::create_case(workspace.path(), "Native MD filesystem", None).unwrap();
     let connection = case.connection().unwrap();
-    register_inputs(&connection, &case.meta.id, &shared, &plans[0]);
+    let inputs = register_inputs(&connection, &case.meta.id, &shared, &plans[0], "physical");
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
+        .insert(
+            &case.meta.id,
+            &domain::DataSource {
+                id: domain::DataSourceId("unrelated-same-path".into()),
+                name: "Independent acquisition".into(),
+                kind: plans[0].source_content[0].source_kind.clone(),
+                source_path: PathBuf::from(&plans[0].source_content[0].source_path),
+                imported_at: chrono::Utc::now(),
+                provenance: Default::default(),
+            },
+        )
+        .unwrap();
+    assert!(matches!(
+        cluster_service::materialize_mdraid_array(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            &plans[0],
+            &[],
+        ),
+        Err(cluster_service::MdRaidPlanError::InvalidContentIdentity)
+    ));
+    let mut reversed_inputs = inputs.clone();
+    reversed_inputs.reverse();
+    assert!(matches!(
+        cluster_service::materialize_mdraid_array(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            &plans[0],
+            &reversed_inputs,
+        ),
+        Err(cluster_service::MdRaidPlanError::InvalidContentIdentity)
+    ));
+    let repeated_inputs = vec![inputs[0].clone(); inputs.len()];
+    assert!(matches!(
+        cluster_service::materialize_mdraid_array(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            &plans[0],
+            &repeated_inputs,
+        ),
+        Err(cluster_service::MdRaidPlanError::InvalidContentIdentity)
+    ));
+    let mut foreign_inputs = inputs.clone();
+    foreign_inputs[0].case_id = "foreign-case".into();
+    assert!(matches!(
+        cluster_service::materialize_mdraid_array(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            &plans[0],
+            &foreign_inputs,
+        ),
+        Err(cluster_service::MdRaidPlanError::InvalidContentIdentity)
+    ));
     let source = cluster_service::materialize_mdraid_array(
         &connection,
         &case.case_root,
         &case.meta.id,
         &plans[0],
+        &inputs,
     )
     .unwrap();
     let repeated = cluster_service::materialize_mdraid_array(
@@ -71,6 +132,7 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         &case.case_root,
         &case.meta.id,
         &plans[0],
+        &inputs,
     )
     .unwrap();
     assert_eq!(source.id, repeated.id);
@@ -96,15 +158,103 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .unwrap()
             .unwrap();
     assert_eq!(object.object_kind, "md_raid");
+    let import = registered_collection(&connection, &case.meta.id, &plans[0], "physical", &inputs);
     let from_collection = cluster_service::materialize_linux_evidence_set_mdraid(
         &connection,
         &case.case_root,
         &case.meta.id,
+        &import,
         &shared,
     )
     .unwrap();
     assert_eq!(from_collection.len(), 1);
     assert_eq!(source.id, from_collection[0].id);
+    let mut reordered_import = import.clone();
+    reordered_import.members.reverse();
+    assert_eq!(
+        cluster_service::materialize_linux_evidence_set_mdraid(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            &reordered_import,
+            &shared,
+        )
+        .unwrap()[0]
+            .id,
+        source.id,
+    );
+    let independent_inputs = register_inputs(
+        &connection,
+        &case.meta.id,
+        &shared,
+        &plans[0],
+        "independent",
+    );
+    let independent_import = registered_collection(
+        &connection,
+        &case.meta.id,
+        &plans[0],
+        "independent",
+        &independent_inputs,
+    );
+    let independent = cluster_service::materialize_linux_evidence_set_mdraid(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &independent_import,
+        &shared,
+    )
+    .unwrap()
+    .remove(0);
+    assert_ne!(source.id, independent.id);
+    assert_eq!(source.source_path, independent.source_path);
+    let revisions = persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
+        &connection,
+    );
+    assert_eq!(
+        revisions.inputs(&case.meta.id.0, &source.id.0).unwrap(),
+        inputs
+    );
+    assert_eq!(
+        revisions
+            .inputs(&case.meta.id.0, &independent.id.0)
+            .unwrap(),
+        independent_inputs
+    );
+    assert_eq!(
+        cluster_service::materialize_mdraid_array(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            &plans[0],
+            &independent_inputs,
+        )
+        .unwrap()
+        .id,
+        independent.id,
+    );
+    let mut invalid_import = import.clone();
+    invalid_import.import_set_id = "unregistered-collection".into();
+    assert!(matches!(
+        cluster_service::materialize_linux_evidence_set_mdraid(
+            &connection,
+            &case.case_root,
+            &case.meta.id,
+            &invalid_import,
+            &shared,
+        ),
+        Err(cluster_service::MdRaidPlanError::InvalidContentIdentity)
+    ));
+    assert!(matches!(
+        cluster_service::materialize_linux_evidence_set_mdraid(
+            &connection,
+            &case.case_root,
+            &domain::CaseId("foreign-case".into()),
+            &import,
+            &shared,
+        ),
+        Err(cluster_service::MdRaidPlanError::InvalidContentIdentity)
+    ));
     let source_connection = source_db::open_source_db(&case.case_root, &source.id).unwrap();
     let native =
         source_db::open_registered_fjall_source_read_only(&case.case_root, &source.id).unwrap();
@@ -129,6 +279,19 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         .read_file_header_by_id(&source_connection, &file.id, 1024)
         .unwrap();
     assert_eq!(preview, expected[..1024]);
+    let independent_connection =
+        source_db::open_source_db(&case.case_root, &independent.id).unwrap();
+    let independent_file = FileRepo::new(&independent_connection)
+        .find_by_partition_and_path(&independent.id, 1, "evidence.bin")
+        .unwrap()
+        .unwrap();
+    assert_ne!(file.data_source_id, independent_file.data_source_id);
+    assert_eq!(
+        file_service::FileHeaderReadCache::new(case.meta.id.0.clone())
+            .read_file_header_by_id(&independent_connection, &independent_file.id, 1024)
+            .unwrap(),
+        expected[..1024],
+    );
     connection
         .execute(
             "UPDATE data_source_catalog_publications SET state='prepared', published_at=NULL
@@ -193,12 +356,6 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         ),
         Err(evidence_access::mdraid::MdRaidPlanError::SourceContentChanged),
     ));
-    assert!(cluster_service::materialize_mdraid_source_catalog(
-        &connection,
-        &case.case_root,
-        &source.id,
-    )
-    .is_err());
     let updated = cluster_service::discover_linux_evidence_set_mdraid(&members).unwrap();
     let revisions = persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
         &connection,
@@ -245,16 +402,37 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     assert!(revisions
         .require_current_inputs(&case.meta.id.0, &source.id.0)
         .is_err());
+    revisions
+        .require_current_inputs(&case.meta.id.0, &independent.id.0)
+        .unwrap();
     assert!(
         file_service::FileHeaderReadCache::new(case.meta.id.0.clone())
             .read_file_header_by_id(&source_connection, &file.id, 1024)
             .is_err()
     );
+    assert!(cluster_service::materialize_mdraid_array(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &updated[0],
+        &inputs,
+    )
+    .is_err());
+    let replacement_inputs = inputs
+        .iter()
+        .map(|input| {
+            revisions
+                .current(&case.meta.id.0, &input.source_id)
+                .unwrap()
+                .0
+        })
+        .collect::<Vec<_>>();
     let replacement = cluster_service::materialize_mdraid_array(
         &connection,
         &case.case_root,
         &case.meta.id,
         &updated[0],
+        &replacement_inputs,
     )
     .unwrap();
     assert_ne!(source.id, replacement.id);
@@ -268,7 +446,7 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .find_by_case(&case.meta.id)
             .unwrap()
             .len(),
-        4,
+        8,
     );
 }
 
@@ -277,10 +455,12 @@ fn register_inputs(
     case_id: &domain::CaseId,
     shared: &evidence_access::datasource_service::ImageCollectionPlan,
     plan: &evidence_access::mdraid::MdRaidArrayPlan,
-) {
+    acquisition: &str,
+) -> Vec<domain::structure::SourceRevisionRef> {
+    let mut inputs = Vec::new();
     for (index, content) in plan.source_content.iter().enumerate() {
         let source = domain::DataSource {
-            id: domain::DataSourceId(format!("physical-{index}")),
+            id: domain::DataSourceId(format!("{acquisition}-{index}")),
             name: format!("Physical {index}"),
             kind: content.source_kind.clone(),
             source_path: PathBuf::from(&content.source_path),
@@ -290,20 +470,64 @@ fn register_inputs(
         persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
             .insert(case_id, &source)
             .unwrap();
-        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
-            .bind(
-                &case_id.0,
-                &source.id.0,
-                &domain::structure::SourceRevisionContent {
-                    logical_size: content.logical_size,
-                    metadata_identity: None,
-                    logical_sha256: Some(content.logical_sha256.clone()),
-                },
-                shared
-                    .native_observations(&source.source_path, &source.kind)
-                    .unwrap(),
-                true,
-            )
-            .unwrap();
+        let reference =
+            persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
+                .bind(
+                    &case_id.0,
+                    &source.id.0,
+                    &domain::structure::SourceRevisionContent {
+                        logical_size: content.logical_size,
+                        metadata_identity: None,
+                        logical_sha256: Some(content.logical_sha256.clone()),
+                    },
+                    shared
+                        .native_observations(&source.source_path, &source.kind)
+                        .unwrap(),
+                    true,
+                )
+                .unwrap();
+        inputs.push(reference);
     }
+    inputs
+}
+
+fn registered_collection(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    plan: &evidence_access::mdraid::MdRaidArrayPlan,
+    acquisition: &str,
+    inputs: &[domain::structure::SourceRevisionRef],
+) -> cluster_service::LinuxEvidenceSetImportPlan {
+    let import = cluster_service::LinuxEvidenceSetImportPlan {
+        import_set_id: format!("registered-native-md-{acquisition}"),
+        import_set_name: "Native MD".into(),
+        root_path: PathBuf::new(),
+        manifest_rel_path: String::new(),
+        members: plan
+            .source_content
+            .iter()
+            .enumerate()
+            .map(
+                |(index, content)| cluster_service::LinuxEvidenceSetMemberPlan {
+                    member_index: index as u32,
+                    source_path: PathBuf::from(&content.source_path),
+                    source_name: format!("Physical {index}"),
+                    source_kind: content.source_kind.clone(),
+                },
+            )
+            .collect(),
+        skipped_entries: Vec::new(),
+    };
+    cluster_service::register_linux_evidence_set_import(conn, case_id, &import).unwrap();
+    let repo =
+        persistence_sqlite::repositories::linux_import_set_repo::LinuxImportSetRepo::new(conn);
+    for member in &import.members {
+        repo.bind_member_source(
+            &import.import_set_id,
+            member.member_index,
+            &inputs[member.member_index as usize].source_id,
+        )
+        .unwrap();
+    }
+    import
 }

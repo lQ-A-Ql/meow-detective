@@ -4,7 +4,10 @@ use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo, source_revision_repo::SourceRevisionRepo,
 };
 
-pub(super) fn validate(path: &Path) -> Result<(), super::MdRaidPlanError> {
+pub(crate) fn validate(
+    source_id: &domain::DataSourceId,
+    path: &Path,
+) -> Result<(), super::MdRaidPlanError> {
     let descriptor = path.canonicalize()?;
     let directory = descriptor
         .parent()
@@ -20,21 +23,11 @@ pub(super) fn validate(path: &Path) -> Result<(), super::MdRaidPlanError> {
     {
         return Err(super::MdRaidPlanError::InvalidPublication);
     }
-    let stem = descriptor
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .ok_or(super::MdRaidPlanError::InvalidPublication)?;
-    let source_id = domain::DataSourceId(format!("mdraid-{stem}"));
     let conn = persistence_sqlite::connection::open_existing_case_read_only(&root.join("app.db"))?;
     let repo = DataSourceRepo::new(&conn);
-    let case_id = repo.case_id(&source_id)?;
-    let source = repo
-        .find_by_case(&case_id)?
-        .into_iter()
-        .find(|source| source.id == source_id)
-        .ok_or(super::MdRaidPlanError::InvalidPublication)?;
-    if source.kind != domain::DataSourceKind::MdRaid
-        || source.source_path.canonicalize()? != descriptor
+    let case_id = repo.case_id(source_id)?;
+    if repo.source_kind(source_id)? != domain::DataSourceKind::MdRaid
+        || Path::new(&repo.source_path(source_id)?).canonicalize()? != descriptor
     {
         return Err(super::MdRaidPlanError::InvalidPublication);
     }
@@ -47,6 +40,12 @@ pub(super) fn validate(path: &Path) -> Result<(), super::MdRaidPlanError> {
     if version.mapping_sha256 != super::mdraid_array_fingerprint(&plan)?
         || version.adapter_version != "fs-lvm/mdraid-v2"
     {
+        return Err(super::MdRaidPlanError::InvalidPublication);
+    }
+    let inputs = SourceRevisionRepo::new(&conn).inputs(&case_id.0, &source_id.0)?;
+    let fingerprint = super::mdraid_array_fingerprint(&plan)?;
+    let expected = super::registered_source_id(&plan.array_uuid, &fingerprint, &inputs);
+    if source_id.0 != expected {
         return Err(super::MdRaidPlanError::InvalidPublication);
     }
     Ok(())
