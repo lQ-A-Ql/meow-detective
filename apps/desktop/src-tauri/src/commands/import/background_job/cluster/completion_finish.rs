@@ -18,6 +18,7 @@ use transport::CommandError;
 
 pub(super) struct ReadyImportState {
     pub(super) mdraid_sources: Vec<domain::DataSource>,
+    pub(super) lvm_sources: Vec<domain::DataSource>,
     pub(super) ceph_scope_id: Option<String>,
 }
 
@@ -53,21 +54,14 @@ pub(super) fn finish_ready_import(
         )
         .map(|_| None);
     }
-    let mdraid_note = if state.mdraid_sources.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "; {} nested MD RAID catalog(s) materialized",
-            state.mdraid_sources.len()
-        )
-    };
+    let derived_note = materialization_note(&state);
     let Some(ceph_scope_id) = state.ceph_scope_id else {
         return Ok(Some(BrowseableEvidenceSetImport {
             processing: build_derived_processing_job(job, Vec::new()),
             parent_job_id: job.job_id.clone(),
             completion_detail: format!(
                 "Imported Linux evidence set {}: {}/{} source(s) ready; no Ceph scope proven{}",
-                job.plan.import_set_name, summary.ready_count, total_members, mdraid_note
+                job.plan.import_set_name, summary.ready_count, total_members, derived_note
             ),
         }));
     };
@@ -96,13 +90,14 @@ pub(super) fn finish_ready_import(
     }
     let completion_detail = format!(
         "Imported Linux evidence set {}: {}/{} image(s) ready{}",
-        job.plan.import_set_name, summary.ready_count, total_members, mdraid_note
+        job.plan.import_set_name, summary.ready_count, total_members, derived_note
     );
     tracing::info!(
         import_set_id = %job.plan.import_set_id,
         members = total_members,
         imported = summary.ready_count,
         mdraid_sources = state.mdraid_sources.len(),
+        lvm_sources = state.lvm_sources.len(),
         derived_sources = derived_sources.len(),
         summaries = ?summary.member_messages,
         "Linux evidence-set import is browseable and awaiting derived-task admission"
@@ -112,4 +107,25 @@ pub(super) fn finish_ready_import(
         parent_job_id: job.job_id.clone(),
         completion_detail,
     }))
+}
+
+fn materialization_note(state: &ReadyImportState) -> String {
+    let mut notes = Vec::new();
+    if !state.mdraid_sources.is_empty() {
+        notes.push(format!(
+            "{} nested MD RAID catalog(s)",
+            state.mdraid_sources.len()
+        ));
+    }
+    if !state.lvm_sources.is_empty() {
+        notes.push(format!(
+            "{} LVM logical volume source(s)",
+            state.lvm_sources.len()
+        ));
+    }
+    if notes.is_empty() {
+        String::new()
+    } else {
+        format!("; {} materialized", notes.join(" and "))
+    }
 }

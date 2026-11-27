@@ -189,6 +189,7 @@ fn import_source_mode(kind: &DataSourceKind) -> Option<ImportSourceMode> {
         DataSourceKind::CephRbd
         | DataSourceKind::CephFs
         | DataSourceKind::MdRaid
+        | DataSourceKind::LvmLogicalVolume
         | DataSourceKind::NestedRange => None,
     }
 }

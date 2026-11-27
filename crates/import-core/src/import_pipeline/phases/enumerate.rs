@@ -50,7 +50,8 @@ pub(crate) fn run_enumeration_phase(
         }
         domain::DataSourceKind::CephRbd
         | domain::DataSourceKind::CephFs
-        | domain::DataSourceKind::MdRaid => {
+        | domain::DataSourceKind::MdRaid
+        | domain::DataSourceKind::LvmLogicalVolume => {
             return Err(CommandError::unsupported(
                 "Ceph RBD derived sources do not use the ordinary import pipeline",
             ));

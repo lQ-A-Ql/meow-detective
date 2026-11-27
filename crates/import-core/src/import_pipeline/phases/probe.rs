@@ -136,6 +136,7 @@ fn probe_image(
         domain::DataSourceKind::CephRbd
         | domain::DataSourceKind::CephFs
         | domain::DataSourceKind::MdRaid
+        | domain::DataSourceKind::LvmLogicalVolume
         | domain::DataSourceKind::NestedRange => {
             return Err(CommandError::unsupported(
                 "Ceph RBD derived sources do not use the host image probe pipeline",
@@ -165,12 +166,7 @@ fn shared_member_only(
 ) -> bool {
     probe.candidates.is_empty()
         && probe.unsupported_volumes.is_empty()
-        && ctx
-            .import_config
-            .collection_plan
-            .as_ref()
-            .zip(ctx.import_config.import_set.as_ref())
-            .is_some_and(|(plan, member)| plan.is_shared_member(member.member_index as usize))
+        && ctx.import_config.collection_plan.is_some()
 }
 
 pub(crate) fn is_exclusively_bluestore_probe(

@@ -141,7 +141,7 @@ impl<'a> SourceReadContext<'a> {
         let selected = match partition_candidates.as_slice() {
             [] if matches!(
                 source_kind.as_str(),
-                "logical_directory" | "logical_archive" | "md_raid"
+                "logical_directory" | "logical_archive" | "md_raid" | "lvm_logical_volume"
             ) =>
             {
                 None
@@ -154,9 +154,13 @@ impl<'a> SourceReadContext<'a> {
                 )));
             }
         };
-        let selected_partition_index = selected
-            .map(|candidate| candidate.partition_index)
-            .or_else(|| (source_kind == "md_raid").then_some(partition_index));
+        let selected_partition_index =
+            selected
+                .map(|candidate| candidate.partition_index)
+                .or_else(|| {
+                    matches!(source_kind.as_str(), "md_raid" | "lvm_logical_volume")
+                        .then_some(partition_index)
+                });
         Ok(PreviewDescriptor {
             case_id: self.case_id.0.clone(),
             file_id: hint.file_id.0.clone(),
@@ -203,7 +207,9 @@ impl<'a> SourceReadContext<'a> {
                     Some(partition_index),
                 )?
             }
-            "logical_directory" | "logical_archive" | "md_raid" => Vec::new(),
+            "logical_directory" | "logical_archive" | "md_raid" | "lvm_logical_volume" => {
+                Vec::new()
+            }
             other => {
                 return Err(FileServiceError::other(format!(
                     "Range reading is not yet wired for data source kind '{other}'"

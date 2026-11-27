@@ -3231,33 +3231,28 @@ fn pve_cluster_multi_pv_lvm_expands_across_members() {
     let shared = plan.prepare_shared_sources(&cancel).unwrap();
     let configs = plan.member_import_configs_from_plan(shared).unwrap();
     assert_eq!(configs.len(), plan.members.len());
+    let mut cross_member_logical_volume = false;
     for (member, config) in plan.members.iter().zip(configs) {
-        let probe = config
-            .collection_plan
-            .as_ref()
-            .unwrap()
+        let collection_plan = config.collection_plan.as_ref().unwrap();
+        cross_member_logical_volume |=
+            collection_plan
+                .logical_volume_candidates()
+                .iter()
+                .any(|candidate| {
+                    candidate
+                        .lvm_identity
+                        .as_ref()
+                        .is_some_and(|identity| identity.pv_sources.len() >= 2)
+                });
+        collection_plan
             .member_probe(
                 member.member_index as usize,
                 &member.source_path,
                 &member.source_kind,
             )
             .unwrap();
-        let paired_pv_warning = probe
-            .candidates
-            .iter()
-            .filter_map(|candidate| candidate.lvm_identity.as_ref())
-            .any(|identity| identity.pv_sources.len() >= 2)
-            || config
-                .collection_plan
-                .as_ref()
-                .unwrap()
-                .is_shared_member(member.member_index as usize);
-        assert!(
-            paired_pv_warning,
-            "cross-member LVM should inspect PVs from both E01 members: {:?}",
-            probe.warnings
-        );
     }
+    assert!(cross_member_logical_volume);
 }
 
 #[test]

@@ -117,19 +117,17 @@ fn evidence_set_member_configs_are_linux_scoped_not_cluster_profiled() {
         configs[1].collection_plan.as_ref().unwrap()
     ));
     let shared = configs[0].collection_plan.as_ref().unwrap();
-    assert_eq!(
-        shared
-            .member_probe(0, &configs[0].source_path, &configs[0].kind)
-            .unwrap()
-            .candidates
-            .len(),
-        1
-    );
+    assert!(shared
+        .member_probe(0, &configs[0].source_path, &configs[0].kind)
+        .unwrap()
+        .candidates
+        .is_empty());
     assert!(shared
         .member_probe(1, &configs[1].source_path, &configs[1].kind)
         .unwrap()
         .candidates
         .is_empty());
+    assert_eq!(shared.logical_volume_candidates().len(), 1);
 }
 
 #[test]

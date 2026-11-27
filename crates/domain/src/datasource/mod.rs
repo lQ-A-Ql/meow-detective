@@ -26,6 +26,8 @@ pub enum DataSourceKind {
     CephFs,
     /// A persisted read-only Linux MD array descriptor bound to its member inputs.
     MdRaid,
+    /// A persisted read-only LVM logical volume descriptor bound to its PV inputs.
+    LvmLogicalVolume,
     /// A fixed VHD payload read from a registered parent file.
     NestedRange,
 }
@@ -90,6 +92,7 @@ impl fmt::Display for DataSourceKind {
             Self::CephRbd => write!(f, "ceph_rbd"),
             Self::CephFs => write!(f, "ceph_fs"),
             Self::MdRaid => write!(f, "md_raid"),
+            Self::LvmLogicalVolume => write!(f, "lvm_logical_volume"),
             Self::NestedRange => write!(f, "nested_range"),
         }
     }

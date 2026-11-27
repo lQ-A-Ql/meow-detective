@@ -33,7 +33,7 @@ fn sources(root: &Path) -> Vec<LvmDiscoverySource> {
 }
 
 #[test]
-fn native_cross_pv_view_has_one_stable_owner_and_matches_the_kernel_digest() {
+fn native_cross_pv_view_is_an_independent_logical_source_matching_the_kernel_digest() {
     let _budget = COLLECTION_BUDGET.lock().unwrap();
     let workspace = tempfile::tempdir().unwrap();
     let mut sources = sources(workspace.path());
@@ -45,12 +45,15 @@ fn native_cross_pv_view_has_one_stable_owner_and_matches_the_kernel_digest() {
     let secondary = plan
         .member_probe(1, &sources[1].source_path, &sources[1].source_kind)
         .unwrap();
-    assert_eq!(owner.candidates.len(), 1);
+    assert!(owner.candidates.is_empty());
     assert!(secondary.candidates.is_empty());
-    assert!(plan.is_shared_member(1));
     assert_eq!(secondary.partitions.len(), 1);
     assert_eq!(secondary.partitions[0].status, PartitionStatus::Expanded);
-    let identity = owner.candidates[0].lvm_identity.as_ref().unwrap();
+    assert_eq!(plan.logical_volume_candidates().len(), 1);
+    let identity = plan.logical_volume_candidates()[0]
+        .lvm_identity
+        .as_ref()
+        .unwrap();
     assert_eq!(identity.pv_sources.len(), 2);
     assert_ne!(
         identity.pv_sources[0].source_path,
@@ -103,13 +106,14 @@ fn native_cross_pv_view_has_one_stable_owner_and_matches_the_kernel_digest() {
         .unwrap()
         .candidates
         .is_empty());
+    assert!(reversed
+        .member_probe(1, &sources[1].source_path, &sources[1].source_kind)
+        .unwrap()
+        .candidates
+        .is_empty());
     assert_eq!(
-        reversed
-            .member_probe(1, &sources[1].source_path, &sources[1].source_kind)
-            .unwrap()
-            .candidates[0]
-            .lvm_identity,
-        owner.candidates[0].lvm_identity
+        reversed.logical_volume_candidates()[0].lvm_identity,
+        plan.logical_volume_candidates()[0].lvm_identity
     );
 }
 
@@ -183,10 +187,9 @@ fn collection_content_detects_replacement_with_unchanged_length_and_timestamps()
     let cancel = AtomicBool::new(false);
     let plan = std::sync::Arc::new(ImageCollectionPlan::prepare(&sources, &cancel).unwrap());
     plan.verify_content(&cancel).unwrap();
-    let probe = plan
-        .member_probe(0, &sources[0].source_path, &DataSourceKind::Raw)
+    let factory = plan
+        .logical_volume_factory(&plan.logical_volume_candidates()[0])
         .unwrap();
-    let factory = plan.logical_volume_factory(&probe.candidates[0]).unwrap();
     let modified = sources[1]
         .source_path
         .metadata()
@@ -245,15 +248,23 @@ fn independently_complete_cloned_vgs_keep_separate_content_and_physical_owners()
     use std::io::{Seek, SeekFrom, Write};
     let workspace = tempfile::tempdir().unwrap();
     let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("../../testdata/fixtures/public-small/lvm-native/thin/pv.raw.gz");
-    let first = workspace.path().join("node-a.raw");
-    std::io::copy(
-        &mut flate2::read::GzDecoder::new(File::open(fixture).unwrap()),
-        &mut File::create(&first).unwrap(),
-    )
-    .unwrap();
-    let second = workspace.path().join("node-b.raw");
-    std::fs::copy(&first, &second).unwrap();
+        .join("../../testdata/fixtures/public-small/lvm-native/shared-ext4");
+    let mut members = Vec::new();
+    for acquisition in ["node-a", "node-b"] {
+        for index in 0..2 {
+            let path = workspace.path().join(format!("{acquisition}-{index}.raw"));
+            std::io::copy(
+                &mut flate2::read::GzDecoder::new(
+                    File::open(fixture.join(format!("pv-{index}.raw.gz"))).unwrap(),
+                ),
+                &mut File::create(&path).unwrap(),
+            )
+            .unwrap();
+            members.push(path);
+        }
+    }
+    let first = members[0].clone();
+    let second = members[3].clone();
     let mut changed = File::options()
         .read(true)
         .write(true)
@@ -265,47 +276,91 @@ fn independently_complete_cloned_vgs_keep_separate_content_and_physical_owners()
     changed.seek(SeekFrom::End(-1)).unwrap();
     changed.write_all(&[byte[0] ^ 0x80]).unwrap();
     drop(changed);
-    let sources = [
-        LvmDiscoverySource::new(&first, DataSourceKind::Raw),
-        LvmDiscoverySource::new(&second, DataSourceKind::Raw),
-    ];
-    let plan = ImageCollectionPlan::prepare(&sources, &AtomicBool::new(false)).unwrap();
+    let plan_a = ImageCollectionPlan::prepare(
+        &members[..2]
+            .iter()
+            .map(|path| LvmDiscoverySource::new(path, DataSourceKind::Raw))
+            .collect::<Vec<_>>(),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    let plan_b = ImageCollectionPlan::prepare(
+        &members[2..]
+            .iter()
+            .map(|path| LvmDiscoverySource::new(path, DataSourceKind::Raw))
+            .collect::<Vec<_>>(),
+        &AtomicBool::new(false),
+    )
+    .unwrap();
     assert_ne!(
-        plan.source_content(&first, &DataSourceKind::Raw)
+        plan_a
+            .source_content(&first, &DataSourceKind::Raw)
             .unwrap()
             .logical_sha256,
-        plan.source_content(&second, &DataSourceKind::Raw)
+        plan_b
+            .source_content(&second, &DataSourceKind::Raw)
             .unwrap()
             .logical_sha256
     );
-    for (index, source) in sources.iter().enumerate() {
-        let facts = plan
-            .native_observations(&source.source_path, &source.source_kind)
-            .unwrap();
-        assert!(facts
-            .iter()
-            .any(|fact| matches!(fact.version, domain::structure::NativeVersion::LvmLabel)));
-        let probe = plan
-            .member_probe(index, &source.source_path, &source.source_kind)
-            .unwrap();
-        assert!(!plan.is_shared_member(index));
-        assert!(probe
-            .partitions
-            .iter()
-            .any(|partition| partition.status == PartitionStatus::Expanded));
-        for partition in probe
-            .partitions
-            .iter()
-            .filter(|partition| partition.lvm_identity.is_some())
-        {
-            let identity = partition.lvm_identity.as_ref().unwrap();
-            assert_eq!(identity.pv_sources.len(), 1);
-            assert_eq!(
-                Path::new(&identity.pv_sources[0].source_path),
-                source.source_path.canonicalize().unwrap()
-            );
+    for (plan, acquisition, slice) in [
+        (&plan_a, "node-a", &members[..2]),
+        (&plan_b, "node-b", &members[2..]),
+    ] {
+        for (index, path) in slice.iter().enumerate() {
+            let source = LvmDiscoverySource::new(path, DataSourceKind::Raw);
+            let facts = plan
+                .native_observations(&source.source_path, &source.source_kind)
+                .unwrap();
+            assert!(facts
+                .iter()
+                .any(|fact| matches!(fact.version, domain::structure::NativeVersion::LvmLabel)));
+            let probe = plan
+                .member_probe(index, &source.source_path, &source.source_kind)
+                .unwrap();
+            assert!(probe
+                .partitions
+                .iter()
+                .any(|partition| partition.status == PartitionStatus::Expanded));
+            assert!(probe
+                .partitions
+                .iter()
+                .all(|partition| partition.lvm_identity.is_none()));
         }
+        let logical = plan.logical_volume_candidates();
+        assert_eq!(logical.len(), 1);
+        let identity = logical[0].lvm_identity.as_ref().unwrap();
+        assert_eq!(identity.pv_sources.len(), 2);
+        assert!(identity.pv_sources.iter().all(|source| {
+            Path::new(&source.source_path)
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(acquisition))
+        }));
     }
+    let identity_a = plan_a.logical_volume_candidates()[0]
+        .lvm_identity
+        .as_ref()
+        .unwrap();
+    let identity_b = plan_b.logical_volume_candidates()[0]
+        .lvm_identity
+        .as_ref()
+        .unwrap();
+    assert_eq!(identity_a.vg_uuid, identity_b.vg_uuid);
+    assert_eq!(identity_a.lv_uuid, identity_b.lv_uuid);
+    assert_ne!(
+        plan_a.logical_volume_candidates()[0]
+            .lvm_identity
+            .as_ref()
+            .unwrap()
+            .pv_sources[0]
+            .source_path,
+        plan_b.logical_volume_candidates()[0]
+            .lvm_identity
+            .as_ref()
+            .unwrap()
+            .pv_sources[0]
+            .source_path
+    );
     let modified = second.metadata().unwrap().modified().unwrap();
     let mut changed = File::options()
         .read(true)
@@ -321,11 +376,34 @@ fn independently_complete_cloned_vgs_keep_separate_content_and_physical_owners()
         .set_times(std::fs::FileTimes::new().set_modified(modified))
         .unwrap();
     drop(changed);
-    plan.validate_snapshot().unwrap();
-    plan.validate_member_inputs(0, &first, &DataSourceKind::Raw, &AtomicBool::new(false))
+    plan_b.validate_snapshot().unwrap();
+    plan_a
+        .validate_member_inputs(
+            0,
+            &members[0],
+            &DataSourceKind::Raw,
+            &AtomicBool::new(false),
+        )
         .unwrap();
-    assert!(plan
+    plan_a
+        .validate_member_inputs(
+            1,
+            &members[1],
+            &DataSourceKind::Raw,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    plan_b
+        .validate_member_inputs(
+            0,
+            &members[2],
+            &DataSourceKind::Raw,
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+    assert!(plan_b
         .validate_member_inputs(1, &second, &DataSourceKind::Raw, &AtomicBool::new(false))
         .is_ok());
-    assert!(plan.verify_content(&AtomicBool::new(false)).is_err());
+    assert!(plan_b.verify_content(&AtomicBool::new(false)).is_err());
+    plan_a.verify_content(&AtomicBool::new(false)).unwrap();
 }

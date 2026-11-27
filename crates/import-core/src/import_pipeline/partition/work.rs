@@ -213,6 +213,7 @@ pub fn open_candidate_reader(
         domain::DataSourceKind::CephRbd
         | domain::DataSourceKind::CephFs
         | domain::DataSourceKind::MdRaid
+        | domain::DataSourceKind::LvmLogicalVolume
         | domain::DataSourceKind::NestedRange => {
             return Err(
                 "Ceph RBD derived sources do not use the host image import pipeline".to_string(),
@@ -302,6 +303,7 @@ fn open_lvm_physical_volume_reader(
         domain::DataSourceKind::CephRbd
         | domain::DataSourceKind::CephFs
         | domain::DataSourceKind::MdRaid
+        | domain::DataSourceKind::LvmLogicalVolume
         | domain::DataSourceKind::NestedRange => return None,
     };
     if let Some(expected) = source {

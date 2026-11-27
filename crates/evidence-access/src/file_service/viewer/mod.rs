@@ -54,7 +54,8 @@ pub(crate) use handle::{detect_preview_for_file, DetectedPreview};
 pub use image_open::{open_candidate_block_reader_with_lvm_cache, LvmPoolRequestCache};
 pub(crate) use image_open::{
     open_descriptor_image_file, open_descriptor_image_file_with_context, open_e01_file,
-    open_mdraid_file, open_mdraid_file_seekable, open_ntfs_descriptor_stream,
+    open_lvm_volume_file, open_lvm_volume_file_seekable, open_mdraid_file,
+    open_mdraid_file_seekable, open_ntfs_descriptor_stream,
 };
 pub(crate) use io::{
     open_first_image_path, open_first_image_path_seekable, read_bounded, read_seekable_range,

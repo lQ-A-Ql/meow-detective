@@ -161,6 +161,15 @@ fn append_source_graph(
                 revision.logical_size,
             )?;
         }
+        if version.adapter_version.starts_with("fs-lvm/lv-") {
+            add_lvm_relations(
+                graph,
+                source_by_id,
+                &version_node,
+                version,
+                &source.source_path,
+            )?;
+        }
     }
     for partition in &source_partitions {
         add_partition_nodes(graph, nodes, source, &source_node, partition);
@@ -375,6 +384,57 @@ fn add_mdraid_relations(
                 verification: version.mapping_sha256.clone(),
             });
         }
+    }
+    Ok(())
+}
+
+fn add_lvm_relations(
+    graph: &mut StructureGraph,
+    sources: &BTreeMap<&str, &DataSource>,
+    version_node: &StructureNodeId,
+    version: &StorageObjectVersion,
+    descriptor_path: &std::path::Path,
+) -> Result<(), StructureAnalysisError> {
+    let plan = evidence_access::lvm::read_lvm_descriptor(descriptor_path)?;
+    let fingerprint = evidence_access::lvm::lvm_volume_fingerprint(&plan)?;
+    if fingerprint != version.mapping_sha256 {
+        return Err(StructureAnalysisError::Graph(
+            "LVM descriptor does not match the published version".into(),
+        ));
+    }
+    let parent_by_path = version
+        .parent_source_revisions
+        .iter()
+        .filter_map(|parent| {
+            sources
+                .get(parent.source_id.as_str())
+                .map(|source| (source, parent))
+        })
+        .map(|(source, parent)| {
+            std::fs::canonicalize(&source.source_path)
+                .map(|path| (path.to_string_lossy().into_owned(), parent))
+                .map_err(StructureAnalysisError::Io)
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+    for (index, source) in plan.sources.iter().enumerate() {
+        let source_path = std::fs::canonicalize(&source.source_path)?;
+        let parent = parent_by_path
+            .get(&source_path.to_string_lossy().into_owned())
+            .ok_or_else(|| {
+                StructureAnalysisError::Graph("LVM physical volume has no registered parent".into())
+            })?;
+        graph.mappings.push(AddressMapping {
+            id: mapping_id(&version.id.0, index),
+            source_node: source_node_id(&parent.source_id, parent.revision),
+            target_node: version_node.clone(),
+            input_space: AddressSpace::PhysicalByte,
+            output_space: AddressSpace::LogicalBlock,
+            unit: "byte".into(),
+            input_range: None,
+            output_range: None,
+            mapping_sha256: version.mapping_sha256.clone(),
+            adapter_version: version.adapter_version.clone(),
+        });
     }
     Ok(())
 }

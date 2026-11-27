@@ -269,6 +269,15 @@ pub fn open_host_evidence_reader(
             .map_err(|error| {
                 crate::file_service::FileServiceError::Io(std::io::Error::other(error))
             }),
+        "lvm_logical_volume" => {
+            let plan = crate::lvm::read_lvm_descriptor(source_path).map_err(|error| {
+                crate::file_service::FileServiceError::Io(std::io::Error::other(error))
+            })?;
+            crate::lvm::open_lvm_volume_reader(&plan, &std::sync::atomic::AtomicBool::new(false))
+                .map_err(|error| {
+                    crate::file_service::FileServiceError::Io(std::io::Error::other(error))
+                })
+        }
         other => Err(crate::file_service::FileServiceError::Unsupported(format!(
             "Evidence reader is not available for source kind '{other}'",
         ))),

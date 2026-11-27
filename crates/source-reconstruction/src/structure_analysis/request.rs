@@ -51,6 +51,8 @@ pub enum StructureAnalysisError {
     #[error(transparent)]
     MdRaid(#[from] evidence_access::mdraid::MdRaidPlanError),
     #[error(transparent)]
+    Lvm(#[from] evidence_access::lvm::LvmPlanError),
+    #[error(transparent)]
     Access(#[from] evidence_access::structure_access::TargetAccessError),
     #[error(transparent)]
     Observation(#[from] evidence_access::structure_observation::StructureObservationError),

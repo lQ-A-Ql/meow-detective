@@ -383,6 +383,7 @@ fn kind_to_str(kind: &DataSourceKind) -> &'static str {
         DataSourceKind::CephRbd => "ceph_rbd",
         DataSourceKind::CephFs => "ceph_fs",
         DataSourceKind::MdRaid => "md_raid",
+        DataSourceKind::LvmLogicalVolume => "lvm_logical_volume",
         DataSourceKind::NestedRange => "nested_range",
     }
 }
@@ -397,6 +398,7 @@ fn str_to_kind(s: &str) -> DataSourceKind {
         "ceph_rbd" => DataSourceKind::CephRbd,
         "ceph_fs" => DataSourceKind::CephFs,
         "md_raid" => DataSourceKind::MdRaid,
+        "lvm_logical_volume" => DataSourceKind::LvmLogicalVolume,
         "nested_range" => DataSourceKind::NestedRange,
         _ => DataSourceKind::Raw,
     }

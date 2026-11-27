@@ -23,6 +23,7 @@ pub mod digest_service;
 pub mod file_service;
 pub mod hash_service;
 pub mod linux_identity_service;
+pub mod lvm;
 pub mod mdraid;
 pub mod partition_capabilities;
 pub mod partition_query_service;

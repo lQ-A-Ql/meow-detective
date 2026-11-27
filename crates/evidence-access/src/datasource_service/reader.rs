@@ -18,6 +18,12 @@ pub fn open_evidence_reader(
         DataSourceKind::MdRaid => crate::mdraid::open_persisted_mdraid_reader(source_path)
             .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             .map_err(std::io::Error::other),
+        DataSourceKind::LvmLogicalVolume => {
+            let plan =
+                crate::lvm::read_lvm_descriptor(source_path).map_err(std::io::Error::other)?;
+            crate::lvm::open_lvm_volume_reader(&plan, &std::sync::atomic::AtomicBool::new(false))
+                .map_err(std::io::Error::other)
+        }
         DataSourceKind::LogicalDirectory
         | DataSourceKind::LogicalArchive
         | DataSourceKind::CephRbd

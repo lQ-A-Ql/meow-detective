@@ -6,7 +6,9 @@ use std::{
 
 use super::{discovery, expansion, model::LvmExpansionState, source_identity};
 use crate::{
-    datasource_service::{self, ImageFilesystemProbe, LvmDiscoverySource},
+    datasource_service::{
+        self, ImageFilesystemCandidate, ImageFilesystemProbe, LvmDiscoverySource,
+    },
     source_runtime::snapshot::SourceSnapshot,
 };
 
@@ -67,12 +69,12 @@ impl transport::ServiceErrorCategory for CollectionPlanError {
 pub struct ImageCollectionPlan {
     sources: Vec<LvmDiscoverySource>,
     probes: Vec<ImageFilesystemProbe>,
-    shared_members: Vec<bool>,
     snapshot: SourceSnapshot,
     source_snapshots: Vec<SourceSnapshot>,
     content: super::collection_content::CollectionContent,
     md_members: Vec<crate::mdraid::MdRaidMemberPlan>,
     observations: Vec<Vec<domain::structure::NativeObservation>>,
+    logical_volumes: Vec<ImageFilesystemCandidate>,
     _memory: std::sync::Arc<super::collection_memory::PlanMemory>,
 }
 
@@ -111,22 +113,16 @@ impl ImageCollectionPlan {
         let (mut probes, pv_infos, mut md_members) = inspect_sources(&canonical, &content, cancel)?;
         let mut warnings = Vec::new();
         let complete = super::collection_groups::complete_groups(&pv_infos, &mut warnings)?;
-        let mut shared_members = vec![false; canonical.len()];
         for group in complete {
             check_cancel(cancel)?;
-            md_members.extend(expand_group(
-                &canonical,
-                &mut probes,
-                &mut shared_members,
-                group,
-                &content,
-            )?);
+            md_members.extend(expand_group(&canonical, &mut probes, group, &content)?);
         }
         for probe in &mut probes {
             probe.warnings.extend(warnings.iter().cloned());
         }
         let observations =
             super::collection_observations::collect(&canonical, &pv_infos, &md_members)?;
+        let logical_volumes = take_logical_volumes(&mut probes);
         snapshot.validate()?;
         let memory = super::collection_memory::retain(
             preparation,
@@ -135,16 +131,17 @@ impl ImageCollectionPlan {
             &snapshot,
             &md_members,
             &observations,
+            &logical_volumes,
         )?;
         Ok(Self {
             sources: canonical,
             probes,
-            shared_members,
             snapshot,
             source_snapshots,
             content,
             md_members,
             observations,
+            logical_volumes,
             _memory: memory,
         })
     }
@@ -235,6 +232,7 @@ impl ImageCollectionPlan {
         self.probes
             .iter()
             .any(|probe| probe.candidates.contains(candidate))
+            || self.logical_volumes.contains(candidate)
     }
 
     pub(super) fn contains_lvm_identity(
@@ -259,7 +257,10 @@ impl ImageCollectionPlan {
                         .filter_map(|item| item.lvm_identity.as_ref()),
                 )
                 .any(|known| known == identity)
-        })
+        }) || self
+            .logical_volumes
+            .iter()
+            .any(|candidate| candidate.lvm_identity.as_ref() == Some(identity))
     }
 
     pub fn validate_snapshot(&self) -> Result<(), CollectionPlanError> {
@@ -285,8 +286,8 @@ impl ImageCollectionPlan {
         Ok(self.probes[index].clone())
     }
 
-    pub fn is_shared_member(&self, index: usize) -> bool {
-        self.shared_members.get(index).copied().unwrap_or(false)
+    pub fn logical_volume_candidates(&self) -> &[ImageFilesystemCandidate] {
+        &self.logical_volumes
     }
 }
 
@@ -337,7 +338,6 @@ fn inspect_sources(
 fn expand_group(
     sources: &[LvmDiscoverySource],
     probes: &mut [ImageFilesystemProbe],
-    shared: &mut [bool],
     group: Vec<datasource_service::LvmPhysicalVolumeSource>,
     content: &super::collection_content::CollectionContent,
 ) -> Result<Vec<crate::mdraid::MdRaidMemberPlan>, CollectionPlanError> {
@@ -391,9 +391,24 @@ fn expand_group(
             candidate.kind != datasource_service::ImageFilesystemKind::LvmPool
                 || !offsets.contains(&candidate.offset)
         });
-        shared[member] = true;
     }
     Ok(md_members)
+}
+
+fn take_logical_volumes(probes: &mut [ImageFilesystemProbe]) -> Vec<ImageFilesystemCandidate> {
+    let mut logical_volumes = Vec::new();
+    for probe in probes {
+        let (lvm_candidates, remaining): (Vec<_>, Vec<_>) =
+            probe.candidates.drain(..).partition(|candidate| {
+                candidate.source == datasource_service::ImageFilesystemSource::LvmLogicalVolume
+            });
+        probe.candidates = remaining;
+        probe
+            .partitions
+            .retain(|partition| partition.lvm_identity.is_none());
+        logical_volumes.extend(lvm_candidates);
+    }
+    logical_volumes
 }
 
 pub(super) fn check_cancel(cancel: &AtomicBool) -> Result<(), CollectionPlanError> {

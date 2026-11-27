@@ -9,8 +9,9 @@ use crate::file_service::{
     viewer::{
         exact_partition_candidate, open_descriptor_image_file,
         open_descriptor_image_file_with_context, open_e01_file, open_e01_reader_cached,
-        open_mdraid_file, open_mdraid_file_seekable, resolve_partition_index_for_entry,
-        validate_readable_file_entry, PreviewDescriptor, PreviewReadContext, RangeContentReader,
+        open_lvm_volume_file, open_lvm_volume_file_seekable, open_mdraid_file,
+        open_mdraid_file_seekable, resolve_partition_index_for_entry, validate_readable_file_entry,
+        PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -24,6 +25,7 @@ pub(crate) fn open_file_content_for_descriptor(
         "e01" => open_e01_descriptor_file(descriptor),
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
         "md_raid" => open_mdraid_descriptor_file(descriptor),
+        "lvm_logical_volume" => open_lvm_volume_descriptor_file(descriptor),
         other => unsupported_source(other),
     }?;
     Ok(match reader {
@@ -83,6 +85,7 @@ pub(crate) fn open_range_content_for_descriptor(
         "e01" => open_e01_descriptor_file(descriptor),
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
         "md_raid" => open_mdraid_descriptor_file(descriptor),
+        "lvm_logical_volume" => open_lvm_volume_descriptor_file(descriptor),
         other => unsupported_source(other),
     }
 }
@@ -166,6 +169,12 @@ pub(crate) fn open_file_content_for_entry(
             entry,
             resolve_partition_index_for_entry(repo, entry)?,
         ),
+        "lvm_logical_volume" => open_lvm_volume_file(
+            &entry.data_source_id.0,
+            &source_path,
+            entry,
+            resolve_partition_index_for_entry(repo, entry)?,
+        ),
         other => unsupported_source(other),
     }
 }
@@ -201,6 +210,13 @@ pub(crate) fn open_range_content_for_entry(
             resolve_partition_index_for_entry(repo, entry)?,
         )
         .map(RangeContentReader::Seekable),
+        "lvm_logical_volume" => open_lvm_volume_file_seekable(
+            &entry.data_source_id.0,
+            &source_path,
+            entry,
+            resolve_partition_index_for_entry(repo, entry)?,
+        )
+        .map(RangeContentReader::Seekable),
         other => unsupported_source(other),
     }
 }
@@ -224,6 +240,19 @@ fn open_mdraid_descriptor_file(
 ) -> Result<RangeContentReader, FileServiceError> {
     let entry = crate::file_service::viewer::descriptor_file_entry(descriptor);
     open_mdraid_file_seekable(
+        &descriptor.data_source_id,
+        &descriptor.source_path,
+        &entry,
+        descriptor.partition_index,
+    )
+    .map(RangeContentReader::Seekable)
+}
+
+fn open_lvm_volume_descriptor_file(
+    descriptor: &PreviewDescriptor,
+) -> Result<RangeContentReader, FileServiceError> {
+    let entry = crate::file_service::viewer::descriptor_file_entry(descriptor);
+    open_lvm_volume_file_seekable(
         &descriptor.data_source_id,
         &descriptor.source_path,
         &entry,

@@ -17,11 +17,13 @@ mod kubernetes_inventory;
 mod kubernetes_parser_error;
 mod kubernetes_yaml;
 mod linux_import;
+mod lvm_materialization;
 mod manifest_parser;
 mod mdraid_materialization;
 mod member_binding;
 mod network_parser;
 mod phase_ledger;
+mod structure_publication;
 mod summary;
 mod topology_projection;
 
@@ -50,6 +52,7 @@ pub use capability::{require_ceph_scope, require_kubernetes_scope, require_os_sc
 pub use etcd_bolt::{parse_etcd_bolt_metadata, EtcdBoltEntry, EtcdBoltSummary};
 pub use etcd_wal::{parse_etcd_wal, EtcdWalRecord, EtcdWalSummary};
 pub use events::get_linux_evidence_events;
+pub use evidence_access::lvm::LvmPlanError;
 pub use kubeconfig_parser::{
     parse_kubeconfig, KubeconfigCluster, KubeconfigContext, KubeconfigSummary, KubeconfigUser,
 };
@@ -71,6 +74,11 @@ pub use linux_import::{
     update_linux_evidence_set_import_state, update_linux_evidence_set_manifest_hash,
     validate_linux_evidence_set_manifest, write_linux_evidence_set_manifest,
     LinuxEvidenceSetImportPlan, LinuxEvidenceSetMemberPlan, LinuxEvidenceSetSkippedEntry,
+};
+pub use lvm_materialization::{
+    materialize_linux_evidence_set_lvm, materialize_linux_evidence_set_lvm_with_cancel,
+    materialize_lvm_source_catalog, materialize_lvm_source_catalog_with_cancel,
+    materialize_lvm_volume, materialize_lvm_volume_with_cancel,
 };
 pub use manifest_parser::{
     parse_static_pod_manifests, ManifestContainer, StaticPodManifestSummary,

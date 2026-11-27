@@ -84,6 +84,7 @@ pub fn open_factory_with_cancel(
         DataSourceKind::Raw => raw_factory(path, cancel),
         DataSourceKind::LocalDisk => device_factory(path, cancel),
         DataSourceKind::MdRaid => mdraid_factory(path),
+        DataSourceKind::LvmLogicalVolume => lvm_factory(path),
         _ => Err(io::Error::new(
             io::ErrorKind::Unsupported,
             "source kind has no image reader factory",
@@ -106,6 +107,43 @@ fn mdraid_factory(path: &Path) -> io::Result<SharedReaderFactory> {
     let validation_plan = plan.clone();
     Ok(Arc::new(OpenFactory {
         opener: move || crate::mdraid::open_mdraid_reader(&plan).map_err(io::Error::other),
+        validator: Box::new(move || {
+            descriptor_snapshot.validate()?;
+            validation_plan.source_snapshot.validate()
+        }),
+        metadata_identity: Some(metadata_identity),
+        size,
+        granularity: 512,
+        capabilities: ReaderCapabilities {
+            independent_cursor: true,
+            max_concurrent_readers: 2,
+            stable_snapshot: true,
+        },
+        route,
+        reader_bytes: reader_bytes.saturating_add(1024 * 1024),
+        resources: None,
+    }))
+}
+
+fn lvm_factory(path: &Path) -> io::Result<SharedReaderFactory> {
+    let path = path.to_path_buf();
+    let descriptor_snapshot =
+        super::snapshot::SourceSnapshot::capture(std::slice::from_ref(&path))?;
+    let plan = crate::lvm::read_lvm_descriptor(&path).map_err(io::Error::other)?;
+    let template =
+        crate::lvm::open_lvm_volume_reader(&plan, &std::sync::atomic::AtomicBool::new(false))
+            .map_err(io::Error::other)?;
+    let size = template.info().size;
+    let metadata_identity = crate::lvm::lvm_volume_fingerprint(&plan).map_err(io::Error::other)?;
+    let reader_bytes = crate::lvm::lvm_reader_content_bytes(&plan);
+    let route = super::resources::ResourceRoute::default();
+    let plan = Arc::new(plan);
+    let validation_plan = plan.clone();
+    Ok(Arc::new(OpenFactory {
+        opener: move || {
+            crate::lvm::open_lvm_reader(&plan, &std::sync::atomic::AtomicBool::new(false))
+                .map_err(io::Error::other)
+        },
         validator: Box::new(move || {
             descriptor_snapshot.validate()?;
             validation_plan.source_snapshot.validate()
