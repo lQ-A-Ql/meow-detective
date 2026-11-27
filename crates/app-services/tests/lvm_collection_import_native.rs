@@ -34,12 +34,14 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
         cluster_service::plan_linux_evidence_set_import(&input, Some("native-shared".into()))
             .unwrap();
     let cancel = Arc::new(AtomicBool::new(false));
-    let configs = plan.member_import_configs(&cancel).unwrap();
+    let shared = plan.prepare_shared_sources(&cancel).unwrap();
+    let configs = plan
+        .member_import_configs_from_plan(shared.clone())
+        .unwrap();
     assert!(Arc::ptr_eq(
         configs[0].collection_plan.as_ref().unwrap(),
         configs[1].collection_plan.as_ref().unwrap()
     ));
-    let shared = configs[0].collection_plan.as_ref().unwrap().clone();
     let case = case_service::create_case(workspace.path(), "Shared native LVM", None).unwrap();
     let connection = case.connection().unwrap();
     cluster_service::register_linux_evidence_set_import(&connection, &case.meta.id, &plan).unwrap();

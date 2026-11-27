@@ -3227,9 +3227,9 @@ fn pve_cluster_multi_pv_lvm_expands_across_members() {
         .expect("multi-PV evidence set should be planned");
     assert!(plan.members.len() >= 2);
 
-    let configs = plan
-        .member_import_configs(&std::sync::atomic::AtomicBool::new(false))
-        .unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let shared = plan.prepare_shared_sources(&cancel).unwrap();
+    let configs = plan.member_import_configs_from_plan(shared).unwrap();
     assert_eq!(configs.len(), plan.members.len());
     for (member, config) in plan.members.iter().zip(configs) {
         let probe = config
@@ -3266,11 +3266,11 @@ fn pve_cluster_nested_mdraid_members_are_reported() {
     let root = pve_cluster_root();
     let plan = plan_linux_evidence_set_import(&root, Some("mdraid".to_string()))
         .expect("MD RAID evidence set should be planned");
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let shared = plan.prepare_shared_sources(&cancel).unwrap();
+    let configs = plan.member_import_configs_from_plan(shared).unwrap();
     let mut diagnostics = Vec::new();
-    for (member, config) in plan.members.iter().zip(
-        plan.member_import_configs(&std::sync::atomic::AtomicBool::new(false))
-            .unwrap(),
-    ) {
+    for (member, config) in plan.members.iter().zip(configs) {
         let probe = config
             .collection_plan
             .as_ref()

@@ -53,9 +53,12 @@ fn real_kubernetes_e01_import_matches_external_identity_and_auto_analysis() {
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(usize::MAX);
+    let shared = plan
+        .prepare_shared_sources(&AtomicBool::new(false))
+        .expect("prepare shared storage plan");
     for config in plan
-        .member_import_configs(&AtomicBool::new(false))
-        .expect("prepare shared storage plan")
+        .member_import_configs_from_plan(shared)
+        .unwrap()
         .into_iter()
         .take(member_limit)
     {

@@ -93,7 +93,12 @@ fn collection_publication_rejects_unpublished_members_and_cancellation() {
             std::fs::write(input.join(format!("source-{index}.raw")), &content).unwrap();
         }
         let plan = cluster_service::plan_linux_evidence_set_import(&input, None).unwrap();
-        let configs = plan.member_import_configs(&AtomicBool::new(false)).unwrap();
+        let collection_plan = plan
+            .prepare_shared_sources(&AtomicBool::new(false))
+            .unwrap();
+        let configs = plan
+            .member_import_configs_from_plan(collection_plan)
+            .unwrap();
         let shared = configs[0].collection_plan.as_ref().unwrap().clone();
         let case = case_service::create_case(root.path(), "Collection verification", None).unwrap();
         let connection = case.connection().unwrap();

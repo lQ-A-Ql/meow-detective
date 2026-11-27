@@ -98,9 +98,9 @@ fn evidence_set_member_configs_are_linux_scoped_not_cluster_profiled() {
         .unwrap();
     }
     let plan = plan_linux_evidence_set_import(tmp.path(), None).unwrap();
-    let configs = plan
-        .member_import_configs(&std::sync::atomic::AtomicBool::new(false))
-        .unwrap();
+    let cancel = std::sync::atomic::AtomicBool::new(false);
+    let shared = plan.prepare_shared_sources(&cancel).unwrap();
+    let configs = plan.member_import_configs_from_plan(shared).unwrap();
 
     assert_eq!(configs.len(), 2);
     assert_eq!(configs[0].platform, DataSourcePlatform::Linux);

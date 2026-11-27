@@ -152,14 +152,6 @@ impl LinuxEvidenceSetImportPlan {
             })
             .collect()
     }
-
-    pub fn member_import_configs(
-        &self,
-        cancel: &std::sync::atomic::AtomicBool,
-    ) -> Result<Vec<ImportSourceConfig>> {
-        let collection_plan = self.prepare_shared_sources(cancel)?;
-        self.member_import_configs_from_plan(collection_plan)
-    }
 }
 
 pub fn plan_linux_evidence_set_import(
