@@ -1,9 +1,7 @@
 //! Shared admission and worker policy for evidence imports.
 //!
-//! The scheduler deliberately owns resource policy only.  Import phases keep
-//! ownership of evidence reads, staging, and persistence; this module prevents
-//! those phases from multiplying workers across ordinary sources and cluster
-//! members.
+//! CPU admission and bounded worker topology. Resident allocations and reader
+//! resources are admitted by source-kernel's process resource pool.
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, OnceLock};
@@ -13,13 +11,8 @@ pub use crate::import_group_gate::{
     global_import_group_gate, ImportGroupGateError, ImportGroupLease,
 };
 
-// E01 members are independent disk-backed sources. Allow two members in
-// flight by default; each member still has a bounded worker budget and the
-// weighted admission controller prevents CPU/memory overcommit.
 const CLUSTER_MEMBER_CAP: usize = 2;
 const CLUSTER_MEMBER_WORKER_CAP: usize = 2;
-const MEMORY_CAPACITY_MB: u64 = 1536;
-const SINGLE_SOURCE_MEMORY_RESERVATION_MB: u64 = 1536;
 const ADMISSION_WAIT: Duration = Duration::from_millis(100);
 const ADMISSION_WAIT_TIMEOUT: Duration = Duration::from_secs(300);
 
@@ -55,7 +48,8 @@ impl ImportSchedulingPolicy {
                 import_workers: requested_import,
                 analysis_workers: requested_analysis,
                 source_concurrency: 1,
-                memory_reservation_mb: SINGLE_SOURCE_MEMORY_RESERVATION_MB,
+                memory_reservation_mb: source_kernel::resource_budget::WORKSPACE_BYTES
+                    / source_kernel::resource_budget::MIB,
             },
             ImportWorkload::LinuxEvidenceSet { member_count } => Self::for_linux_evidence_set(
                 cpu_budget,
@@ -73,9 +67,6 @@ impl ImportSchedulingPolicy {
         member_count: usize,
     ) -> Self {
         let cpu_budget = cpu_budget.max(1);
-        // A cluster member is an independent evidence reader.  Cap its local
-        // worker budget at two so two members can make progress without
-        // multiplying the ordinary six-worker source budget.
         let member_worker_cap = cpu_budget.clamp(1, CLUSTER_MEMBER_WORKER_CAP);
         let test_member_worker_cap = test_override("FORENSICS_TEST_MEMBER_WORKER_CAP")
             .unwrap_or(member_worker_cap)
@@ -86,8 +77,14 @@ impl ImportSchedulingPolicy {
         let source_concurrency = member_count
             .min(test_cluster_member_cap())
             .min((cpu_budget / per_member_cpu).max(1))
+            .min(
+                (source_kernel::resource_budget::global_pool().limits().bytes
+                    / source_kernel::resource_budget::WORKSPACE_BYTES)
+                    .max(1) as usize,
+            )
             .max(1);
-        let memory_reservation_mb = (memory_capacity_mb() / source_concurrency as u64).max(1024);
+        let memory_reservation_mb =
+            source_kernel::resource_budget::WORKSPACE_BYTES / source_kernel::resource_budget::MIB;
         Self {
             cpu_budget,
             import_workers,
@@ -100,7 +97,6 @@ impl ImportSchedulingPolicy {
     pub fn admission_request(self) -> ImportAdmissionRequest {
         ImportAdmissionRequest {
             cpu_weight: self.import_workers.max(self.analysis_workers),
-            memory_mb: self.memory_reservation_mb,
         }
     }
 
@@ -117,7 +113,6 @@ impl ImportSchedulingPolicy {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ImportAdmissionRequest {
     pub cpu_weight: usize,
-    pub memory_mb: u64,
 }
 
 /// Snapshot useful for progress reporting and deterministic tests.
@@ -125,12 +120,9 @@ pub struct ImportAdmissionRequest {
 pub struct ImportAdmissionSnapshot {
     pub cpu_capacity: usize,
     pub cpu_in_use: usize,
-    pub memory_capacity_mb: u64,
-    pub memory_in_use_mb: u64,
     pub active_sources: usize,
     pub peak_active_sources: usize,
     pub peak_cpu_in_use: usize,
-    pub peak_memory_in_use_mb: u64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -154,18 +146,15 @@ impl std::error::Error for ImportAdmissionError {}
 
 struct AdmissionState {
     cpu_in_use: usize,
-    memory_in_use_mb: u64,
     active_sources: usize,
     peak_active_sources: usize,
     peak_cpu_in_use: usize,
-    peak_memory_in_use_mb: u64,
 }
 
 struct AdmissionInner {
     state: Mutex<AdmissionState>,
     changed: Condvar,
     cpu_capacity: usize,
-    memory_capacity_mb: u64,
     /// Lock-free live permit count for external observers. Incremented on
     /// successful admission and decremented on [`ImportPermit`] Drop. It sits
     /// outside the `state` mutex on purpose: the post-import scheduler probes
@@ -181,20 +170,17 @@ pub struct ImportAdmission {
 }
 
 impl ImportAdmission {
-    pub fn new(cpu_capacity: usize, memory_capacity_mb: u64) -> Self {
+    pub fn new(cpu_capacity: usize) -> Self {
         Self {
             inner: Arc::new(AdmissionInner {
                 state: Mutex::new(AdmissionState {
                     cpu_in_use: 0,
-                    memory_in_use_mb: 0,
                     active_sources: 0,
                     peak_active_sources: 0,
                     peak_cpu_in_use: 0,
-                    peak_memory_in_use_mb: 0,
                 }),
                 changed: Condvar::new(),
                 cpu_capacity: cpu_capacity.max(1),
-                memory_capacity_mb: memory_capacity_mb.max(1),
                 active_permits: AtomicU64::new(0),
             }),
         }
@@ -227,12 +213,9 @@ impl ImportAdmission {
             }
             if self.can_admit(&state, request) {
                 state.cpu_in_use += request.cpu_weight;
-                state.memory_in_use_mb += request.memory_mb;
                 state.active_sources += 1;
                 state.peak_active_sources = state.peak_active_sources.max(state.active_sources);
                 state.peak_cpu_in_use = state.peak_cpu_in_use.max(state.cpu_in_use);
-                state.peak_memory_in_use_mb =
-                    state.peak_memory_in_use_mb.max(state.memory_in_use_mb);
                 self.inner.active_permits.fetch_add(1, Ordering::AcqRel);
                 return Ok(ImportPermit {
                     inner: Arc::clone(&self.inner),
@@ -269,35 +252,20 @@ impl ImportAdmission {
         ImportAdmissionSnapshot {
             cpu_capacity: self.inner.cpu_capacity,
             cpu_in_use: state.cpu_in_use,
-            memory_capacity_mb: self.inner.memory_capacity_mb,
-            memory_in_use_mb: state.memory_in_use_mb,
             active_sources: state.active_sources,
             peak_active_sources: state.peak_active_sources,
             peak_cpu_in_use: state.peak_cpu_in_use,
-            peak_memory_in_use_mb: state.peak_memory_in_use_mb,
         }
     }
 
     fn normalize_request(&self, request: ImportAdmissionRequest) -> ImportAdmissionRequest {
         ImportAdmissionRequest {
             cpu_weight: request.cpu_weight.max(1).min(self.inner.cpu_capacity),
-            memory_mb: request.memory_mb.max(1).min(self.inner.memory_capacity_mb),
         }
     }
 
     fn can_admit(&self, state: &AdmissionState, request: ImportAdmissionRequest) -> bool {
-        let cpu_available = state.cpu_in_use + request.cpu_weight <= self.inner.cpu_capacity;
-        let memory_available =
-            state.memory_in_use_mb + request.memory_mb <= self.inner.memory_capacity_mb;
-        if !cpu_available || !memory_available {
-            return false;
-        }
-        // RSS is a safety signal, not the source of truth for reservations. If
-        // one source is already active, wait for it to drain below the soft
-        // capacity before admitting another source. Always admit the first
-        // source so a high baseline RSS cannot deadlock an import forever.
-        let rss_mb = source_kernel::runtime_resources::current_rss_mb();
-        state.cpu_in_use == 0 || rss_mb == 0 || rss_mb < self.inner.memory_capacity_mb
+        state.cpu_in_use + request.cpu_weight <= self.inner.cpu_capacity
     }
 }
 
@@ -319,9 +287,6 @@ impl Drop for ImportPermit {
             .lock()
             .unwrap_or_else(|error| error.into_inner());
         state.cpu_in_use = state.cpu_in_use.saturating_sub(self.request.cpu_weight);
-        state.memory_in_use_mb = state
-            .memory_in_use_mb
-            .saturating_sub(self.request.memory_mb);
         state.active_sources = state.active_sources.saturating_sub(1);
         self.inner.changed.notify_all();
     }
@@ -329,18 +294,12 @@ impl Drop for ImportPermit {
 
 pub fn global_import_admission() -> &'static ImportAdmission {
     static ADMISSION: OnceLock<ImportAdmission> = OnceLock::new();
-    ADMISSION.get_or_init(|| ImportAdmission::new(default_cpu_budget(), memory_capacity_mb()))
+    ADMISSION.get_or_init(|| ImportAdmission::new(default_cpu_budget()))
 }
 
 pub use source_kernel::resource_budget::{
     default_cpu_budget, resolve_analysis_worker_count, resolve_analysis_worker_count_for_memory,
 };
-
-fn memory_capacity_mb() -> u64 {
-    test_override("FORENSICS_TEST_MEMORY_CAPACITY_MB")
-        .map(|value| value as u64)
-        .unwrap_or(MEMORY_CAPACITY_MB)
-}
 
 fn test_cluster_member_cap() -> usize {
     test_override("FORENSICS_TEST_CLUSTER_MEMBER_CAP")

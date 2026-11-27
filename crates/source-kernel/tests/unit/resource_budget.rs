@@ -183,3 +183,65 @@ fn two_maximum_e01_metadata_owners_leave_capacity_for_one_workspace() {
     drop(second);
     assert_eq!(root.snapshot().0, Resources::default());
 }
+
+#[test]
+fn collection_metadata_and_one_heavy_workspace_share_the_process_budget() {
+    let root = ResourcePool::new(Resources {
+        bytes: PROCESS_BYTES,
+        metadata: METADATA_BYTES,
+        workers: STORAGE_WORKERS,
+        ..Default::default()
+    });
+    let plan = root
+        .acquire(
+            Resources {
+                bytes: 4 * MIB,
+                metadata: 4 * MIB,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+    let workspace = root.workspace(&AtomicBool::new(false)).unwrap();
+    assert!(matches!(
+        root.acquire(
+            Resources {
+                bytes: WORKSPACE_BYTES,
+                workers: STORAGE_WORKERS,
+                ..Default::default()
+            },
+            None
+        ),
+        Err(ResourceError::Busy)
+    ));
+    let verification = workspace
+        .pool()
+        .acquire(
+            Resources {
+                bytes: 256 * MIB,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+    let enumeration = workspace
+        .pool()
+        .acquire(
+            Resources {
+                bytes: ENUMERATION_BYTES,
+                ..Default::default()
+            },
+            None,
+        )
+        .unwrap();
+    assert!(root.snapshot().1.fits(root.limits()));
+    drop(workspace);
+    assert_eq!(
+        root.snapshot().0.bytes,
+        4 * MIB + 256 * MIB + ENUMERATION_BYTES
+    );
+    drop(verification);
+    drop(enumeration);
+    drop(plan);
+    assert_eq!(root.snapshot().0, Resources::default());
+}

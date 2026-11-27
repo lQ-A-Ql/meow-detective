@@ -12,16 +12,23 @@ impl SourceSnapshot {
         for source in sources {
             match source.source_kind {
                 domain::DataSourceKind::E01 => paths.extend(
-                    image_e01::E01Reader::open(&source.source_path)?
-                        .open_plan()?
-                        .segment_paths(),
+                    super::resources::open_e01_plan(
+                        &source.source_path,
+                        None,
+                        None,
+                        Default::default(),
+                    )?
+                    .segment_paths(),
                 ),
-                domain::DataSourceKind::Raw => paths.extend(
-                    evidence_core::RawImageReader::open(&source.source_path)?
-                        .backing_paths()
-                        .iter()
-                        .cloned(),
-                ),
+                domain::DataSourceKind::Raw => {
+                    let _parse = super::resources::raw_parse(None)?;
+                    paths.extend(
+                        evidence_core::RawImageReader::open(&source.source_path)?
+                            .backing_paths()
+                            .iter()
+                            .cloned(),
+                    );
+                }
                 _ => {
                     return Err(io::Error::new(
                         io::ErrorKind::Unsupported,
@@ -33,7 +40,7 @@ impl SourceSnapshot {
         Self::capture(&paths.into_iter().collect::<Vec<_>>())
     }
 
-    pub(super) fn metadata_bytes(&self) -> u64 {
+    pub(crate) fn metadata_bytes(&self) -> u64 {
         (self.0.capacity() * std::mem::size_of::<(PathBuf, u64, SystemTime, Option<SystemTime>)>()
             + self.0.iter().map(|e| e.0.capacity()).sum::<usize>()) as u64
     }

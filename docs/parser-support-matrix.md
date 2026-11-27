@@ -214,6 +214,11 @@ Kubernetes 清单保留固定数量且顺序稳定的候选，同时统计全部
 RAW、E01、LocalDisk、AndroidSparse 预览统一使用已发布分区记录，
 跨 PV 预览按记录中的全部来源重新打开，并验证 VG/LV UUID。
 文件流与范围读取共用文件系统打开入口及有界读取组件。
+集合计划准备预留 192 MiB 工作内存，保留计划按实际结构估计收费，上限 16 MiB；
+`Arc` 共享期间只保留一份许可。来源 snapshot、PV 检查和 VG 打开使用预算读取工厂。
+内存、metadata、物理读取器、句柄与工作区由 `source-kernel::resource_budget` 管理，
+调度器只负责 CPU 权重。1536 MiB 总估计预算与 1020 MiB 重型工作区决定当前重型成员并发为 1。
+这些数值属于分配估计；大型实际样本 RSS 性能仍需要单独测量。
 
 ### 4c. dm-thin 一致性边界
 
@@ -231,8 +236,14 @@ CRC32C 使用 `crc32c 0.6.8` 的 MIT 授权实现，格式约束参考 Linux
 `dm-thin-metadata.c`、persistent-data B-tree 和 thin-provisioning-tools 的公开实现。
 原生工具生成的三设备多层树包含每设备 1024 个稀疏映射，测试全部映射和间隙。
 
-当前 thin 能力保持 Experimental；space-map 分配位图与引用计数的全局交叉验证、
-持有 metadata snapshot 的独立恢复，以及全部 thin snapshot 变体尚未覆盖。
+进程内验证 data/metadata space-map 的分配位图、溢出引用树、分配总数、
+空闲计数和搜索提示，并与全部可达物理引用交叉检查。共享 metadata 节点只展开一次，
+每条父引用计入节点引用计数；数据引用按不同物理映射叶节点统计。
+持有 metadata snapshot 的树参与同一引用证明，覆盖 snapshot 后继续写入的原生镜像。
+校验工作内存上限为 256 MiB，受资源池管理的读取器会在读取前申请对应许可；
+超过上限返回类型化错误。运行期间保持进程内读取，原生工具仅用于生成和核验测试样本。
+当前 thin 能力保持 Experimental；独立恢复持有 snapshot、全部 thin snapshot 变体
+及大型生产 metadata 的性能验证仍未覆盖。
 
 ## 5. 容器邮件解析器 (V3 计划)
 

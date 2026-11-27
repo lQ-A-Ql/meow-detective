@@ -274,12 +274,11 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     let browseable_elapsed = browseable_started.elapsed();
     let scheduler_after = app_services::import_scheduler::global_import_admission().snapshot();
     eprintln!(
-        "PVE scheduler: activeBefore={} activeAfter={} peakSources={} peakCpuWeight={} peakMemoryReservationMb={} rssMb={} peakRssMb={}",
+        "PVE scheduler: activeBefore={} activeAfter={} peakSources={} peakCpuWeight={} rssMb={} peakRssMb={}",
         scheduler_before.active_sources,
         scheduler_after.active_sources,
         scheduler_after.peak_active_sources,
         scheduler_after.peak_cpu_in_use,
-        scheduler_after.peak_memory_in_use_mb,
         app_services::import_analysis::current_rss_mb(),
         app_services::import_analysis::peak_rss_mb()
     );

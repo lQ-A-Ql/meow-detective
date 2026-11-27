@@ -60,13 +60,7 @@ fn execute(
     cancel: &Arc<AtomicBool>,
 ) -> Result<EvidenceTaskResultDto, CommandError> {
     let _admission = global_import_admission()
-        .acquire(
-            ImportAdmissionRequest {
-                cpu_weight: 1,
-                memory_mb: 256,
-            },
-            cancel,
-        )
+        .acquire(ImportAdmissionRequest { cpu_weight: 1 }, cancel)
         .map_err(|error| match error {
             ImportAdmissionError::Cancelled => CommandError::cancelled("Evidence task cancelled"),
             ImportAdmissionError::TimedOut => {

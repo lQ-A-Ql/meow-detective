@@ -49,12 +49,13 @@ impl transport::ServiceErrorCategory for CollectionPlanError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ImageCollectionPlan {
     sources: Vec<LvmDiscoverySource>,
     probes: Vec<ImageFilesystemProbe>,
     shared_members: Vec<bool>,
     snapshot: SourceSnapshot,
+    _memory: std::sync::Arc<super::collection_memory::PlanMemory>,
 }
 
 impl ImageCollectionPlan {
@@ -62,6 +63,17 @@ impl ImageCollectionPlan {
         sources: &[LvmDiscoverySource],
         cancel: &AtomicBool,
     ) -> Result<Self, CollectionPlanError> {
+        let preparation = source_kernel::resource_budget::global_pool()
+            .acquire(
+                source_kernel::resource_budget::Resources {
+                    bytes: super::collection_memory::PREPARATION_BYTES,
+                    metadata: super::collection_memory::RETAINED_BYTES,
+                    catalogs: 1,
+                    ..Default::default()
+                },
+                Some(cancel),
+            )
+            .map_err(source_kernel::resource_budget::ResourceError::into_io)?;
         let mut unique = HashSet::new();
         let mut canonical = Vec::with_capacity(sources.len());
         for source in sources {
@@ -120,11 +132,15 @@ impl ImageCollectionPlan {
             probe.warnings.extend(warnings.iter().cloned());
         }
         snapshot.validate()?;
+        drop(groups);
+        drop(pv_infos);
+        let memory = super::collection_memory::retain(preparation, &canonical, &probes, &snapshot)?;
         Ok(Self {
             sources: canonical,
             probes,
             shared_members,
             snapshot,
+            _memory: memory,
         })
     }
 

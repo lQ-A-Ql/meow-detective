@@ -1,4 +1,5 @@
 mod collection;
+mod collection_memory;
 mod diagnostics;
 mod discovery;
 mod expansion;

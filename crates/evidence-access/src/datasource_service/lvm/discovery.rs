@@ -1,4 +1,3 @@
-use super::super::reader::open_evidence_reader;
 use super::super::{ImageFilesystemCandidate, LvmPhysicalVolumeSource};
 use super::diagnostics::{
     format_lvm_lv_summaries, format_lvm_missing_pvs, format_lvm_pv_sources,
@@ -188,7 +187,9 @@ pub(super) fn inspect_lvm_pv_candidate(
     source_path: &Path,
     source_kind: &DataSourceKind,
 ) -> std::result::Result<LvmPvDiscoveryInfo, String> {
-    let mut reader = open_evidence_reader(source_path, source_kind).map_err(|e| {
+    let factory =
+        crate::source_runtime::open_factory(source_path, source_kind).map_err(|e| e.to_string())?;
+    let mut reader = factory.open_reader().map_err(|e| {
         format!(
             "LVM expand: cannot open reader for PV source='{}' offset={}: {}",
             lvm_source_fingerprint(&source_path.to_string_lossy()),

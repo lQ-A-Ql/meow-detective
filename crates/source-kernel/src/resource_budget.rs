@@ -7,6 +7,8 @@ pub const MIB: u64 = 1024 * 1024;
 pub const WORKSPACE_BYTES: u64 = 1020 * MIB;
 pub const ENUMERATION_BYTES: u64 = 560 * MIB;
 pub const STORAGE_WORKERS: u64 = 12;
+pub const PROCESS_BYTES: u64 = 1536 * MIB;
+pub const METADATA_BYTES: u64 = 516 * MIB;
 
 const DEFAULT_CPU_CAP: usize = 6;
 const ANALYSIS_WORKER_MEMORY_RESERVATION_MB: u64 = 192;
@@ -317,8 +319,8 @@ pub fn pool_for(lease: Option<&crate::source_runtime::SourcePublicationLease>) -
 pub fn global_pool() -> &'static ResourcePool {
     static POOL: LazyLock<ResourcePool> = LazyLock::new(|| {
         ResourcePool::new(Resources {
-            bytes: 1536 * MIB,
-            metadata: 516 * MIB,
+            bytes: PROCESS_BYTES,
+            metadata: METADATA_BYTES,
             readers: 32,
             handles: 512,
             workers: STORAGE_WORKERS,

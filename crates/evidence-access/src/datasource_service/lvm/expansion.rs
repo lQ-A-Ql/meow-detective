@@ -1,6 +1,5 @@
 use super::super::fs_magic::{kind_label, read_boot_filesystem};
 use super::super::read_filesystem_uuid;
-use super::super::reader::open_evidence_reader;
 use super::super::{
     ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe, ImageFilesystemSource,
     LvmLogicalVolumeIdentity, LvmPhysicalVolumeSource, PartitionRecord, PartitionStatus,
@@ -145,7 +144,7 @@ fn discover_lvm_pool(
             .source_kind
             .as_ref()
             .unwrap_or(default_source_kind);
-        readers.push(open_evidence_reader(reader_path, reader_kind)?);
+        readers.push(crate::source_runtime::open_factory(reader_path, reader_kind)?.open_reader()?);
     }
     Ok((fs_lvm::LvmPool::discover(readers, pv_offsets)?, seed_offset))
 }
