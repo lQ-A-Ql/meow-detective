@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+mod retained_members;
 mod shared_plan;
 use std::fmt::Write;
 use std::io::{Read, Seek, SeekFrom};
@@ -18,7 +19,7 @@ use app_services::derived_source_service::{
 };
 use app_services::import_analysis::ImportAnalysisMode;
 use app_services::source_db::{self, GlobalFileId};
-use domain::{CaseId, CaseMeta, DataSource, DataSourceId, FileEntryId};
+use domain::{CaseId, CaseMeta, DataSource, DataSourceId, EntryType, FileEntryId};
 use persistence_source::repositories::{
     artifact_repo::ArtifactRepo, file_repo::FileRepo, timeline_repo::TimelineRepo,
 };
@@ -34,6 +35,7 @@ use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
     job_repo::JobRepo,
     processing_phase_repo::{DataSourceProcessingPhaseRepo, ProcessingPhase, ProcessingPhaseState},
+    source_revision_repo::SourceRevisionRepo,
 };
 use tempfile::TempDir;
 use transport::commands::{
@@ -67,6 +69,7 @@ const PVE_RBD_COLD_ARTIFACT_REPLAY_ENV: &str = "FORENSICS_PVE_RBD_COLD_ARTIFACT_
 const PVE_RBD_CATALOG_REBUILD_ENV: &str = "FORENSICS_PVE_RBD_CATALOG_REBUILD";
 const PVE_MEMBER_COUNT: usize = 6;
 const PVE_HOST_COUNT: usize = 3;
+const PVE_HOST_METADATA_ENTRY_COUNT: u64 = 15;
 const PVE_CLUSTER_FSID: &str = "3f28d8bb-e754-475b-b471-b9c97161bbf7";
 const PVE_RBD_IMAGE_ID: &str = "16ecc87af5c9";
 const PVE_RBD_IMAGE_NAME: &str = "vm-100-disk-0";
@@ -578,12 +581,6 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
             "retained performance mode requires an already materialized ready RBD source"
         );
     }
-    migrate_retained_source_databases(
-        &case_conn,
-        &case_root,
-        &case_id,
-        if catalog_rebuild { 0 } else { 1 },
-    );
     let parent_snapshots = capture_rbd_parent_source_snapshots(&case_conn, &case_root, &case_id);
 
     let started = Instant::now();
@@ -653,46 +650,6 @@ fn real_pve_rbd_materializes_vm_tree_from_retained_cluster() {
     }
     assert_derived_rbd_automatic_processing(&case_conn, &case_root, &case_id, &ceph_scope_id);
     assert_parent_source_snapshots_unchanged(&case_conn, &case_root, &case_id, &parent_snapshots);
-}
-
-fn migrate_retained_source_databases(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    expected_derived_sources: usize,
-) {
-    let sources = DataSourceRepo::new(case_conn)
-        .find_by_case(case_id)
-        .expect("query retained source databases before migration");
-    let derived_source_count = sources
-        .iter()
-        .filter(|source| source.kind == domain::DataSourceKind::CephRbd)
-        .count();
-    assert_eq!(
-        derived_source_count, expected_derived_sources,
-        "retained RBD replay has an unexpected derived-source baseline"
-    );
-    let started = Instant::now();
-    for source in &sources {
-        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &source.id)
-            .unwrap_or_else(|error| {
-                panic!(
-                    "migrate retained source database '{}': {error}",
-                    source.id.0
-                )
-            });
-        source_db::checkpoint_source_db(&source_conn).unwrap_or_else(|error| {
-            panic!(
-                "checkpoint retained source database '{}': {error}",
-                source.id.0
-            )
-        });
-    }
-    eprintln!(
-        "PVE_RBD_SOURCE_MIGRATION elapsedMs={} sources={}",
-        started.elapsed().as_millis(),
-        sources.len()
-    );
 }
 
 fn reset_derived_artifact_phase(
@@ -1088,12 +1045,17 @@ fn assert_job_outcome(case_conn: &rusqlite::Connection, job_id: &domain::JobId) 
 }
 
 fn assert_control_database_is_tree_free(case_conn: &rusqlite::Connection) {
+    let catalog_objects: u64 = case_conn
+        .query_row(
+            "SELECT COUNT(*) FROM sqlite_master
+             WHERE name = 'file_entries' AND type IN ('table', 'view')",
+            [],
+            |row| row.get(0),
+        )
+        .expect("inspect app catalog objects");
     assert_eq!(
-        FileRepo::new(case_conn)
-            .count_all()
-            .expect("count app files"),
-        0,
-        "app.db must remain a control database"
+        catalog_objects, 0,
+        "app.db must not contain a file catalog table or view"
     );
 }
 
@@ -1162,7 +1124,7 @@ fn assert_member_storage_and_content(
                 "only PVE host disk01 members may be ready: {}",
                 member.source_path.display()
             );
-            assert_host_source(case_conn, case_root, case_id, source);
+            assert_host_source(case_conn, case_root, source);
         } else {
             assert!(
                 !is_host_disk(&member.source_path),
@@ -1180,6 +1142,7 @@ fn assert_member_storage_and_content(
     }
     assert_eq!(ready_count, PVE_HOST_COUNT);
     assert_eq!(metadata_count, PVE_MEMBER_COUNT - PVE_HOST_COUNT);
+    assert_logical_lvm_sources(case_conn, case_root, case_id, &sources, &member_sources);
     assert_eq!(osd_ids, HashSet::from([0, 1, 2]));
     assert_eq!(osd_uuids.len(), 3);
     assert_eq!(bluefs_uuids.len(), 3);
@@ -1243,46 +1206,33 @@ fn assert_derived_rbd_sources(
         record_count, PVE_RBD_RECORD_COUNT,
         "derived RBD record count differs from the retained sample oracle"
     );
-    let (directory_count, file_count, total_file_size) = source_conn
-        .query_row(
-            "SELECT
-                SUM(entry_type = 'directory'),
-                SUM(entry_type = 'file'),
-                COALESCE(SUM(CASE WHEN entry_type = 'file' THEN size ELSE 0 END), 0)
-             FROM file_entries
-             WHERE data_source_id = ?1",
-            [&source.id.0],
-            |row| {
-                Ok((
-                    row.get::<_, u64>(0)?,
-                    row.get::<_, u64>(1)?,
-                    row.get::<_, u64>(2)?,
-                ))
-            },
-        )
-        .expect("query derived RBD record oracle");
+    let mut directory_count = 0u64;
+    let mut file_count = 0u64;
+    let mut total_file_size = 0u64;
+    FileRepo::new(&source_conn)
+        .visit_all(Some(&source.id.0), |entry| {
+            match entry.entry_type {
+                EntryType::Directory => directory_count += 1,
+                EntryType::File => {
+                    file_count += 1;
+                    total_file_size = total_file_size.saturating_add(entry.size.unwrap_or(0));
+                }
+            }
+            Ok(())
+        })
+        .expect("summarize derived RBD record oracle");
     assert_eq!(directory_count, PVE_RBD_DIRECTORY_COUNT);
     assert_eq!(file_count, PVE_RBD_FILE_COUNT);
     assert_eq!(total_file_size, PVE_RBD_TOTAL_FILE_SIZE);
 
-    let partition_rows = source_conn
-        .prepare(
-            "SELECT partition_index, filesystem, status
-             FROM data_source_partitions
-             WHERE data_source_id = ?1
-             ORDER BY partition_index",
-        )
-        .expect("prepare derived partition query")
-        .query_map([&source.id.0], |row| {
-            Ok((
-                row.get::<_, u32>(0)?,
-                row.get::<_, Option<String>>(1)?,
-                row.get::<_, String>(2)?,
-            ))
-        })
-        .expect("query derived RBD partitions")
-        .collect::<Result<Vec<_>, _>>()
-        .expect("read derived RBD partitions");
+    let mut partition_rows =
+        app_services::partition_query_service::PartitionQueryRepo::new(&source_conn)
+            .source_records(&source.id.0)
+            .expect("read derived RBD partitions")
+            .into_iter()
+            .map(|record| (record.partition_index, record.filesystem, record.status))
+            .collect::<Vec<_>>();
+    partition_rows.sort_by_key(|record| record.0);
     assert_eq!(
         partition_rows,
         vec![
@@ -1583,12 +1533,7 @@ fn assert_member_metadata(
     assert_eq!(member_count as usize, PVE_MEMBER_COUNT);
 }
 
-fn assert_host_source(
-    case_conn: &rusqlite::Connection,
-    case_root: &Path,
-    case_id: &CaseId,
-    source: &DataSource,
-) {
+fn assert_host_source(case_conn: &rusqlite::Connection, case_root: &Path, source: &DataSource) {
     let storage = DataSourceRepo::new(case_conn)
         .find_storage(&source.id)
         .expect("query host storage")
@@ -1600,38 +1545,91 @@ fn assert_host_source(
         FileRepo::new(&source_conn)
             .count_by_data_source(&source.id)
             .expect("count host files"),
-        host_file_count_oracle(source),
-        "host file count differs for {}",
+        PVE_HOST_METADATA_ENTRY_COUNT,
+        "physical host source must contain metadata entries only: {}",
         source.name
     );
-    for path in PVE_OS_FILES {
+}
+
+fn assert_logical_lvm_sources(
+    case_conn: &rusqlite::Connection,
+    case_root: &Path,
+    case_id: &CaseId,
+    sources: &[DataSource],
+    member_sources: &[DataSource],
+) {
+    let logical_sources = sources
+        .iter()
+        .filter(|source| source.kind == domain::DataSourceKind::LvmLogicalVolume)
+        .collect::<Vec<_>>();
+    assert_eq!(logical_sources.len(), PVE_HOST_COUNT);
+    let revisions = SourceRevisionRepo::new(case_conn);
+    let mut file_counts = Vec::new();
+    for host_source in member_sources
+        .iter()
+        .filter(|source| is_host_disk(&source.source_path))
+    {
+        let linked = logical_sources
+            .iter()
+            .filter(|logical| {
+                revisions
+                    .inputs(&case_id.0, &logical.id.0)
+                    .expect("read logical LVM parent sources")
+                    .iter()
+                    .any(|input| input.source_id == host_source.id.0)
+            })
+            .copied()
+            .collect::<Vec<_>>();
+        assert_eq!(
+            linked.len(),
+            1,
+            "each imported host disk must publish one logical LVM source"
+        );
+        let logical = linked[0];
+        assert_source_database_health(case_root, logical);
+        let storage = DataSourceRepo::new(case_conn)
+            .find_storage(&logical.id)
+            .expect("query logical LVM storage")
+            .expect("logical LVM storage");
+        assert_eq!(storage.import_state, "ready");
+        let source_conn = source_db::open_registered_source_db(case_conn, case_root, &logical.id)
+            .expect("open logical LVM source database");
+        let count = FileRepo::new(&source_conn)
+            .count_by_data_source(&logical.id)
+            .expect("count logical LVM files");
+        let expected = match host_source
+            .source_path
+            .file_name()
+            .and_then(|name| name.to_str())
+        {
+            Some("server01-disk01.E01") => 62_388,
+            Some("server02-disk01.E01") => 62_365,
+            Some("server03-disk01.E01") => 62_390,
+            _ => panic!("unexpected PVE host source {}", host_source.name),
+        };
+        assert_eq!(
+            count, expected,
+            "logical file count differs for {}",
+            host_source.name
+        );
+        file_counts.push(count);
+        for path in PVE_OS_FILES {
+            assert!(
+                find_file_by_linux_suffix(&source_conn, &logical.id, path).is_some(),
+                "logical LVM source is missing {path}"
+            );
+        }
         assert_file_preview(
             case_conn,
             case_root,
             case_id,
             &source_conn,
-            &source.id,
-            path,
+            &logical.id,
+            "/etc/passwd",
         );
     }
-}
-
-fn host_file_count_oracle(source: &DataSource) -> u64 {
-    let file_name = source
-        .source_path
-        .file_name()
-        .and_then(|value| value.to_str())
-        .unwrap_or_default()
-        .to_ascii_lowercase();
-    match file_name.as_str() {
-        "server01-disk01.e01" => 62_403,
-        "server02-disk01.e01" => 62_380,
-        "server03-disk01.e01" => 62_405,
-        _ => panic!(
-            "missing exact host file-count oracle for {}",
-            source.source_path.display()
-        ),
-    }
+    file_counts.sort_unstable();
+    assert_eq!(file_counts, vec![62_365, 62_388, 62_390]);
 }
 
 fn assert_source_database_health(case_root: &Path, source: &DataSource) {
@@ -1829,22 +1827,28 @@ fn find_file_by_linux_suffix(
         .trim_start_matches('/')
         .replace('\\', "/")
         .to_ascii_lowercase();
-    let suffix_pattern = format!("%/{suffix}");
-    source_conn
-        .query_row(
-            "SELECT id FROM file_entries
-             WHERE data_source_id = ?1
-               AND entry_type = 'file' COLLATE NOCASE
-               AND (
-                   LOWER(REPLACE(path, '\\', '/')) = ?2
-                   OR LOWER(REPLACE(path, '\\', '/')) LIKE ?3
-               )
-             ORDER BY LENGTH(path) ASC
-             LIMIT 1",
-            rusqlite::params![data_source_id.0, suffix, suffix_pattern],
-            |row| row.get::<_, String>(0).map(FileEntryId),
-        )
-        .ok()
+    let partitions = app_services::partition_query_service::PartitionQueryRepo::new(source_conn)
+        .source_records(&data_source_id.0)
+        .expect("read Linux source partition identities");
+    let catalog = FileRepo::new(source_conn);
+    partitions
+        .into_iter()
+        .filter_map(|partition| {
+            catalog
+                .find_by_partition_and_path_ci(
+                    data_source_id,
+                    partition.partition_index as usize,
+                    &suffix,
+                )
+                .expect("query indexed Linux file path")
+        })
+        .filter(|entry| entry.entry_type == EntryType::File)
+        .filter(|entry| {
+            let normalized = entry.path.replace('\\', "/").to_ascii_lowercase();
+            normalized == suffix || normalized.ends_with(&format!("/{suffix}"))
+        })
+        .min_by_key(|entry| entry.path.len())
+        .map(|entry| entry.id)
 }
 
 fn assert_bluestore_source(
