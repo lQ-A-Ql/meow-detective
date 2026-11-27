@@ -22,6 +22,14 @@ impl CatalogAttempt {
         })
     }
 
+    pub(super) fn id(&self) -> &str {
+        &self.id
+    }
+
+    pub(super) fn owner(&self) -> &str {
+        &self.owner
+    }
+
     pub(super) fn refresh(
         &self,
         conn: &rusqlite::Connection,

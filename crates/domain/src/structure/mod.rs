@@ -12,7 +12,9 @@ pub use identity::{
     RevisionConsistency, SourceRevisionContent, SourceRevisionRef, StructureIdentityError,
 };
 pub use native_version::{MdMetadataVersion, NativeVersion};
-pub use object_version::{ObjectVersionId, StorageObjectVersion, StorageObjectVersionKind};
+pub use object_version::{
+    ObjectVersionId, StorageObjectVersion, StorageObjectVersionKind, StructureViewAttempt,
+};
 pub use observation::{
     NativeObservation, ObservationDetail, ObservationId, ObservationIndex, ObservationIndexError,
     ObservationLocation,

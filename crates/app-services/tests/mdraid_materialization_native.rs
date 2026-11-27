@@ -159,6 +159,18 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .unwrap()
             .unwrap();
     assert_eq!(object.object_kind, "md_raid");
+    let view_attempt =
+        persistence_sqlite::repositories::structure_view_attempt_repo::StructureViewAttemptRepo::new(
+            &connection,
+        )
+        .find(&case.meta.id.0, &source.id.0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(view_attempt.input_fingerprint, version.mapping_sha256);
+    assert_eq!(view_attempt.generation, "source.fjall");
+    assert!(!view_attempt.attempt_id.is_empty());
+    assert!(!view_attempt.owner_id.is_empty());
+    assert_eq!(view_attempt.receipt.len(), 64);
     let graph = app_services::structure_analysis::get_structure_graph(
         &connection,
         &case.case_root,

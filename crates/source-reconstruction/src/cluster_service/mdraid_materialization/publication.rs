@@ -1,16 +1,19 @@
 use std::path::Path;
 
-use domain::DataSource;
+use domain::{structure::StructureViewAttempt, CaseId, DataSource};
 use evidence_access::mdraid::MdRaidPlanError;
 use persistence_source::fjall::{
     encode_key, KeyPart, KeyspaceName, PersistMode, VersionedEnvelope,
 };
 use persistence_sqlite::repositories::{
     catalog_publication_repo::CatalogPublicationRepo, datasource_repo::DataSourceRepo,
+    structure_view_attempt_repo::StructureViewAttemptRepo,
 };
 use source_kernel::source_db;
 
 use super::build::CatalogBuild;
+
+const STRUCTURE_VIEW_GENERATION: &str = "source.fjall";
 
 pub(super) fn seal_catalog(
     request: &CatalogBuild<'_>,
@@ -75,6 +78,15 @@ pub(super) fn publish_build(
     source_db::publish_source_build_db(request.case_root, &request.source.id, &request.attempt.id)?;
     let transaction = request.case_conn.unchecked_transaction()?;
     super::inputs::validate(&transaction, request.source)?;
+    bind_view_attempt(
+        &transaction,
+        request.case_id,
+        &request.source.id.0,
+        request.fingerprint,
+        request.attempt.id(),
+        request.attempt.owner(),
+        digest,
+    )?;
     CatalogPublicationRepo::new(&transaction).mark_published(
         &request.source.id,
         &publication.attempt_id,
@@ -105,9 +117,16 @@ pub(super) fn verify_publication(
     let manifest = native.generation_manifest(&source.id.0)?;
     let snapshot = native.snapshot();
     native.require_projection_complete(&snapshot, &source.id.0)?;
+    let attempt = StructureViewAttemptRepo::new(conn)
+        .find_for_attempt(&case_id.0, &source.id.0, &stored.attempt_id)?
+        .ok_or(MdRaidPlanError::InvalidPublication)?;
     if !native.partition_projection_complete(&snapshot, &source.id.0)?
         || manifest.attempt_id != stored.attempt_id
         || manifest.projection_batch_digest != fingerprint
+        || attempt.attempt_id != stored.attempt_id
+        || attempt.input_fingerprint != fingerprint
+        || attempt.generation != STRUCTURE_VIEW_GENERATION
+        || attempt.receipt != manifest.immutable_data_digest
         || !publications.is_published(
             &source.id,
             fingerprint,
@@ -156,11 +175,22 @@ pub(super) fn recover_prepared_publication(
         return Err(MdRaidPlanError::InvalidPublication);
     }
     if publication.state == "prepared" {
-        CatalogPublicationRepo::new(request.case_conn).mark_published(
+        let transaction = request.case_conn.unchecked_transaction()?;
+        bind_view_attempt(
+            &transaction,
+            request.case_id,
+            &request.source.id.0,
+            request.fingerprint,
+            request.attempt.id(),
+            request.attempt.owner(),
+            &manifest.immutable_data_digest,
+        )?;
+        CatalogPublicationRepo::new(&transaction).mark_published(
             &request.source.id,
             &publication.attempt_id,
             &publication.seal,
         )?;
+        transaction.commit()?;
     }
     verify_publication(
         request.case_conn,
@@ -175,4 +205,28 @@ pub(super) fn recover_prepared_publication(
         .finish_ready(&transaction, &request.source.id, request.fingerprint)?;
     transaction.commit()?;
     Ok(true)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn bind_view_attempt(
+    conn: &rusqlite::Connection,
+    case_id: &CaseId,
+    source_id: &str,
+    input_fingerprint: &str,
+    attempt_id: &str,
+    owner_id: &str,
+    receipt: &str,
+) -> Result<(), MdRaidPlanError> {
+    StructureViewAttemptRepo::new(conn).bind(
+        &case_id.0,
+        &StructureViewAttempt {
+            derived_source_id: source_id.into(),
+            input_fingerprint: input_fingerprint.into(),
+            attempt_id: attempt_id.into(),
+            owner_id: owner_id.into(),
+            generation: STRUCTURE_VIEW_GENERATION.into(),
+            receipt: receipt.into(),
+        },
+    )?;
+    Ok(())
 }

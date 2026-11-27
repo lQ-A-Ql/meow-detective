@@ -110,6 +110,17 @@ pub enum StorageObjectVersionKind {
     NativeObservation,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StructureViewAttempt {
+    pub derived_source_id: String,
+    pub input_fingerprint: String,
+    pub attempt_id: String,
+    pub owner_id: String,
+    pub generation: String,
+    pub receipt: String,
+}
+
 impl StorageObjectVersionKind {
     pub fn as_str(self) -> &'static str {
         match self {
