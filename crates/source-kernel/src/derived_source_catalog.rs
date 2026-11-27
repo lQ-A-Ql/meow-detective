@@ -3,9 +3,9 @@ use serde::Deserialize;
 use sha2::{Digest, Sha256};
 
 pub const PROCESSING_PHASE_VERSION: u32 = 1;
-pub const CATALOG_MATERIALIZER_VERSION: u32 = 5;
+pub const CATALOG_MATERIALIZER_VERSION: u32 = 6;
 pub const CATALOG_SCHEMA_DEPENDENCY: &str = "source_015_ceph_bluestore_rbd_header_context";
-pub const CATALOG_POLICY_VERSION: &str = "rbd-filesystem-catalog-v3-partition-identities";
+pub const CATALOG_POLICY_VERSION: &str = "rbd-filesystem-catalog-v4-id-stream-summary";
 
 const SOURCE_META_KEY: &str = "derived.catalog.manifest";
 

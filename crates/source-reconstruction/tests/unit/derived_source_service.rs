@@ -7,6 +7,8 @@ use std::sync::{
     Arc,
 };
 use test_support::NativeSourceFixture;
+#[path = "derived_source_service/catalog_streaming.rs"]
+mod catalog_streaming;
 
 #[test]
 fn derived_source_id_is_deterministic_and_path_safe() {

@@ -6,6 +6,8 @@ use sha2::{Digest, Sha256};
 use super::{DerivedSourceError, DerivedSourceResult, MaterializedRbdSource};
 use source_kernel::derived_source_catalog::CATALOG_MATERIALIZER_VERSION;
 
+mod streaming;
+
 const SOURCE_META_KEY: &str = "derived.catalog.manifest";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -158,63 +160,7 @@ pub(super) fn summarize_source_connection(
     connection: &Connection,
     data_source: DataSource,
 ) -> DerivedSourceResult<MaterializedRbdSource> {
-    let entries = persistence_source::repositories::file_repo::FileRepo::new(connection)
-        .find_by_data_source(&data_source.id)
-        .map_err(|error| DerivedSourceError::InconsistentState(error.to_string()))?;
-    let by_id = entries
-        .iter()
-        .map(|entry| (entry.id.0.clone(), entry.clone()))
-        .collect::<std::collections::HashMap<_, _>>();
-    let mut entries = entries;
-    entries.sort_by(|left, right| {
-        left.path
-            .cmp(&right.path)
-            .then_with(|| left.name.cmp(&right.name))
-            .then_with(|| left.is_directory().cmp(&right.is_directory()))
-            .then_with(|| left.size.cmp(&right.size))
-    });
-    let mut accumulator = CatalogAccumulator::default();
-    for entry in entries {
-        let is_directory = entry.is_directory();
-        let parent_id = entry.parent_id.clone();
-        let parent = parent_id.as_ref().and_then(|id| by_id.get(&id.0));
-        accumulator.push(CatalogRow {
-            id: entry.id.0,
-            parent_id: parent_id.as_ref().map(|id| id.0.clone()),
-            path: entry.path,
-            name: entry.name,
-            entry_type: if is_directory {
-                "directory".into()
-            } else {
-                "file".into()
-            },
-            size: entry.size,
-            deleted: i64::from(entry.deleted),
-            hidden: i64::from(entry.hidden),
-            system: i64::from(entry.system),
-            created_at: entry.created_at.map(|value| value.to_rfc3339()),
-            modified_at: entry.modified_at.map(|value| value.to_rfc3339()),
-            accessed_at: entry.accessed_at.map(|value| value.to_rfc3339()),
-            changed_at: entry.changed_at.map(|value| value.to_rfc3339()),
-            parent_state: if parent_id.is_none() {
-                0
-            } else if parent.is_some() {
-                1
-            } else {
-                2
-            },
-            parent_path: parent.map(|value| value.path.clone()),
-            parent_name: parent.map(|value| value.name.clone()),
-            parent_entry_type: parent.map(|value| {
-                if value.is_directory() {
-                    "directory".into()
-                } else {
-                    "file".into()
-                }
-            }),
-        });
-    }
-    Ok(accumulator.into_summary(data_source))
+    streaming::summarize(connection, data_source)
 }
 
 fn persist_catalog_manifest(
