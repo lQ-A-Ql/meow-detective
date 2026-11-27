@@ -106,6 +106,14 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
             revision: 1,
         };
         revisions.require_current(&reference).unwrap();
+        let (_, revision_content) = revisions
+            .current(&case.meta.id.0, &reference.source_id)
+            .unwrap();
+        assert_eq!(revision_content.acquisition_id.0, plan.import_set_id);
+        assert_eq!(
+            revision_content.logical_sha256_status,
+            domain::structure::DigestVerification::Verified
+        );
         let facts = evidence_access::structure_observation::read_source_observations(
             &connection,
             &case.case_root,

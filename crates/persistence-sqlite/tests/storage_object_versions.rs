@@ -15,7 +15,12 @@ fn object_identity_stays_stable_while_versions_accumulate() {
         .bind(
             "case-a",
             "physical",
-            &SourceRevisionContent::captured(4096, None, "a".repeat(64)),
+            &SourceRevisionContent::captured(
+                AcquisitionId("physical".into()),
+                4096,
+                None,
+                "a".repeat(64),
+            ),
             true,
         )
         .unwrap();
@@ -34,7 +39,12 @@ fn object_identity_stays_stable_while_versions_accumulate() {
         .bind(
             "case-a",
             "physical",
-            &SourceRevisionContent::captured(4096, None, "c".repeat(64)),
+            &SourceRevisionContent::captured(
+                AcquisitionId("physical".into()),
+                4096,
+                None,
+                "c".repeat(64),
+            ),
             true,
         )
         .unwrap();
@@ -75,7 +85,12 @@ fn same_native_version_with_different_mapping_marks_identity_conflicted() {
         .bind(
             "case-a",
             "physical",
-            &SourceRevisionContent::captured(4096, None, "a".repeat(64)),
+            &SourceRevisionContent::captured(
+                AcquisitionId("physical".into()),
+                4096,
+                None,
+                "a".repeat(64),
+            ),
             true,
         )
         .unwrap();
@@ -114,7 +129,12 @@ fn versions_are_immutable_case_scoped_and_retire_with_the_derived_source() {
         .bind(
             "case-b",
             "source-b",
-            &SourceRevisionContent::captured(4096, None, "a".repeat(64)),
+            &SourceRevisionContent::captured(
+                AcquisitionId("source-b".into()),
+                4096,
+                None,
+                "a".repeat(64),
+            ),
             true,
         )
         .unwrap();
@@ -126,7 +146,12 @@ fn versions_are_immutable_case_scoped_and_retire_with_the_derived_source() {
         .bind(
             "case-a",
             "physical",
-            &SourceRevisionContent::captured(4096, None, "b".repeat(64)),
+            &SourceRevisionContent::captured(
+                AcquisitionId("physical".into()),
+                4096,
+                None,
+                "b".repeat(64),
+            ),
             true,
         )
         .unwrap();
@@ -178,7 +203,11 @@ fn bind_derived(conn: &rusqlite::Connection, source_id: &str) -> SourceRevisionR
         .bind(
             "case-a",
             source_id,
-            &SourceRevisionContent::derived(4096, format!("version:{source_id}")),
+            &SourceRevisionContent::derived(
+                AcquisitionId(format!("acquisition:{source_id}")),
+                4096,
+                format!("version:{source_id}"),
+            ),
             true,
         )
         .unwrap()

@@ -42,6 +42,7 @@ pub struct SourceRevisionRef {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SourceRevisionContent {
+    pub acquisition_id: AcquisitionId,
     pub logical_size: u64,
     pub metadata_identity: Option<String>,
     pub metadata_identity_status: DigestVerification,
@@ -54,11 +55,13 @@ pub struct SourceRevisionContent {
 
 impl SourceRevisionContent {
     pub fn captured(
+        acquisition_id: AcquisitionId,
         logical_size: u64,
         metadata_identity: Option<String>,
         logical_sha256: String,
     ) -> Self {
         Self {
+            acquisition_id,
             logical_size,
             metadata_identity_status: if metadata_identity.is_some() {
                 DigestVerification::Recorded
@@ -74,13 +77,18 @@ impl SourceRevisionContent {
         }
     }
 
-    pub fn observed(logical_size: u64, metadata_identity: Option<String>) -> Self {
+    pub fn observed(
+        acquisition_id: AcquisitionId,
+        logical_size: u64,
+        metadata_identity: Option<String>,
+    ) -> Self {
         let metadata_identity_status = if metadata_identity.is_some() {
             DigestVerification::Recorded
         } else {
             DigestVerification::Missing
         };
         Self {
+            acquisition_id,
             logical_size,
             metadata_identity,
             metadata_identity_status,
@@ -96,8 +104,13 @@ impl SourceRevisionContent {
         }
     }
 
-    pub fn derived(logical_size: u64, metadata_identity: String) -> Self {
+    pub fn derived(
+        acquisition_id: AcquisitionId,
+        logical_size: u64,
+        metadata_identity: String,
+    ) -> Self {
         Self {
+            acquisition_id,
             logical_size,
             metadata_identity: Some(metadata_identity),
             metadata_identity_status: DigestVerification::Recorded,
@@ -110,6 +123,11 @@ impl SourceRevisionContent {
     }
 
     pub fn validate(&self) -> Result<(), StructureIdentityError> {
+        if self.acquisition_id.as_str().is_empty() {
+            return Err(StructureIdentityError::EmptyField {
+                field: "acquisition_id",
+            });
+        }
         validate_digest(
             self.logical_sha256.as_deref(),
             self.logical_sha256_status,

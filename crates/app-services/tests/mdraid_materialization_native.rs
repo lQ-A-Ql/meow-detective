@@ -1,6 +1,7 @@
 use std::fs::File;
 use std::io::{Seek, SeekFrom, Write};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 
 use app_services::{case_service, cluster_service, file_service, source_db};
 use domain::DataSourceKind;
@@ -158,6 +159,78 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .unwrap()
             .unwrap();
     assert_eq!(object.object_kind, "md_raid");
+    let graph = app_services::structure_analysis::get_structure_graph(
+        &connection,
+        &case.case_root,
+        &app_services::structure_analysis::StructureGraphRequest {
+            case_id: case.meta.id.clone(),
+            source_ids: vec![source.id.0.clone()],
+        },
+    )
+    .unwrap();
+    assert!(graph
+        .mappings
+        .iter()
+        .any(|mapping| { mapping.target_node.0 == format!("version:{}", version.id.0) }));
+    assert!(!graph.recovery_relations.is_empty());
+    assert!(graph
+        .edges
+        .iter()
+        .any(|edge| edge.kind == domain::structure::StructureRelationKind::ContentDependency));
+    let analysis_request = app_services::structure_analysis::StructureAnalysisRequest {
+        case_id: case.meta.id.clone(),
+        source_ids: vec![source.id.0.clone()],
+        intent: domain::structure::ReadIntent::MetadataInspection,
+        priority: domain::structure::ReadPriority::Interactive,
+        consumers: vec!["native-structure-test".into()],
+        attempt: Some(domain::structure::StructureAttemptRef {
+            attempt_id: "structure-attempt".into(),
+            owner: "native-structure-test".into(),
+        }),
+        required_features: Default::default(),
+    };
+    let mut unsupported = analysis_request.clone();
+    unsupported
+        .required_features
+        .insert("unknown-feature".into());
+    assert!(matches!(
+        app_services::structure_analysis::plan_structure_analysis(
+            &connection,
+            &case.case_root,
+            &unsupported,
+        ),
+        Err(app_services::structure_analysis::StructureAnalysisError::UnsupportedFeature { .. })
+    ));
+    let analysis = app_services::structure_analysis::plan_structure_analysis(
+        &connection,
+        &case.case_root,
+        &analysis_request,
+    )
+    .unwrap();
+    assert!(analysis
+        .adapters
+        .iter()
+        .any(|adapter| adapter.id == app_services::structure_analysis::MDRAID_ADAPTER_ID));
+    assert!(analysis.work_items.iter().any(|item| {
+        item.adapter_id == app_services::structure_analysis::MDRAID_ADAPTER_ID
+            && item
+                .demand
+                .as_ref()
+                .and_then(|demand| demand.attempt.as_ref())
+                .is_some_and(|attempt| attempt.attempt_id == "structure-attempt")
+    }));
+    assert!(analysis.work_items.iter().any(|item| {
+        item.adapter_id == app_services::structure_analysis::FILESYSTEM_ADAPTER_ID
+    }));
+    let run = app_services::structure_analysis::run_structure_analysis(
+        &connection,
+        &case.case_root,
+        &analysis_request,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert_eq!(run.work_results.len(), run.plan.work_items.len());
+    assert!(run.work_results.iter().all(|result| result.bytes_read > 0));
     let import = registered_collection(&connection, &case.meta.id, &plans[0], "physical", &inputs);
     let from_collection = cluster_service::materialize_linux_evidence_set_mdraid(
         &connection,
@@ -389,6 +462,12 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     assert!(revisions
         .require_current_inputs(&case.meta.id.0, &source.id.0)
         .is_err());
+    assert!(app_services::structure_analysis::plan_structure_analysis(
+        &connection,
+        &case.case_root,
+        &analysis_request,
+    )
+    .is_err());
     revisions
         .require_current_inputs(&case.meta.id.0, &independent.id.0)
         .unwrap();
@@ -495,6 +574,7 @@ fn register_inputs(
                     &case_id.0,
                     &source.id.0,
                     &domain::structure::SourceRevisionContent::captured(
+                        domain::structure::AcquisitionId(acquisition.to_owned()),
                         content.logical_size,
                         None,
                         content.logical_sha256.clone(),

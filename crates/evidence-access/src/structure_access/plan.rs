@@ -8,9 +8,12 @@ use domain::{
         ByteRange, ByteRangeSet, ReadDemand, ReadDemandError, ReadIntent, ReadPriority,
         ReadVerification, SourceRevisionRef, StructureAttemptRef,
     },
-    DataSourceKind,
+    DataSourceId, DataSourceKind,
 };
 use evidence_core::EvidenceReader;
+use persistence_sqlite::repositories::{
+    datasource_repo::DataSourceRepo, source_revision_repo::SourceRevisionRepo,
+};
 use sha2::{Digest, Sha256};
 
 use super::VerifiedView;
@@ -53,8 +56,12 @@ pub enum TargetAccessError {
     MdRaid(#[from] MdRaidPlanError),
     #[error("target reader failed: {0}")]
     Io(#[from] std::io::Error),
+    #[error("target registration lookup failed: {0}")]
+    Database(#[from] persistence_sqlite::DbError),
     #[error("target access was cancelled")]
     Cancelled,
+    #[error("target source kind is not supported by the registered access path")]
+    UnsupportedTarget,
     #[error("verified digest mismatch: expected {expected}, actual {actual}")]
     DigestMismatch { expected: String, actual: String },
 }
@@ -65,10 +72,12 @@ impl From<TargetAccessError> for MdRaidPlanError {
             TargetAccessError::MdRaid(error) => error,
             TargetAccessError::Collection(error) => Self::Collection(error),
             TargetAccessError::Io(error) => Self::Io(error),
+            TargetAccessError::Database(error) => Self::Database(error),
             TargetAccessError::Cancelled => Self::Cancelled,
             TargetAccessError::Range(_) | TargetAccessError::Demand(_) => {
                 Self::InvalidContentIdentity
             }
+            TargetAccessError::UnsupportedTarget => Self::InvalidPublication,
             TargetAccessError::DigestMismatch { .. } => Self::SourceContentChanged,
         }
     }
@@ -88,6 +97,18 @@ impl TargetAccessPlan {
 pub struct DiscoveryAccessPlan {
     ranges: ByteRangeSet,
     reader: Box<dyn EvidenceReader>,
+}
+
+pub struct RegisteredMdRaidAccessRequest {
+    pub source_id: String,
+    pub ranges: Option<Vec<ByteRange>>,
+    pub intent: ReadIntent,
+    pub priority: ReadPriority,
+    pub deadline_unix_ms: Option<u64>,
+    pub reorderable: bool,
+    pub consumers: Vec<String>,
+    pub verification: ReadVerification,
+    pub attempt: Option<StructureAttemptRef>,
 }
 
 pub fn plan_target_access(
@@ -130,6 +151,41 @@ pub(crate) fn plan_discovery_access(
         ranges: ByteRangeSet::full(target_size)?,
         reader,
     })
+}
+
+pub fn plan_registered_mdraid_access(
+    case_conn: &rusqlite::Connection,
+    _case_root: &Path,
+    request: RegisteredMdRaidAccessRequest,
+    cancel: &AtomicBool,
+) -> Result<TargetAccessPlan, TargetAccessError> {
+    check_cancel(cancel)?;
+    let source_id = DataSourceId(request.source_id);
+    let sources = DataSourceRepo::new(case_conn);
+    if sources.source_kind(&source_id)? != DataSourceKind::MdRaid {
+        return Err(TargetAccessError::UnsupportedTarget);
+    }
+    let path = std::path::PathBuf::from(sources.source_path(&source_id)?);
+    let (source_revision, _) = SourceRevisionRepo::new(case_conn)
+        .current(&sources.case_id(&source_id)?.0, &source_id.0)?;
+    super::super::mdraid::persisted_inputs::validate(&source_id, &path)?;
+    let plan = super::super::mdraid::read_mdraid_descriptor(&path)?;
+    let target = AccessTarget::MdRaid(&plan);
+    plan_target_access(
+        TargetAccessRequest {
+            target,
+            source_revision,
+            ranges: request.ranges,
+            intent: request.intent,
+            priority: request.priority,
+            deadline_unix_ms: request.deadline_unix_ms,
+            reorderable: request.reorderable,
+            consumers: request.consumers,
+            verification: request.verification,
+            attempt: request.attempt,
+        },
+        cancel,
+    )
 }
 
 pub fn open_verified_view(

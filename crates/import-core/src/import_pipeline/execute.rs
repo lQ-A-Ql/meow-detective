@@ -234,8 +234,15 @@ fn finalize(
             ctx.source_connection()?,
             &source.id.0,
         )?;
-        super::source_revision::publish_observations(ctx, source, &digest)?;
-        mark_projection_committed(ctx.conn, &ctx.job_id.0, &digest)?;
+        let transaction = ctx
+            .conn
+            .unchecked_transaction()
+            .map_err(CommandError::from_service_error)?;
+        super::source_revision::publish_observations(ctx, source, &digest, &transaction)?;
+        mark_projection_committed(&transaction, &ctx.job_id.0, &digest)?;
+        transaction
+            .commit()
+            .map_err(CommandError::from_service_error)?;
         Ok(message)
     });
     profile::emit_timed_phase_profile(

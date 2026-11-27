@@ -1,4 +1,6 @@
-use domain::structure::{DigestVerification, SourceRevisionContent, SourceRevisionRef};
+use domain::structure::{
+    AcquisitionId, DigestVerification, SourceRevisionContent, SourceRevisionRef,
+};
 use persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo;
 
 fn setup() -> rusqlite::Connection {
@@ -14,7 +16,12 @@ fn setup() -> rusqlite::Connection {
 }
 
 fn content() -> SourceRevisionContent {
-    SourceRevisionContent::captured(4096, Some("metadata-a".into()), "a".repeat(64))
+    SourceRevisionContent::captured(
+        AcquisitionId("acquisition-a".into()),
+        4096,
+        Some("metadata-a".into()),
+        "a".repeat(64),
+    )
 }
 
 #[test]
@@ -23,6 +30,12 @@ fn immutable_revision_reuses_identical_facts_and_rejects_stale_reference() {
     let repo = SourceRevisionRepo::new(&conn);
     let original = repo.bind("case-a", "source-a", &content(), true).unwrap();
     assert_eq!(original.revision, 1);
+    let (_, persisted) = repo.current("case-a", "source-a").unwrap();
+    assert_eq!(persisted.acquisition_id.0, "acquisition-a");
+    assert_eq!(
+        persisted.logical_sha256_status,
+        DigestVerification::Verified
+    );
     assert_eq!(
         repo.bind("case-a", "source-a", &content(), false).unwrap(),
         original

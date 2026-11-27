@@ -24,6 +24,7 @@ pub(super) fn bind(
     inputs: &[domain::structure::SourceRevisionRef],
 ) -> Result<(), MdRaidPlanError> {
     let native_object_id = native_object_id(case_id, plan, inputs)?;
+    let acquisition_id = AcquisitionId(native_object_id.scope.clone());
     let object_id = native_object_id.storage_object_id();
     let repo = StorageObjectRepo::new(conn);
     repo.insert_if_absent(&StorageObjectRecord {
@@ -62,7 +63,14 @@ pub(super) fn bind(
     )
     .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))?;
     repo.bind_version(&case_id.0, &version)?;
-    bind_derived_revision(conn, case_id, source, &version.id.0, logical_size)?;
+    bind_derived_revision(
+        conn,
+        case_id,
+        source,
+        &version.id.0,
+        logical_size,
+        acquisition_id,
+    )?;
     Ok(())
 }
 
@@ -72,11 +80,12 @@ pub(super) fn bind_derived_revision(
     source: &DataSource,
     version_id: &str,
     logical_size: u64,
+    acquisition_id: AcquisitionId,
 ) -> Result<(), MdRaidPlanError> {
     SourceRevisionRepo::new(conn).bind(
         &case_id.0,
         &source.id.0,
-        &SourceRevisionContent::derived(logical_size, version_id.to_owned()),
+        &SourceRevisionContent::derived(acquisition_id, logical_size, version_id.to_owned()),
         true,
     )?;
     Ok(())

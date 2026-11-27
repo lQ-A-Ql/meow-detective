@@ -77,6 +77,7 @@ pub mod source_runtime;
 pub mod staging;
 pub mod step_recorder;
 pub mod storage_recovery_service;
+pub mod structure_analysis;
 pub mod text_service;
 pub mod timeline_service;
 pub mod v2_governance_service;

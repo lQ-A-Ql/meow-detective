@@ -9,6 +9,7 @@ pub mod cluster_service;
 pub mod deleted_recovery;
 pub mod derived_source_service;
 pub mod mount_service;
+pub mod structure_analysis;
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

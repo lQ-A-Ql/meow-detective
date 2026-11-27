@@ -1,6 +1,6 @@
 use domain::structure::{
-    NativeObservation, NativeVersion, ObservationIndex, ObservationLocation, SourceRevisionContent,
-    SourceRevisionRef,
+    AcquisitionId, NativeObservation, NativeVersion, ObservationIndex, ObservationLocation,
+    SourceRevisionContent, SourceRevisionRef,
 };
 use persistence_sqlite::repositories::{
     source_revision_repo::SourceRevisionRepo,
@@ -72,7 +72,12 @@ fn bind_revision(conn: &rusqlite::Connection, source_id: &str, case_id: &str) ->
         .bind(
             case_id,
             source_id,
-            &SourceRevisionContent::captured(4096, None, "a".repeat(64)),
+            &SourceRevisionContent::captured(
+                AcquisitionId("acquisition-a".into()),
+                4096,
+                None,
+                "a".repeat(64),
+            ),
             true,
         )
         .unwrap()

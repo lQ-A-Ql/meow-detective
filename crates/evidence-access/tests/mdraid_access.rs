@@ -60,6 +60,12 @@ fn native_md_ext4_uses_shared_filesystem_discovery_and_bounded_reads() {
     let mut changed_plan = plans[0].clone();
     changed_plan.layout += 1;
     assert!(open_mdraid_reader(&changed_plan).is_err());
+    let mut duplicate_slot = plans[0].clone();
+    duplicate_slot.members[1].superblock.dev_number =
+        duplicate_slot.members[0].superblock.dev_number;
+    duplicate_slot.members[1].superblock.dev_roles =
+        duplicate_slot.members[0].superblock.dev_roles.clone();
+    assert!(open_mdraid_reader(&duplicate_slot).is_err());
     let descriptor = write_mdraid_descriptor(workspace.path(), &plans[0]).unwrap();
     let mut tampered = plans[0].clone();
     tampered.source_content[0].logical_sha256 = "a".repeat(64);

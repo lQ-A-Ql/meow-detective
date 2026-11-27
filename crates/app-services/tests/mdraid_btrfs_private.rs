@@ -70,6 +70,7 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
                     &case_id.0,
                     &source.id.0,
                     &domain::structure::SourceRevisionContent::captured(
+                        domain::structure::AcquisitionId("btrfs".into()),
                         content.logical_size,
                         None,
                         content.logical_sha256.clone(),
