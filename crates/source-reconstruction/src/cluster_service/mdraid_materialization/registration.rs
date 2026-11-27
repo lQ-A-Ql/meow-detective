@@ -41,6 +41,7 @@ pub(super) fn register_mdraid_array(
         }
         persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
             .bind_inputs(&case_id.0, &existing.id.0, &inputs)?;
+        super::object_version::validate(conn, &case_id.0, &existing.id.0, &fingerprint)?;
         return Ok(existing);
     }
     let descriptor_path = write_mdraid_descriptor(case_root, plan)?;
@@ -73,6 +74,7 @@ pub(super) fn register_mdraid_array(
     )?;
     persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&transaction)
         .bind_inputs(&case_id.0, &source.id.0, &inputs)?;
+    super::object_version::bind(&transaction, case_id, &source, plan, &fingerprint)?;
     transaction.commit()?;
     Ok(source)
 }

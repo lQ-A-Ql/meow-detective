@@ -192,6 +192,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0071_source_revisions",
         include_str!("scripts/0071_source_revisions.sql"),
     ),
+    (
+        "0072_storage_object_versions",
+        include_str!("scripts/0072_storage_object_versions.sql"),
+    ),
 ];
 
 pub use super::case_graph::{
@@ -245,6 +249,7 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
         };
 
         if !already_applied {
+            let rebuild_storage = super::storage_rebuild::StorageRebuild::prepare(conn, name)?;
             // Wrap in a transaction for atomicity. If the script fails,
             // the transaction is rolled back and the migration can be retried.
             conn.execute_batch("BEGIN").map_err(|e| {
@@ -259,6 +264,7 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
             };
             match migration_result {
                 Ok(()) => {
+                    rebuild_storage.validate()?;
                     conn.execute("INSERT INTO schema_migrations (name) VALUES (?1)", [name])
                         .map_err(|e| {
                             DbError::Migration(format!(

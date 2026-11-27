@@ -53,6 +53,7 @@ pub enum StorageObjectKind {
     LvmPhysicalVolume,
     VolumeGroup,
     LogicalVolume,
+    MdRaid,
     VirtualDisk,
     CephCluster,
     CephOsd,
@@ -68,6 +69,7 @@ impl StorageObjectKind {
             Self::LvmPhysicalVolume => "lvm_physical_volume",
             Self::VolumeGroup => "volume_group",
             Self::LogicalVolume => "logical_volume",
+            Self::MdRaid => "md_raid",
             Self::VirtualDisk => "virtual_disk",
             Self::CephCluster => "ceph_cluster",
             Self::CephOsd => "ceph_osd",
@@ -199,7 +201,7 @@ impl InfrastructureRelationKind {
                 (source, target),
                 (
                     Storage(S::FileSystem),
-                    Storage(S::LogicalVolume | S::VirtualDisk)
+                    Storage(S::LogicalVolume | S::VirtualDisk | S::MdRaid)
                 )
             ),
             R::DerivedFrom => matches!(

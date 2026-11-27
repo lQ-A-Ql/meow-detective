@@ -15,6 +15,7 @@ use evidence_access::datasource_service::ImageCollectionPlan;
 mod build;
 mod catalog;
 mod inputs;
+mod object_version;
 mod phase;
 mod publication;
 mod registration;
@@ -77,6 +78,7 @@ pub fn materialize_mdraid_source_catalog_with_cancel(
         return Err(MdRaidPlanError::InvalidPublication);
     }
     inputs::validate(conn, &source)?;
+    object_version::validate(conn, &case_id.0, &source.id.0, &fingerprint)?;
     drop(open_mdraid_reader(&plan)?);
     verify_mdraid_source_content(&plan, cancel)?;
     let owner = uuid::Uuid::new_v4().to_string();

@@ -1,5 +1,6 @@
 use crate::connection::{DbError, DbResult};
 use rusqlite::{params, Connection, OptionalExtension};
+mod versions;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StorageObjectRecord {

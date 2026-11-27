@@ -56,6 +56,12 @@ pub(super) fn publish_build(
 ) -> Result<(), MdRaidPlanError> {
     super::ensure_not_cancelled(request.cancel)?;
     super::inputs::validate(request.case_conn, request.source)?;
+    super::object_version::validate(
+        request.case_conn,
+        &request.case_id.0,
+        &request.source.id.0,
+        request.fingerprint,
+    )?;
     request
         .attempt
         .refresh(request.case_conn, &request.source.id, request.fingerprint)?;
@@ -89,6 +95,8 @@ pub(super) fn verify_publication(
     fingerprint: &str,
 ) -> Result<(), MdRaidPlanError> {
     super::inputs::validate(conn, source)?;
+    let case_id = DataSourceRepo::new(conn).case_id(&source.id)?;
+    super::object_version::validate(conn, &case_id.0, &source.id.0, fingerprint)?;
     let publications = CatalogPublicationRepo::new(conn);
     let stored = publications
         .find(&source.id)?

@@ -39,5 +39,15 @@ pub(super) fn validate(path: &Path) -> Result<(), super::MdRaidPlanError> {
         return Err(super::MdRaidPlanError::InvalidPublication);
     }
     SourceRevisionRepo::new(&conn).require_current_inputs(&case_id.0, &source_id.0)?;
+    let version =
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&conn)
+            .version_for_source(&case_id.0, &source_id.0)?
+            .ok_or(super::MdRaidPlanError::InvalidPublication)?;
+    let plan = super::read_mdraid_descriptor(&descriptor)?;
+    if version.mapping_sha256 != super::mdraid_array_fingerprint(&plan)?
+        || version.adapter_version != "fs-lvm/mdraid-v2"
+    {
+        return Err(super::MdRaidPlanError::InvalidPublication);
+    }
     Ok(())
 }

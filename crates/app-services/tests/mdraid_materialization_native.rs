@@ -74,6 +74,21 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     )
     .unwrap();
     assert_eq!(source.id, repeated.id);
+    let version =
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&connection)
+            .version_for_source(&case.meta.id.0, &source.id.0)
+            .unwrap()
+            .unwrap();
+    assert_eq!(
+        version.mapping_sha256,
+        evidence_access::mdraid::mdraid_array_fingerprint(&plans[0]).unwrap()
+    );
+    let object =
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&connection)
+            .find(&version.storage_object_id)
+            .unwrap()
+            .unwrap();
+    assert_eq!(object.object_kind, "md_raid");
     let from_collection = cluster_service::materialize_linux_evidence_set_mdraid(
         &connection,
         &case.case_root,
