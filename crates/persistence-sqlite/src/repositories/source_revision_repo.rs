@@ -2,6 +2,8 @@ use crate::{DbError, DbResult};
 use domain::structure::{NativeObservation, SourceRevisionContent, SourceRevisionRef};
 use rusqlite::{params, Connection, OptionalExtension};
 
+mod ancestors;
+
 pub struct SourceRevisionRepo<'a> {
     conn: &'a Connection,
 }
@@ -71,6 +73,20 @@ impl<'a> SourceRevisionRepo<'a> {
     }
 
     pub fn require_current(&self, reference: &SourceRevisionRef) -> DbResult<()> {
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        self.require_current_revision(reference)?;
+        ancestors::validate(self, &reference.case_id, &reference.source_id, None, false)?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
+        Ok(())
+    }
+
+    fn require_current_revision(&self, reference: &SourceRevisionRef) -> DbResult<()> {
         require_case(self.conn, &reference.case_id, &reference.source_id)?;
         let current: Option<u64> = self.conn.query_row(
             "SELECT MAX(revision) FROM source_revisions WHERE source_id = ?1",
@@ -124,13 +140,17 @@ impl<'a> SourceRevisionRepo<'a> {
         if inputs.is_empty() {
             return Err(DbError::System("structure view inputs are missing".into()));
         }
+        if inputs.len() > ancestors::MAX_EDGES {
+            return Err(DbError::System(
+                "structure dependency graph exceeds validation limits".into(),
+            ));
+        }
         let transaction = self
             .conn
             .is_autocommit()
             .then(|| self.conn.unchecked_transaction())
             .transpose()?;
         require_case(self.conn, case_id, derived_source_id)?;
-        let repo = SourceRevisionRepo::new(self.conn);
         let mut expected = inputs.to_vec();
         expected.sort_by(|left, right| left.source_id.cmp(&right.source_id));
         for (index, input) in expected.iter().enumerate() {
@@ -142,18 +162,9 @@ impl<'a> SourceRevisionRepo<'a> {
                     "invalid structure view parent identity".into(),
                 ));
             }
-            repo.require_current(input)?;
-            let cycle: bool = self.conn.query_row(
-                "WITH RECURSIVE parents(id) AS (
-                 SELECT ?1 UNION SELECT parent_source_id FROM structure_view_inputs JOIN parents ON derived_source_id = parents.id)
-                 SELECT EXISTS(SELECT 1 FROM parents WHERE id = ?2)",
-                params![input.source_id, derived_source_id], |row| row.get(0),
-            )?;
-            if cycle {
-                return Err(DbError::System("structure view dependency cycle".into()));
-            }
         }
-        let prior = repo.inputs(case_id, derived_source_id)?;
+        ancestors::validate(self, case_id, derived_source_id, Some(&expected), true)?;
+        let prior = self.inputs(case_id, derived_source_id)?;
         if !prior.is_empty() && prior != expected {
             return Err(DbError::System("structure view inputs changed".into()));
         }
@@ -197,12 +208,14 @@ impl<'a> SourceRevisionRepo<'a> {
     }
 
     pub fn require_current_inputs(&self, case_id: &str, derived_source_id: &str) -> DbResult<()> {
-        let inputs = self.inputs(case_id, derived_source_id)?;
-        if inputs.is_empty() {
-            return Err(DbError::System("structure view inputs are missing".into()));
-        }
-        for input in inputs {
-            self.require_current(&input)?;
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        ancestors::validate(self, case_id, derived_source_id, None, true)?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
         }
         Ok(())
     }
