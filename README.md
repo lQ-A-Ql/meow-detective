@@ -6,7 +6,7 @@
 
 Meow~Detective 面向磁盘镜像、逻辑目录、Android 镜像与 Linux/PVE 证据源的本地离线分析。后端 workspace 当前包含 53 Rust crates。存储按控制面与明细分层：案件级数据库负责案件、数据源注册、任务和审计；每个数据源的 `source.db` 保存控制面、处理阶段与发布回执，分区、文件树、制品、时间线和源内索引以 Fjall 原子 generation 持久化于案件工作区；可重建的案件级跨源关系投影保存于 `indexes/case-graph.db`。
 
-当前工程事实快照包含 12 frontend pages、171 Tauri commands、58 source modules、migration scripts (83)、173 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
+当前工程事实快照包含 12 frontend pages、171 Tauri commands、59 source modules、migration scripts (85)、173 test files。计数由 `scripts/check-doc-drift.ps1` 与仓库结构同步校验。
 
 RAW/E01 导入采用作业级 SourceRuntime、独立 reader 与共享 E01 OpenPlan，默认 worker 数为 `min(CPU 数, 2)`；并发由 1536 MB 软限的估算资源准入与独立的 2048 MB RSS 硬限共同约束。来源元数据身份用于续导绑定和失效检查，证据内容摘要仍由字节校验路径生成。
 
