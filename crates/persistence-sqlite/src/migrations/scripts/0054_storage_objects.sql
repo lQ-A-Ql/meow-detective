@@ -15,15 +15,6 @@ CREATE TABLE storage_objects (
 
 CREATE INDEX idx_storage_objects_case_kind ON storage_objects(case_id, object_kind, status);
 
-CREATE TABLE storage_object_memberships (
-    storage_object_id TEXT NOT NULL REFERENCES storage_objects(id) ON DELETE CASCADE,
-    data_source_id TEXT NOT NULL REFERENCES data_sources(id) ON DELETE CASCADE,
-    role TEXT NOT NULL,
-    confidence TEXT NOT NULL DEFAULT 'candidate' CHECK (confidence IN ('candidate', 'corroborated', 'proven', 'conflicted')),
-    provenance_json TEXT NOT NULL DEFAULT '{}',
-    PRIMARY KEY (storage_object_id, data_source_id, role)
-);
-
 CREATE TABLE storage_relations (
     source_object_id TEXT NOT NULL REFERENCES storage_objects(id) ON DELETE CASCADE,
     target_object_id TEXT NOT NULL REFERENCES storage_objects(id) ON DELETE CASCADE,

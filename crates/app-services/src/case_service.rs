@@ -42,8 +42,6 @@ pub enum CaseServiceError {
     UnsupportedStorageFormat(String),
     #[error("Unsupported data source platform in case: {0}")]
     UnsupportedPlatform(String),
-    #[error("Case uses the retired Linux cluster model and must be re-imported")]
-    TopologyReimportRequired,
     #[error("Data source '{data_source_id}' deletion requires recovery from case tombstone '{tombstone}': {reason}")]
     DataSourceDeleteRecoveryPending {
         data_source_id: String,
@@ -99,9 +97,7 @@ impl transport::ServiceErrorCategory for CaseServiceError {
                 transport::ErrorCategory::Validation
             }
             Self::UnsupportedStorageFormat(_) => transport::ErrorCategory::Unsupported,
-            Self::UnsupportedPlatform(_) | Self::TopologyReimportRequired => {
-                transport::ErrorCategory::Unsupported
-            }
+            Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
             Self::NotFound(_) => transport::ErrorCategory::Validation,
         }
     }
@@ -118,7 +114,6 @@ impl transport::ServiceErrorCategory for CaseServiceError {
                 Some("DATA_SOURCE_DELETE_ROLLBACK_FAILED")
             }
             Self::StorageHandlesInUse(_) => Some("STORAGE_HANDLES_IN_USE"),
-            Self::TopologyReimportRequired => Some("TOPOLOGY_REIMPORT_REQUIRED"),
             Self::UnsupportedStorageFormat(_) => Some("UNSUPPORTED_STORAGE_FORMAT"),
             _ => None,
         }
@@ -138,9 +133,6 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             Self::StorageHandlesInUse(_) => {
                 Some("The data source is still in use and cannot be deleted yet.")
             }
-            Self::TopologyReimportRequired => {
-                Some("This case uses the retired Linux cluster model and must be re-imported.")
-            }
             Self::UnsupportedStorageFormat(_) => {
                 Some("This case uses an unsupported storage format and must be re-imported.")
             }
@@ -154,7 +146,6 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             | Self::DataSourceDeleteCleanupPending { .. }
             | Self::DataSourceDeleteRollbackFailed { .. }
             | Self::StorageHandlesInUse(_) => Some(true),
-            Self::TopologyReimportRequired => Some(false),
             Self::UnsupportedStorageFormat(_) => Some(false),
             _ => None,
         }
@@ -198,10 +189,6 @@ impl transport::ServiceErrorCategory for CaseServiceError {
                 "dataSourceId": data_source_id,
                 "state": "activeHandles"
             })),
-            Self::TopologyReimportRequired => Some(serde_json::json!({
-                "reimportRequired": true,
-                "reason": "retiredLinuxClusterModel"
-            })),
             Self::UnsupportedStorageFormat(message) => Some(serde_json::json!({
                 "reimportRequired": true,
                 "reason": "unsupportedStorageFormat",
@@ -221,9 +208,6 @@ impl transport::ServiceErrorCategory for CaseServiceError {
             ),
             Self::DataSourceDeleteCleanupPending { .. } => Some(
                 "Retry managed-storage cleanup; the data source registration has already been removed.",
-            ),
-            Self::TopologyReimportRequired => Some(
-                "Create a new case and re-import the evidence to build typed Linux topology scopes.",
             ),
             Self::UnsupportedStorageFormat(_) => Some(
                 "Create a new case and re-import the evidence using the current storage format.",

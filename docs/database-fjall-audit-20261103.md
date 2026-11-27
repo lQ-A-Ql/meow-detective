@@ -1,8 +1,8 @@
 # SQLite 与 Fjall 数据库审计
 
 审计日期为 2026-11-10。并发写入设计更新于 2026-11-24，样本告警诊断更新于 2026-11-25。
-当前 source 格式：`source_042_android_fjall_only`
-验证分支基线：`044c5566`
+当前 source 格式：`source_038_linux_evidence_facts`
+清理验证基线：`a4a90726`
 
 ## 存储规则
 

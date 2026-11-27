@@ -38,7 +38,6 @@ fn run_all_migrations() {
         "data_sources",
         "jobs",
         "reports",
-        "tags",
         "graph_nodes",
         "graph_edges",
     ] {
@@ -59,6 +58,30 @@ fn application_schema_omits_source_detail_tables() {
     runner::run_all(&conn).unwrap();
 
     for table in ["file_entries", "artifacts", "timeline_events"] {
+        let exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(!exists, "application database must not own {table}");
+    }
+}
+
+#[test]
+fn application_schema_omits_retired_tables() {
+    let conn = open_in_memory().unwrap();
+    runner::run_all(&conn).unwrap();
+
+    for table in [
+        "tags",
+        "tag_bindings",
+        "partitions",
+        "chain_of_custody",
+        "data_source_clusters",
+        "storage_object_memberships",
+    ] {
         let exists: bool = conn
             .query_row(
                 "SELECT COUNT(*) > 0 FROM sqlite_master WHERE type='table' AND name=?1",

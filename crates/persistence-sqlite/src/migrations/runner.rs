@@ -11,14 +11,9 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     ),
     ("0006_jobs", include_str!("scripts/0006_jobs.sql")),
     ("0007_reports", include_str!("scripts/0007_reports.sql")),
-    ("0008_tags", include_str!("scripts/0008_tags.sql")),
     (
         "0010_job_partition_progress",
         include_str!("scripts/0010_job_partition_progress.sql"),
-    ),
-    (
-        "0013_create_partitions",
-        include_str!("scripts/0013_create_partitions.sql"),
     ),
     (
         "0015_create_audit_log",
@@ -27,10 +22,6 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     (
         "0016_add_cascade_delete",
         include_str!("scripts/0016_add_cascade_delete.sql"),
-    ),
-    (
-        "0017_add_missing_indexes",
-        include_str!("scripts/0017_add_missing_indexes.sql"),
     ),
     (
         "0018_job_partial_counts",
@@ -59,14 +50,9 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0029_entity_relationships",
         include_str!("scripts/0029_entity_relationships.sql"),
     ),
-    ("0030_custody", include_str!("scripts/0030_custody.sql")),
     (
         "0034_data_source_storage",
         include_str!("scripts/0034_data_source_storage.sql"),
-    ),
-    (
-        "0035_data_source_clusters",
-        include_str!("scripts/0035_data_source_clusters.sql"),
     ),
     (
         "0036_graph_node_order_index",
@@ -83,14 +69,6 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
     (
         "0039_data_source_catalog_publications",
         include_str!("scripts/0039_data_source_catalog_publications.sql"),
-    ),
-    (
-        "0040_cephfs_derived_sources",
-        include_str!("scripts/0040_cephfs_derived_sources.sql"),
-    ),
-    (
-        "0041_cephfs_assembly_binding",
-        include_str!("scripts/0041_cephfs_assembly_binding.sql"),
     ),
     (
         "0043_bitlocker_restore_intents",
@@ -263,13 +241,7 @@ pub(super) fn run_migrations(conn: &Connection, migrations: &[(&str, &str)]) -> 
             conn.execute_batch("BEGIN").map_err(|e| {
                 DbError::Migration(format!("Failed to begin transaction for {}: {}", name, e))
             })?;
-            let migration_result = if *name == "source_015_ceph_bluestore_rbd_header_context" {
-                add_ceph_bluestore_rbd_header_context(conn)
-            } else if *name == "source_024_ntfs_deleted_recovery" {
-                super::ntfs_deleted_recovery::add_sequence_column(conn, sql)
-            } else {
-                conn.execute_batch(sql).map_err(DbError::from)
-            };
+            let migration_result = conn.execute_batch(sql).map_err(DbError::from);
             match migration_result {
                 Ok(()) => {
                     rebuild_storage.validate()?;
@@ -307,48 +279,4 @@ fn all_migrations_recorded(conn: &Connection, migrations: &[(&str, &str)]) -> bo
     };
     let recorded = rows.filter_map(Result::ok).collect::<HashSet<_>>();
     migrations.iter().all(|(name, _)| recorded.contains(*name))
-}
-
-fn add_ceph_bluestore_rbd_header_context(conn: &Connection) -> DbResult<()> {
-    let columns = [
-        (
-            "operation_features_hex",
-            "ALTER TABLE ceph_bluestore_rbd_headers
-             ADD COLUMN operation_features_hex TEXT CHECK (
-                 operation_features_hex IS NULL
-                 OR (
-                     length(operation_features_hex) = 16
-                     AND operation_features_hex NOT GLOB '*[^0-9a-f]*'
-                 )
-             )",
-        ),
-        (
-            "parent_key_present",
-            "ALTER TABLE ceph_bluestore_rbd_headers
-             ADD COLUMN parent_key_present INTEGER NOT NULL DEFAULT 0
-             CHECK (parent_key_present IN (0, 1))",
-        ),
-    ];
-    for (column, sql) in columns {
-        let exists: bool = conn.query_row(
-            "SELECT COUNT(*) > 0 FROM pragma_table_info('ceph_bluestore_rbd_headers') WHERE name = ?1",
-            [column],
-            |row| row.get(0),
-        )?;
-        if !exists {
-            conn.execute_batch(sql)?;
-        }
-    }
-    conn.execute_batch(
-        "CREATE INDEX IF NOT EXISTS idx_ceph_bluestore_objects_rbd_lookup
-         ON ceph_bluestore_objects(
-             inventory_id,
-             object_name,
-             decoded_pool,
-             object_namespace,
-             snap_hex,
-             object_identity_sha256
-         )",
-    )?;
-    Ok(())
 }
