@@ -57,6 +57,26 @@ pub enum LvmError {
         origin: String,
     },
 
+    #[error("thin pool transaction mismatch: LVM expects {expected}, metadata contains {actual}")]
+    ThinPoolTransactionMismatch { expected: u64, actual: u64 },
+
+    #[error("thin pool transaction ID is missing from LVM metadata")]
+    MissingThinPoolTransaction,
+
+    #[error("thin device {device_id} transaction {actual} exceeds pool transaction {maximum}")]
+    ThinDeviceTransaction {
+        device_id: u64,
+        actual: u64,
+        maximum: u64,
+    },
+
+    #[error("thin device {device_id} maps {mapped_blocks} blocks but logical capacity is {logical_blocks}")]
+    ThinDeviceCapacity {
+        device_id: u64,
+        mapped_blocks: u64,
+        logical_blocks: u64,
+    },
+
     /// Volume group metadata references a PV that does not have a supplied reader.
     #[error("missing reader for physical volume '{pv_name}' ({pv_uuid})")]
     MissingPhysicalVolumeReader { pv_name: String, pv_uuid: String },

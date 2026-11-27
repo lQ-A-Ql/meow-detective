@@ -94,12 +94,12 @@ fn mdraid_factory(path: &Path) -> io::Result<SharedReaderFactory> {
     let path = path.to_path_buf();
     let descriptor_snapshot =
         super::snapshot::SourceSnapshot::capture(std::slice::from_ref(&path))?;
-    let plan: crate::mdraid::MdRaidArrayPlan =
-        serde_json::from_slice(&std::fs::read(&path)?).map_err(io::Error::other)?;
+    let plan = crate::mdraid::read_mdraid_descriptor(&path).map_err(io::Error::other)?;
     let template = crate::mdraid::open_mdraid_reader(&plan).map_err(io::Error::other)?;
     let size = template.info().size;
     let metadata_identity =
         crate::mdraid::mdraid_array_fingerprint(&plan).map_err(io::Error::other)?;
+    let reader_bytes = crate::mdraid::mdraid_reader_content_bytes(&plan);
     let route = super::resources::ResourceRoute::default();
     let plan = Arc::new(plan);
     let validation_plan = plan.clone();
@@ -118,7 +118,7 @@ fn mdraid_factory(path: &Path) -> io::Result<SharedReaderFactory> {
             stable_snapshot: true,
         },
         route,
-        reader_bytes: 1024 * 1024,
+        reader_bytes: reader_bytes.saturating_add(1024 * 1024),
         resources: None,
     }))
 }

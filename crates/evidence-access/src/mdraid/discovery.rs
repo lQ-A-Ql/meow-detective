@@ -20,9 +20,22 @@ struct PvEvidence {
 pub fn discover_linux_evidence_set_mdraid(
     members: &[MdRaidDiscoveryMember<'_>],
 ) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
+    discover_linux_evidence_set_mdraid_with_cancel(
+        members,
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+}
+
+pub fn discover_linux_evidence_set_mdraid_with_cancel(
+    members: &[MdRaidDiscoveryMember<'_>],
+    cancel: &std::sync::atomic::AtomicBool,
+) -> Result<Vec<MdRaidArrayPlan>, MdRaidPlanError> {
     let mut arrays = BTreeMap::new();
     let mut pvs = Vec::new();
     for member in members {
+        if cancel.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(MdRaidPlanError::Cancelled);
+        }
         let mut reader =
             datasource_service::open_evidence_reader(member.source_path, member.source_kind)?;
         let probe = datasource_service::detect_image_filesystem(&mut reader)?;
@@ -47,6 +60,7 @@ pub fn discover_linux_evidence_set_mdraid(
             .iter()
             .any(|member| member.superblock.data_size_sectors != array.min_data_size_sectors);
     }
+    super::content::bind_content(&mut plans, cancel)?;
     Ok(plans)
 }
 
@@ -379,6 +393,7 @@ fn insert_member(
         min_data_size_sectors: member.superblock.data_size_sectors,
         capacity_mismatch: false,
         source_snapshot: SourceSnapshot::default(),
+        source_content: Vec::new(),
         members: Vec::new(),
     });
     if let Some(index) = plan

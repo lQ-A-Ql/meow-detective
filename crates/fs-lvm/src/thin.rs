@@ -74,6 +74,14 @@ impl ThinMetadata {
         &self.superblock
     }
 
+    pub fn validate_pool_transaction(&self, expected: u64) -> Result<()> {
+        let actual = self.superblock.transaction_id;
+        if actual != expected {
+            return Err(LvmError::ThinPoolTransactionMismatch { expected, actual });
+        }
+        Ok(())
+    }
+
     pub fn data_block_size_bytes(&self) -> Result<u64> {
         checked_mul(
             self.superblock.data_block_size_sectors as u64,

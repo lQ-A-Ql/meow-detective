@@ -43,6 +43,14 @@ fn native_md_ext4_uses_shared_filesystem_discovery_and_bounded_reads() {
     changed_plan.layout += 1;
     assert!(open_mdraid_reader(&changed_plan).is_err());
     let descriptor = write_mdraid_descriptor(workspace.path(), &plans[0]).unwrap();
+    let mut tampered = plans[0].clone();
+    tampered.source_content[0].logical_sha256 = "a".repeat(64);
+    std::fs::write(&descriptor, serde_json::to_vec(&tampered).unwrap()).unwrap();
+    assert!(matches!(
+        evidence_access::mdraid::read_mdraid_descriptor(&descriptor),
+        Err(evidence_access::mdraid::MdRaidPlanError::InvalidContentIdentity),
+    ));
+    std::fs::write(&descriptor, serde_json::to_vec_pretty(&plans[0]).unwrap()).unwrap();
     let probe = probe_mdraid_filesystems(&descriptor).unwrap();
     assert_eq!(probe.candidates.len(), 1);
     assert_eq!(
@@ -68,14 +76,39 @@ fn native_md_ext4_uses_shared_filesystem_discovery_and_bounded_reads() {
     file.read_exact(&mut actual).unwrap();
     assert_eq!(actual, expected[7331..7331 + 73]);
     drop(file);
+    let original_modified = std::fs::metadata(&paths[0]).unwrap().modified().unwrap();
+    let original = std::fs::read(&paths[0]).unwrap();
+    let payload_offset = original
+        .windows(64)
+        .position(|bytes| bytes == &expected[..64])
+        .expect("native file payload");
     let mut changed = std::fs::OpenOptions::new()
         .write(true)
         .open(&paths[0])
         .unwrap();
-    changed.seek(SeekFrom::Start(4096 + 32)).unwrap();
-    changed.write_all(b"x").unwrap();
+    changed
+        .seek(SeekFrom::Start(payload_offset as u64))
+        .unwrap();
+    changed.write_all(&[expected[0] ^ 0x80]).unwrap();
     changed.sync_all().unwrap();
-    assert!(open_mdraid_reader(&plans[0]).is_err());
+    changed
+        .set_times(std::fs::FileTimes::new().set_modified(original_modified))
+        .unwrap();
+    drop(changed);
+    plans[0].source_snapshot.validate().unwrap();
+    assert!(matches!(
+        evidence_access::mdraid::verify_mdraid_source_content(
+            &plans[0],
+            &std::sync::atomic::AtomicBool::new(false),
+        ),
+        Err(evidence_access::mdraid::MdRaidPlanError::SourceContentChanged),
+    ));
+    let result = open_mdraid_filesystem(&descriptor, &probe.candidates[0]).and_then(|filesystem| {
+        filesystem
+            .read_file_range("evidence.bin", 0, 64)
+            .map_err(evidence_access::file_service::FileServiceError::Io)
+    });
+    assert!(result.is_err());
 }
 
 #[test]

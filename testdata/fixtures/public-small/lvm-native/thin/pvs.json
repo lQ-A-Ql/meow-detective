@@ -1,0 +1,15 @@
+  {
+      "report": [
+          {
+              "pvseg": [
+                  {"pv_name":"/dev/loop0", "pe_start":"1048576", "pvseg_start":"0", "lv_name":"[lvol0_pmspare]"},
+                  {"pv_name":"/dev/loop0", "pe_start":"1048576", "pvseg_start":"4", "lv_name":"[pool_tdata]"},
+                  {"pv_name":"/dev/loop0", "pe_start":"1048576", "pvseg_start":"52", "lv_name":"[pool_tmeta]"},
+                  {"pv_name":"/dev/loop0", "pe_start":"1048576", "pvseg_start":"56", "lv_name":""}
+              ]
+          }
+      ]
+      ,
+      "log": [
+      ]
+  }

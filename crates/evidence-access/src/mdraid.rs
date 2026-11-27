@@ -5,9 +5,15 @@ use thiserror::Error;
 
 use crate::datasource_service::{self, LvmLogicalVolumeIdentity};
 
+mod content;
 mod discovery;
 mod filesystem;
 
+pub use content::{
+    mdraid_reader_content_bytes, verify_mdraid_source_content, MdRaidSourceContent,
+    CONTENT_CHUNK_BYTES,
+};
+pub use discovery::discover_linux_evidence_set_mdraid_with_cancel;
 pub use discovery::{discover_linux_evidence_set_mdraid, MdRaidDiscoveryMember};
 pub(crate) use filesystem::open_mdraid_partition;
 pub use filesystem::{open_mdraid_filesystem, probe_mdraid_filesystems};
@@ -34,6 +40,10 @@ pub enum MdRaidPlanError {
     Busy,
     #[error("MD RAID catalog publication is inconsistent")]
     InvalidPublication,
+    #[error("MD RAID source content identity is missing or invalid")]
+    InvalidContentIdentity,
+    #[error("MD RAID source content changed since discovery")]
+    SourceContentChanged,
     #[error("MD RAID catalog materialization cancelled")]
     Cancelled,
 }
@@ -48,7 +58,10 @@ impl transport::ServiceErrorCategory for MdRaidPlanError {
             Self::Classification(error) => error.category(),
             Self::Json(_) => transport::ErrorCategory::Parser,
             Self::Cancelled => transport::ErrorCategory::Cancelled,
-            Self::Generation(_) | Self::InvalidPublication => transport::ErrorCategory::Parser,
+            Self::Generation(_)
+            | Self::InvalidPublication
+            | Self::InvalidContentIdentity
+            | Self::SourceContentChanged => transport::ErrorCategory::Parser,
             Self::Busy => transport::ErrorCategory::Validation,
         }
     }
@@ -132,6 +145,7 @@ pub struct MdRaidArrayPlan {
     pub min_data_size_sectors: u64,
     pub capacity_mismatch: bool,
     pub source_snapshot: crate::source_runtime::snapshot::SourceSnapshot,
+    pub source_content: Vec<MdRaidSourceContent>,
     pub members: Vec<MdRaidMemberPlan>,
 }
 
@@ -140,9 +154,10 @@ pub fn open_mdraid_reader(
 ) -> Result<fs_lvm::mdraid::MdRaidReader, MdRaidPlanError> {
     validate_plan_shape(plan)?;
     validate_source_snapshot(plan)?;
+    content::validate_content_bindings(plan)?;
     let mut members = Vec::with_capacity(plan.members.len());
     for member in &plan.members {
-        let mut reader = open_member_reader(&member.origin)?;
+        let mut reader = open_member_reader(plan, &member.origin)?;
         let size = reader.info().size;
         let current = fs_lvm::mdraid::probe_superblock(&mut *reader, size)
             .ok_or_else(|| {
@@ -189,6 +204,7 @@ pub fn mdraid_array_fingerprint(plan: &MdRaidArrayPlan) -> Result<String, MdRaid
 }
 
 fn open_member_reader(
+    plan: &MdRaidArrayPlan,
     origin: &MdRaidMemberOrigin,
 ) -> Result<Box<dyn evidence_core::EvidenceReader>, MdRaidPlanError> {
     match origin {
@@ -209,11 +225,11 @@ fn open_member_reader(
                             ),
                         )
                     })?;
-                    datasource_service::open_evidence_reader(
+                    content::open_verified_source(
+                        plan,
                         std::path::Path::new(&source.source_path),
                         kind,
                     )
-                    .map_err(MdRaidPlanError::Io)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
             let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())?;
@@ -240,7 +256,8 @@ fn open_member_reader(
             byte_offset,
             byte_length,
         } => {
-            let reader = datasource_service::open_evidence_reader(
+            let reader = content::open_verified_source(
+                plan,
                 std::path::Path::new(source_path),
                 source_kind,
             )?;
@@ -298,9 +315,23 @@ pub fn write_mdraid_descriptor(
 pub fn open_persisted_mdraid_reader(
     descriptor_path: &std::path::Path,
 ) -> Result<fs_lvm::mdraid::MdRaidReader, MdRaidPlanError> {
+    open_mdraid_reader(&read_mdraid_descriptor(descriptor_path)?)
+}
+
+pub fn read_mdraid_descriptor(
+    descriptor_path: &std::path::Path,
+) -> Result<MdRaidArrayPlan, MdRaidPlanError> {
     let payload = std::fs::read(descriptor_path)?;
     let plan: MdRaidArrayPlan = serde_json::from_slice(&payload)?;
-    open_mdraid_reader(&plan)
+    let expected = format!(
+        "{}-{}.json",
+        hex::encode(plan.array_uuid),
+        mdraid_array_fingerprint(&plan)?,
+    );
+    if descriptor_path.file_name().and_then(|name| name.to_str()) != Some(expected.as_str()) {
+        return Err(MdRaidPlanError::InvalidContentIdentity);
+    }
+    Ok(plan)
 }
 
 fn validate_plan_shape(plan: &MdRaidArrayPlan) -> Result<(), MdRaidPlanError> {

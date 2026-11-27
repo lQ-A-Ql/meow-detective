@@ -53,6 +53,7 @@ fn plan() -> MdRaidArrayPlan {
         min_data_size_sectors: 16,
         capacity_mismatch: false,
         source_snapshot: Default::default(),
+        source_content: Vec::new(),
         members: vec![MdRaidMemberPlan {
             superblock,
             origin: app_services::cluster_service::MdRaidMemberOrigin::Lvm {

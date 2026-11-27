@@ -34,8 +34,7 @@ pub(super) fn register_mdraid_array(
         if repo.case_id(&id)? != *case_id || existing.kind != DataSourceKind::MdRaid {
             return Err(MdRaidPlanError::InvalidPublication);
         }
-        let persisted: MdRaidArrayPlan =
-            serde_json::from_slice(&std::fs::read(&existing.source_path)?)?;
+        let persisted = evidence_access::mdraid::read_mdraid_descriptor(&existing.source_path)?;
         if persisted != *plan {
             return Err(MdRaidPlanError::InvalidPublication);
         }

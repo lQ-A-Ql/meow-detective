@@ -182,8 +182,13 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 MD 目录与预览共用文件系统探测及打开入口。EXT4 已有公开端到端证明；
 分区后的 MD、MD 后 LVM、XFS、Btrfs 组合仍需要各自的原生公开验收。
 来源身份包含全部 RAW backing file/E01 segment 的路径、长度、修改时间、创建时间，
-以及原生 MD 元数据和成员关系；该元数据快照不充当原始证据内容摘要。
-派生源按输入身份保存独立 descriptor，通过处理阶段、generation 和发布凭据验证目录复用。
+以及原生 MD 元数据和成员关系。每个独立输入还保存完整逻辑磁盘 SHA-256、
+固定 1 MiB 区块摘要和区块长度，使用现有 RustCrypto SHA-256 实现。
+目录复用及封存前重新验证完整逻辑摘要；读取仅返回经过摘要验证的区块字节，
+每个底层读取器缓存一个区块，摘要元数据与缓存计入 MD 资源估计。
+完整摘要验证支持取消。同一次集合发现只对每个独立输入计算一次摘要。
+E01 摘要覆盖解压后的逻辑字节；原始 E01 容器摘要由独立来源哈希流程管理。
+派生源按内容身份保存独立 descriptor，通过处理阶段、generation 和发布凭据验证目录复用。
 旧 descriptor 格式需要重新导入。
 同一来源的分区探测结果供直接 MD 与 PV 发现共同使用。LVM committed metadata
 的版本选择由 `fs-lvm::metadata::select_committed_metadata` 统一处理，
@@ -194,6 +199,21 @@ Kubernetes 清单保留固定数量且顺序稳定的候选，同时统计全部
 拓扑写入要求集合成员、案件归属与数据源就绪状态一致。
 集合摘要使用同一次读取完成清单摘要验证和元数据投影，并呈现清单记录的扫描缺口。
 事件与拓扑共用成员准入，成员记录与实际数据源均须处于就绪状态。
+
+### 4c. dm-thin 一致性边界
+
+`fs-lvm --test thin_native` 使用 LVM2、Linux device-mapper、
+`thin_check`、`thin_dump` 和 `thin_restore` 生成的公开小镜像。
+验证 LVM thin-pool transaction 与 metadata transaction 相等、设备 transaction
+不超过 pool transaction、设备映射数量不超过逻辑容量、完整物理数据区块边界、
+稀疏区域补零及完整 16 MiB 逻辑字节摘要。
+其中 transaction 冲突镜像的二进制 metadata 能通过原生 `thin_check`，
+包含它的 LVM pool 声明另一个 transaction，应用在打开 thin LV 时拒绝。
+这些修改只检查现有解析结果之间的一致性。
+
+thin 二进制 metadata 的 checksum、version、feature 与完整树一致性验证仍未完成；
+尚未确认可直接复用且满足 MIT 条件的格式解析实现。
+当前 thin 能力保持 Experimental，不能据此声明 metadata 完整性已经通过。
 
 ## 5. 容器邮件解析器 (V3 计划)
 

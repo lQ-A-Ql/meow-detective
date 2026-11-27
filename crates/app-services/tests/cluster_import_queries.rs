@@ -226,6 +226,7 @@ fn summary_reads_persisted_mdraid_without_materializing_a_source() {
         min_data_size_sectors: 16,
         capacity_mismatch: false,
         source_snapshot: Default::default(),
+        source_content: Vec::new(),
         members: vec![MdRaidMemberPlan {
             superblock: MdRaidSuperblock {
                 metadata_version: fs_lvm::mdraid::MdRaidMetadataVersion::V1_2,

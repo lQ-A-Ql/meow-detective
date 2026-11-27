@@ -6,7 +6,7 @@
       "category": "Linux MD",
       "item": "全部阵列状态、layout 与文件系统组合",
       "status": "partial",
-      "summary": "公开原生镜像验证 linear、RAID0/1/5/6/10 的指定布局以及 RAID0/EXT4 目录和预览；RAID4、更多 layout、分区后的 MD、MD 后 LVM、XFS/Btrfs 仍需独立公开验收。reshape、重建状态、未知 feature、events 不一致或可读取副本内容冲突均拒绝。成员元数据快照不证明修改时间被保持时的内容一致性",
+      "summary": "公开原生镜像验证 linear、RAID0/1/5/6/10 的指定布局以及 RAID0/EXT4 目录和预览；RAID4、更多 layout、分区后的 MD、MD 后 LVM、XFS/Btrfs 仍需独立公开验收。reshape、重建状态、未知 feature、events 不一致或可读取副本内容冲突均拒绝。完整逻辑磁盘 SHA-256 与区块摘要绑定输入身份，目录复用及发布前重新校验，范围读取验证涉及区块；原始容器哈希属于独立来源哈希流程",
       "affectedChains": [
         "MD",
         "LVM",
@@ -458,7 +458,7 @@
       "category": "Linux LVM/PVE",
       "item": "LVM thin/cache/RAID/snapshot/VDO/writecache",
       "status": "partial",
-      "summary": "direct linear/striped 与基础 dm-thin 只读映射已实现；thin metadata checksum/repair、cache、RAID、snapshot、VDO、writecache 仍不支持且必须 fail closed",
+      "summary": "direct linear/striped 与基础 dm-thin 只读映射已实现；thin 已验证 pool/device transaction 关系、设备映射数量和数据区块容量。thin metadata checksum、version、feature 与完整树一致性验证仍未完成，不能声明 metadata 完整性通过。cache、RAID、snapshot、VDO、writecache 仍不支持并拒绝打开",
       "affectedChains": [
         "LVM"
       ],

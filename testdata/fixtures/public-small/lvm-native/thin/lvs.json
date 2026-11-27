@@ -1,0 +1,16 @@
+  {
+      "report": [
+          {
+              "lv": [
+                  {"lv_name":"[lvol0_pmspare]", "lv_size":"4.00m", "lv_attr":"ewi-------", "thin_id":"", "transaction_id":""},
+                  {"lv_name":"pool", "lv_size":"48.00m", "lv_attr":"twi-aotz--", "thin_id":"", "transaction_id":"1"},
+                  {"lv_name":"[pool_tdata]", "lv_size":"48.00m", "lv_attr":"Twi-ao----", "thin_id":"", "transaction_id":""},
+                  {"lv_name":"[pool_tmeta]", "lv_size":"4.00m", "lv_attr":"ewi-ao----", "thin_id":"", "transaction_id":""},
+                  {"lv_name":"thin", "lv_size":"16.00m", "lv_attr":"Vwi-a-tz--", "thin_id":"1", "transaction_id":"0"}
+              ]
+          }
+      ]
+      ,
+      "log": [
+      ]
+  }

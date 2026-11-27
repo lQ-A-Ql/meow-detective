@@ -102,7 +102,9 @@ fn acquire_budget(
     source_kernel::resource_budget::global_pool()
         .acquire(
             source_kernel::resource_budget::Resources {
-                bytes: source_kernel::resource_budget::ENUMERATION_BYTES,
+                bytes: source_kernel::resource_budget::ENUMERATION_BYTES
+                    + evidence_access::mdraid::mdraid_reader_content_bytes(&plan)
+                        .saturating_mul(workers as u64 + 1),
                 readers: physical_readers * (workers as u64 + 1),
                 workers: workers as u64,
                 catalogs: 1,

@@ -127,6 +127,7 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         Err(cluster_service::MdRaidPlanError::Cancelled),
     ));
     let descriptor_bytes = std::fs::read(&source.source_path).unwrap();
+    let original_modified = std::fs::metadata(&paths[0]).unwrap().modified().unwrap();
     let mut changed = std::fs::OpenOptions::new()
         .write(true)
         .open(&paths[0])
@@ -134,7 +135,22 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     changed.seek(SeekFrom::End(-1)).unwrap();
     changed.write_all(&[0x19]).unwrap();
     changed.sync_all().unwrap();
+    changed
+        .set_times(std::fs::FileTimes::new().set_modified(original_modified))
+        .unwrap();
     drop(changed);
+    assert_eq!(
+        std::fs::metadata(&paths[0]).unwrap().modified().unwrap(),
+        original_modified
+    );
+    plans[0].source_snapshot.validate().unwrap();
+    assert!(matches!(
+        evidence_access::mdraid::verify_mdraid_source_content(
+            &plans[0],
+            &std::sync::atomic::AtomicBool::new(false),
+        ),
+        Err(evidence_access::mdraid::MdRaidPlanError::SourceContentChanged),
+    ));
     assert!(cluster_service::materialize_mdraid_source_catalog(
         &connection,
         &case.case_root,

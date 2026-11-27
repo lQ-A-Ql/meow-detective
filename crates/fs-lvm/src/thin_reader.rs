@@ -41,10 +41,25 @@ impl ThinLvReader {
                 "thin data block size resolved to zero bytes".to_string(),
             ));
         }
-        if metadata.device_detail(device_id)?.is_none() {
-            return Err(metadata_error(format!(
+        let detail = metadata.device_detail(device_id)?.ok_or_else(|| {
+            metadata_error(format!(
                 "thin metadata has no device detail record for device_id {device_id}"
-            )));
+            ))
+        })?;
+        if detail.transaction_id > metadata.superblock().transaction_id {
+            return Err(LvmError::ThinDeviceTransaction {
+                device_id,
+                actual: detail.transaction_id,
+                maximum: metadata.superblock().transaction_id,
+            });
+        }
+        let logical_blocks = total_size.div_ceil(data_block_size);
+        if detail.mapped_blocks > logical_blocks {
+            return Err(LvmError::ThinDeviceCapacity {
+                device_id,
+                mapped_blocks: detail.mapped_blocks,
+                logical_blocks,
+            });
         }
         let info = ReaderInfo {
             path: std::path::PathBuf::from(format!("lvm+thin://{}", lv_name)),
@@ -95,6 +110,22 @@ impl ThinLvReader {
                             )
                         })?;
                     let mut reader = lock_data_reader(&self.data_reader)?;
+                    let block_end = mapping
+                        .block
+                        .checked_add(1)
+                        .and_then(|block| block.checked_mul(self.data_block_size))
+                        .ok_or_else(|| {
+                            std::io::Error::new(
+                                std::io::ErrorKind::InvalidData,
+                                "thin data block end overflows",
+                            )
+                        })?;
+                    if block_end > reader.info().size {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::InvalidData,
+                            "thin mapping exceeds data device capacity",
+                        ));
+                    }
                     reader.seek(SeekFrom::Start(data_offset))?;
                     reader.read_exact(&mut buf[..to_read])?;
                 }

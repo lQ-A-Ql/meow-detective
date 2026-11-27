@@ -2,8 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use domain::{CaseId, DataSource, DataSourceId};
 use evidence_access::mdraid::{
-    discover_linux_evidence_set_mdraid, mdraid_array_fingerprint, open_mdraid_reader,
-    MdRaidArrayPlan, MdRaidDiscoveryMember, MdRaidPlanError,
+    discover_linux_evidence_set_mdraid_with_cancel, mdraid_array_fingerprint, open_mdraid_reader,
+    verify_mdraid_source_content, MdRaidArrayPlan, MdRaidDiscoveryMember, MdRaidPlanError,
 };
 use persistence_sqlite::repositories::{
     datasource_repo::DataSourceRepo,
@@ -70,12 +70,13 @@ pub fn materialize_mdraid_source_catalog_with_cancel(
     if source.kind != domain::DataSourceKind::MdRaid {
         return Err(MdRaidPlanError::InvalidPublication);
     }
-    let plan: MdRaidArrayPlan = serde_json::from_slice(&std::fs::read(&source.source_path)?)?;
+    let plan = evidence_access::mdraid::read_mdraid_descriptor(&source.source_path)?;
     let fingerprint = mdraid_array_fingerprint(&plan)?;
     if source.id != registration::source_id(&plan, &fingerprint) {
         return Err(MdRaidPlanError::InvalidPublication);
     }
     drop(open_mdraid_reader(&plan)?);
+    verify_mdraid_source_content(&plan, cancel)?;
     let owner = uuid::Uuid::new_v4().to_string();
     let claim = DataSourceProcessingPhaseRepo::new(conn).claim(
         &source.id,
@@ -161,7 +162,7 @@ pub fn materialize_linux_evidence_set_mdraid_with_cancel(
             source_kind: &member.source_kind,
         })
         .collect::<Vec<_>>();
-    discover_linux_evidence_set_mdraid(&members)?
+    discover_linux_evidence_set_mdraid_with_cancel(&members, cancel)?
         .iter()
         .map(|array| materialize_mdraid_array_with_cancel(conn, case_root, case_id, array, cancel))
         .collect()

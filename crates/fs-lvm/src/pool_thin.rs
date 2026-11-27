@@ -105,6 +105,11 @@ impl LvmPool {
             Box::new(self.open_mapped_volume(metadata_index)?);
         let data_reader: Box<dyn EvidenceReader> = Box::new(self.open_mapped_volume(data_index)?);
         let thin_metadata = ThinMetadata::open(metadata_reader)?;
+        thin_metadata.validate_pool_transaction(
+            pool_deps
+                .transaction_id
+                .ok_or(LvmError::MissingThinPoolTransaction)?,
+        )?;
         if let Some(chunk_size) = pool_deps.chunk_size {
             let data_block_size = thin_metadata.superblock().data_block_size_sectors as u64;
             if data_block_size != chunk_size {
