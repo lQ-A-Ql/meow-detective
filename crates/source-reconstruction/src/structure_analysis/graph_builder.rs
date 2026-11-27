@@ -59,82 +59,18 @@ pub(crate) fn build_structure_graph(
         let versions = version_repo.versions_for_source(&case_id.0, &source.id.0)?;
         let source_partitions = partitions.find_by_data_source(&source.id.0)?;
         let observation_count = observations.count_published(&revision_ref)?;
-        let source_node = add_source_node(&mut nodes, source, &revision_ref, observation_count);
-        for version in &versions {
-            let object = version_repo.find(&version.storage_object_id)?;
-            let object_node = StructureNodeId(format!("object:{}", version.storage_object_id));
-            nodes.entry(object_node.clone()).or_insert_with(|| StructureNode {
-                id: object_node.clone(),
-                kind: StructureNodeKind::StorageObject,
-                label: object
-                    .as_ref()
-                    .map_or_else(|| version.storage_object_id.clone(), |object| object.name.clone()),
-                details: serde_json::json!({
-                    "objectKind": object.as_ref().map(|object| object.object_kind.clone()),
-                    "identityState": object.as_ref().map(|object| object.identity_state.clone()),
-                }),
-            });
-            let version_node = StructureNodeId(format!("version:{}", version.id.0));
-            nodes
-                .entry(version_node.clone())
-                .or_insert_with(|| StructureNode {
-                    id: version_node.clone(),
-                    kind: StructureNodeKind::ObjectVersion,
-                    label: version.adapter_version.clone(),
-                    details: serde_json::json!({
-                        "storageObjectId": version.storage_object_id,
-                        "mappingSha256": version.mapping_sha256,
-                        "consistency": version.consistency,
-                        "versionKind": version.version_kind,
-                    }),
-                });
-            add_edge(
-                &mut graph,
-                source_node.clone(),
-                version_node.clone(),
-                StructureRelationKind::Observation,
-                "exposes_version",
-            );
-            add_edge(
-                &mut graph,
-                version_node.clone(),
-                object_node,
-                StructureRelationKind::DeploymentControl,
-                "defines_object",
-            );
-            for parent in &version.parent_source_revisions {
-                let parent_node = add_parent_source_node(&mut nodes, &source_by_id, parent);
-                add_edge(
-                    &mut graph,
-                    version_node.clone(),
-                    parent_node,
-                    StructureRelationKind::ContentDependency,
-                    "depends_on",
-                );
-            }
-            if version.adapter_version.starts_with("fs-lvm/mdraid") {
-                add_mdraid_relations(
-                    &mut graph,
-                    &source_by_id,
-                    &version_node,
-                    version,
-                    &source.source_path,
-                    revision.logical_size,
-                )?;
-            }
-        }
-        for partition in &source_partitions {
-            let partition_node =
-                add_partition_nodes(&mut graph, &mut nodes, source, &source_node, partition);
-            let _ = partition_node;
-        }
-        contexts.push(SourceContext {
-            data_source: source.clone(),
+        contexts.push(append_source_graph(
+            source,
             revision_ref,
             revision,
             versions,
-            partitions: source_partitions,
-        });
+            source_partitions,
+            observation_count,
+            &source_by_id,
+            &version_repo,
+            &mut nodes,
+            &mut graph,
+        )?);
     }
     graph.nodes = nodes.into_values().collect();
     graph
@@ -143,6 +79,98 @@ pub(crate) fn build_structure_graph(
     Ok(GraphBuildResult {
         graph,
         sources: contexts,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn append_source_graph(
+    source: &DataSource,
+    revision_ref: SourceRevisionRef,
+    revision: SourceRevisionContent,
+    versions: Vec<StorageObjectVersion>,
+    source_partitions: Vec<PartitionRecord>,
+    observation_count: u64,
+    source_by_id: &BTreeMap<&str, &DataSource>,
+    version_repo: &StorageObjectRepo<'_>,
+    nodes: &mut BTreeMap<StructureNodeId, StructureNode>,
+    graph: &mut StructureGraph,
+) -> Result<SourceContext, StructureAnalysisError> {
+    let source_node = add_source_node(nodes, source, &revision_ref, observation_count);
+    for version in &versions {
+        let object = version_repo.find(&version.storage_object_id)?;
+        let object_node = StructureNodeId(format!("object:{}", version.storage_object_id));
+        nodes
+            .entry(object_node.clone())
+            .or_insert_with(|| StructureNode {
+                id: object_node.clone(),
+                kind: StructureNodeKind::StorageObject,
+                label: object.as_ref().map_or_else(
+                    || version.storage_object_id.clone(),
+                    |object| object.name.clone(),
+                ),
+                details: serde_json::json!({
+                    "objectKind": object.as_ref().map(|object| object.object_kind.clone()),
+                    "identityState": object.as_ref().map(|object| object.identity_state.clone()),
+                }),
+            });
+        let version_node = StructureNodeId(format!("version:{}", version.id.0));
+        nodes
+            .entry(version_node.clone())
+            .or_insert_with(|| StructureNode {
+                id: version_node.clone(),
+                kind: StructureNodeKind::ObjectVersion,
+                label: version.adapter_version.clone(),
+                details: serde_json::json!({
+                    "storageObjectId": version.storage_object_id,
+                    "mappingSha256": version.mapping_sha256,
+                    "consistency": version.consistency,
+                    "versionKind": version.version_kind,
+                }),
+            });
+        add_edge(
+            graph,
+            source_node.clone(),
+            version_node.clone(),
+            StructureRelationKind::Observation,
+            "exposes_version",
+        );
+        add_edge(
+            graph,
+            version_node.clone(),
+            object_node,
+            StructureRelationKind::DeploymentControl,
+            "defines_object",
+        );
+        for parent in &version.parent_source_revisions {
+            let parent_node = add_parent_source_node(nodes, source_by_id, parent);
+            add_edge(
+                graph,
+                version_node.clone(),
+                parent_node,
+                StructureRelationKind::ContentDependency,
+                "depends_on",
+            );
+        }
+        if version.adapter_version.starts_with("fs-lvm/mdraid") {
+            add_mdraid_relations(
+                graph,
+                source_by_id,
+                &version_node,
+                version,
+                &source.source_path,
+                revision.logical_size,
+            )?;
+        }
+    }
+    for partition in &source_partitions {
+        add_partition_nodes(graph, nodes, source, &source_node, partition);
+    }
+    Ok(SourceContext {
+        data_source: source.clone(),
+        revision_ref,
+        revision,
+        versions,
+        partitions: source_partitions,
     })
 }
 
