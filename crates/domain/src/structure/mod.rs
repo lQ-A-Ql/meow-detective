@@ -19,7 +19,7 @@ pub use observation::{
 };
 pub use plan::{
     AdapterOperation, StructureAdapterDescriptor, StructureAnalysisPlan, StructurePlanError,
-    StructureWorkItem,
+    StructureStage, StructureWorkItem,
 };
 pub use range::{ByteRange, ByteRangeError, ByteRangeSet, ByteRangeSetError};
 pub use read_demand::{

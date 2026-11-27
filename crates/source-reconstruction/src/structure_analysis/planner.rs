@@ -1,7 +1,7 @@
 use domain::{
     structure::{
         ByteRange, ByteRangeSet, ReadDemand, ReadIntent, ReadPriority, ReadVerification,
-        StorageObjectVersionKind, StructureAnalysisPlan, StructureWorkItem,
+        StorageObjectVersionKind, StructureAnalysisPlan, StructureStage, StructureWorkItem,
     },
     DataSourceKind,
 };
@@ -54,6 +54,7 @@ pub fn plan_structure_analysis(
         graph: build.graph,
         adapters: registry.descriptors(),
         work_items,
+        stages: StructureStage::all(),
     };
     plan.validate()
         .map_err(|error| StructureAnalysisError::Plan(error.to_string()))?;

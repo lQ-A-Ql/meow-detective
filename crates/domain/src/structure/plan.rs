@@ -54,10 +54,14 @@ pub struct StructureAnalysisPlan {
     pub graph: StructureGraph,
     pub adapters: Vec<StructureAdapterDescriptor>,
     pub work_items: Vec<StructureWorkItem>,
+    pub stages: Vec<StructureStage>,
 }
 
 impl StructureAnalysisPlan {
     pub fn validate(&self) -> Result<(), StructurePlanError> {
+        if self.stages != StructureStage::all() {
+            return Err(StructurePlanError::InvalidStages);
+        }
         self.graph
             .validate()
             .map_err(|error| StructurePlanError::Graph(error.to_string()))?;
@@ -107,6 +111,36 @@ impl StructureAnalysisPlan {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StructureStage {
+    SourceFreeze,
+    BoundedDiscovery,
+    IdentityBinding,
+    VersionSelection,
+    TargetPlanning,
+    ReadVerification,
+    AtomicPublication,
+    InvestigationAnalysis,
+}
+
+impl StructureStage {
+    pub const ALL: [Self; 8] = [
+        Self::SourceFreeze,
+        Self::BoundedDiscovery,
+        Self::IdentityBinding,
+        Self::VersionSelection,
+        Self::TargetPlanning,
+        Self::ReadVerification,
+        Self::AtomicPublication,
+        Self::InvestigationAnalysis,
+    ];
+
+    pub fn all() -> Vec<Self> {
+        Self::ALL.to_vec()
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StructurePlanError {
     #[error("structure graph is invalid: {0}")]
@@ -127,4 +161,6 @@ pub enum StructurePlanError {
     EmptyTarget(String),
     #[error("structure plan range is invalid: {0}")]
     Range(String),
+    #[error("structure plan execution stages are incomplete or out of order")]
+    InvalidStages,
 }

@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use domain::structure::{
     AdapterOperation, AddressSpace, ByteRange, ByteRangeSet, ReadDemand, ReadIntent, ReadPriority,
     ReadVerification, SourceRevisionRef, StructureAdapterDescriptor, StructureAnalysisPlan,
-    StructureGraph, StructurePlanError, StructureWorkItem,
+    StructureGraph, StructurePlanError, StructureStage, StructureWorkItem,
 };
 
 #[test]
@@ -43,6 +43,7 @@ fn plan_rejects_unknown_adapter_version_and_missing_dependency() {
         graph: empty_graph(),
         adapters: vec![adapter("1")],
         work_items: vec![work],
+        stages: StructureStage::all(),
     };
     assert!(matches!(
         plan.validate(),
@@ -67,8 +68,15 @@ fn plan_requires_the_plan_operation_and_valid_ranges() {
         graph: empty_graph(),
         adapters: vec![adapter],
         work_items: Vec::new(),
+        stages: StructureStage::all(),
     };
     plan.validate().unwrap();
+    plan.stages.pop();
+    assert!(matches!(
+        plan.validate(),
+        Err(StructurePlanError::InvalidStages)
+    ));
+    plan.stages = StructureStage::all();
     plan.work_items.push(StructureWorkItem {
         id: "work".into(),
         source_revision: SourceRevisionRef {
