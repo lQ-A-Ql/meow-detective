@@ -1,7 +1,4 @@
-use domain::{
-    structure::{NativeVersion, StorageObjectVersion},
-    CaseId, DataSource, StorageObjectKind,
-};
+use domain::{structure::StorageObjectVersion, CaseId, DataSource, StorageObjectKind};
 use evidence_access::mdraid::{MdRaidArrayPlan, MdRaidPlanError};
 use persistence_sqlite::repositories::{
     source_revision_repo::SourceRevisionRepo,
@@ -31,10 +28,7 @@ pub(super) fn bind(
     })?;
     let mut native_versions = Vec::new();
     for member in &plan.members {
-        let version = NativeVersion::Md {
-            metadata_version: format!("{:?}", member.superblock.metadata_version),
-            events: member.superblock.events,
-        };
+        let version = evidence_access::mdraid::mdraid_native_version(&member.superblock);
         if !native_versions.contains(&version) {
             native_versions.push(version);
         }

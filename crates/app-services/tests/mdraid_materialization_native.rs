@@ -83,6 +83,13 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         version.mapping_sha256,
         evidence_access::mdraid::mdraid_array_fingerprint(&plans[0]).unwrap()
     );
+    assert_eq!(
+        version.native_versions,
+        vec![domain::structure::NativeVersion::Md {
+            metadata_version: domain::structure::MdMetadataVersion::V1_2,
+            events: plans[0].members[0].superblock.events,
+        }]
+    );
     let object =
         persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&connection)
             .find(&version.storage_object_id)

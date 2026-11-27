@@ -8,6 +8,7 @@ use crate::datasource_service::{self, LvmLogicalVolumeIdentity};
 mod content;
 pub(crate) mod discovery;
 mod filesystem;
+mod native_version;
 mod persisted_inputs;
 
 use crate::source_runtime::content::SourceContent;
@@ -17,6 +18,7 @@ pub use discovery::discover_mdraid_from_collection;
 pub use discovery::{discover_linux_evidence_set_mdraid, MdRaidDiscoveryMember};
 pub(crate) use filesystem::open_mdraid_partition;
 pub use filesystem::{open_mdraid_filesystem, probe_mdraid_filesystems};
+pub use native_version::mdraid_native_version;
 
 #[derive(Debug, Error)]
 pub enum MdRaidPlanError {

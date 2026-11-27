@@ -25,10 +25,7 @@ pub(super) fn collect(
                     if identity.pv_sources.iter().any(|pv| std::path::Path::new(&pv.source_path) == source.source_path) {
                         facts.push(NativeObservation {
                             native_identity: format!("md:{}:{}", hex::encode(member.superblock.array_uuid), member.superblock.dev_number),
-                            version: NativeVersion::Md {
-                                metadata_version: format!("{:?}", member.superblock.metadata_version),
-                                events: member.superblock.events,
-                            },
+                            version: crate::mdraid::mdraid_native_version(&member.superblock),
                             location: ObservationLocation::Unavailable {reason: "MD metadata is addressed through an LVM logical view".into()},
                             parser_version: "fs-lvm/mdraid-v2".into(),
                             native_checksum_verified: member.superblock.checksum_valid,
@@ -52,13 +49,7 @@ pub(super) fn collect(
                                 hex::encode(member.superblock.array_uuid),
                                 member.superblock.dev_number
                             ),
-                            version: NativeVersion::Md {
-                                metadata_version: format!(
-                                    "{:?}",
-                                    member.superblock.metadata_version
-                                ),
-                                events: member.superblock.events,
-                            },
+                            version: crate::mdraid::mdraid_native_version(&member.superblock),
                             location: ObservationLocation::SourceWindow {
                                 byte_offset: *byte_offset,
                                 byte_length: *byte_length,

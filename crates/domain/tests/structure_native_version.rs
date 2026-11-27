@@ -1,0 +1,31 @@
+use domain::structure::{MdMetadataVersion, NativeVersion};
+
+#[test]
+fn md_versions_round_trip_with_explicit_native_format_names() {
+    for (metadata_version, encoded) in [
+        (MdMetadataVersion::V0_90, "v0_90"),
+        (MdMetadataVersion::V1_0, "v1_0"),
+        (MdMetadataVersion::V1_1, "v1_1"),
+        (MdMetadataVersion::V1_2, "v1_2"),
+    ] {
+        let version = NativeVersion::Md {
+            metadata_version,
+            events: 47,
+        };
+        let value = serde_json::to_value(&version).unwrap();
+        assert_eq!(
+            value,
+            serde_json::json!({"kind": "md", "metadata_version": encoded, "events": 47})
+        );
+        assert_eq!(
+            serde_json::from_value::<NativeVersion>(value).unwrap(),
+            version
+        );
+    }
+}
+
+#[test]
+fn unknown_md_metadata_version_cannot_become_a_native_fact() {
+    let value = serde_json::json!({"kind": "md", "metadata_version": "v2_0", "events": 47});
+    assert!(serde_json::from_value::<NativeVersion>(value).is_err());
+}

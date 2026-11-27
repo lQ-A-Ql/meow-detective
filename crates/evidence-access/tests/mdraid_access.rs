@@ -185,7 +185,10 @@ fn native_lvm_members_include_a_pv_without_metadata_and_preserve_file_bytes() {
         let facts = collection.native_observations(path, &kind).unwrap();
         assert!(facts.iter().any(|fact| matches!(
             fact.version,
-            domain::structure::NativeVersion::Md { .. }
+            domain::structure::NativeVersion::Md {
+                metadata_version: domain::structure::MdMetadataVersion::V1_2,
+                ..
+            }
         ) && fact.native_checksum_verified));
         assert!(facts
             .iter()

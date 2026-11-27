@@ -1,4 +1,6 @@
-use domain::structure::{NativeVersion, SourceRevisionContent, StorageObjectVersion};
+use domain::structure::{
+    MdMetadataVersion, NativeVersion, SourceRevisionContent, StorageObjectVersion,
+};
 use persistence_sqlite::repositories::{
     source_revision_repo::SourceRevisionRepo,
     storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
@@ -44,7 +46,7 @@ fn md_version_binds_native_events_to_registered_parent_revision() {
         adapter_version: "fs-lvm/mdraid-v2".into(),
         mapping_sha256: "b".repeat(64),
         native_versions: vec![NativeVersion::Md {
-            metadata_version: "V1_2".into(),
+            metadata_version: MdMetadataVersion::V1_2,
             events: 4,
         }],
     };
