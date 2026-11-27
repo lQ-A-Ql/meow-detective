@@ -89,20 +89,8 @@ pub(super) const SOURCE_MIGRATIONS: &[(&str, &str)] = &[
         include_str!("scripts/source_032_deleted_recovery_hashes.sql"),
     ),
     (
-        "source_036_android_analysis",
-        include_str!("scripts/source_036_android_analysis.sql"),
-    ),
-    (
         "source_038_linux_evidence_facts",
         include_str!("scripts/source_038_linux_evidence_facts.sql"),
-    ),
-    (
-        "source_041_fjall_detail_ownership",
-        include_str!("scripts/source_041_fjall_detail_ownership.sql"),
-    ),
-    (
-        "source_042_android_fjall_only",
-        include_str!("scripts/source_042_android_fjall_only.sql"),
     ),
 ];
 

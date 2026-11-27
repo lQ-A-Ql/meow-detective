@@ -4,10 +4,10 @@ use persistence_sqlite::runner;
 fn source_version_is_monotonic_for_active_migrations() {
     assert!(runner::source_version_is_at_least(
         "source_038_linux_evidence_facts",
-        "source_036_android_analysis"
+        "source_032_deleted_recovery_hashes"
     ));
     assert!(!runner::source_version_is_at_least(
-        "source_036_android_analysis",
+        "source_032_deleted_recovery_hashes",
         "source_038_linux_evidence_facts"
     ));
     assert!(!runner::source_version_is_at_least(
@@ -68,6 +68,6 @@ fn source_with_sqlite_details_is_rejected_without_migration_or_data_changes() {
     assert_eq!(migrations, 0);
     assert_eq!(
         runner::latest_source_version(),
-        "source_042_android_fjall_only"
+        "source_038_linux_evidence_facts"
     );
 }

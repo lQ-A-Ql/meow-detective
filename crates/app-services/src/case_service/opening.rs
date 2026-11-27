@@ -94,9 +94,6 @@ fn preflight_case_workspace(root: &Path, db_path: &Path, case_id: &CaseId) -> Re
             recovery.disposition
         )));
     }
-    if has_retired_linux_cluster_relationships(&conn, case_id)? {
-        return Err(CaseServiceError::TopologyReimportRequired);
-    }
     ensure_global_detail_boundary(&conn)?;
     ensure_supported_data_source_platforms_for_case(&conn, case_id)?;
     queue_retired_generation_cleanup(&conn, root, case_id)?;
@@ -208,17 +205,4 @@ fn load_case_record(conn: &Connection, case_id: &CaseId) -> Result<CaseMeta> {
     CaseRepo::new(conn)
         .find_by_id(case_id)?
         .ok_or_else(|| CaseServiceError::InvalidCaseDir("Case not in database".to_string()))
-}
-
-fn has_retired_linux_cluster_relationships(
-    conn: &Connection,
-    case_id: &CaseId,
-) -> persistence_sqlite::DbResult<bool> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM data_sources
-         WHERE case_id = ?1 AND cluster_id IS NOT NULL",
-        [&case_id.0],
-        |row| row.get(0),
-    )?;
-    Ok(count > 0)
 }
