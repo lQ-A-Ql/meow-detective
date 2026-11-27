@@ -89,7 +89,7 @@ fn native_md_range_matches_kernel_oracle_and_has_independent_cursor() {
     let mut first = [0; 17];
     second.read_exact(&mut first).unwrap();
     assert_eq!(first, expected[4093..4110]);
-    assert_eq!(view.seek(SeekFrom::Current(0)).unwrap(), range.length());
+    assert_eq!(view.stream_position().unwrap(), range.length());
     drop(second);
     drop(view);
     drop(collection);

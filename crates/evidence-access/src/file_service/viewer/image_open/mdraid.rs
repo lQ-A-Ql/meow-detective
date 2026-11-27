@@ -18,11 +18,8 @@ pub(crate) fn open_mdraid_file_seekable(
     entry: &FileEntry,
     partition_index: Option<usize>,
 ) -> Result<Box<dyn evidence_core::ReadSeek>, FileServiceError> {
-    let filesystem = crate::mdraid::open_mdraid_partition(
-        source_id,
-        Path::new(source_path),
-        partition_index,
-    )?;
+    let filesystem =
+        crate::mdraid::open_mdraid_partition(source_id, Path::new(source_path), partition_index)?;
     let size = entry
         .size
         .ok_or_else(|| FileServiceError::other("MD file size is missing"))?;

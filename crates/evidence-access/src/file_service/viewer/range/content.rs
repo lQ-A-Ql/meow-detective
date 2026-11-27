@@ -229,5 +229,5 @@ fn open_mdraid_descriptor_file(
         &entry,
         descriptor.partition_index,
     )
-        .map(RangeContentReader::Seekable)
+    .map(RangeContentReader::Seekable)
 }
