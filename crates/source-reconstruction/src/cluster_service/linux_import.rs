@@ -100,11 +100,10 @@ struct UnsignedLinuxEvidenceSetManifest<'a> {
 }
 
 impl LinuxEvidenceSetImportPlan {
-    pub fn member_import_configs(
+    pub fn prepare_shared_sources(
         &self,
         cancel: &std::sync::atomic::AtomicBool,
-    ) -> Result<Vec<ImportSourceConfig>> {
-        let member_count = self.members.len() as u32;
+    ) -> Result<std::sync::Arc<datasource_service::ImageCollectionPlan>> {
         let sources = self
             .members
             .iter()
@@ -115,9 +114,16 @@ impl LinuxEvidenceSetImportPlan {
                 )
             })
             .collect::<Vec<_>>();
-        let collection_plan = std::sync::Arc::new(
+        Ok(std::sync::Arc::new(
             datasource_service::ImageCollectionPlan::prepare(&sources, cancel)?,
-        );
+        ))
+    }
+
+    pub fn member_import_configs_from_plan(
+        &self,
+        collection_plan: std::sync::Arc<datasource_service::ImageCollectionPlan>,
+    ) -> Result<Vec<ImportSourceConfig>> {
+        let member_count = self.members.len() as u32;
         self.members
             .iter()
             .map(|member| {
@@ -145,6 +151,14 @@ impl LinuxEvidenceSetImportPlan {
                 })
             })
             .collect()
+    }
+
+    pub fn member_import_configs(
+        &self,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<Vec<ImportSourceConfig>> {
+        let collection_plan = self.prepare_shared_sources(cancel)?;
+        self.member_import_configs_from_plan(collection_plan)
     }
 }
 

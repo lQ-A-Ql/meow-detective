@@ -19,6 +19,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use std::time::Instant;
 use tauri::AppHandle;
 use transport::CommandError;
 
@@ -49,11 +50,38 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
         return Ok(None);
     }
     emit_cluster_started(app, &job.job_id);
+    if let Err(error) = begin_content_identity(&job_repo, app, &job) {
+        return fail_linux_evidence_set_job(&job_repo, &job.job_id, app, None, error)
+            .map(|()| None);
+    }
+    let collection_started = Instant::now();
+    let collection_plan = match job.plan.prepare_shared_sources(&cancel_token) {
+        Ok(plan) => plan,
+        Err(error) => {
+            return handle_content_identity_failure(
+                &connection,
+                &job_repo,
+                &job,
+                app,
+                CommandError::from_typed_service_error(error),
+            )
+        }
+    };
+    record_cluster_phase(
+        &connection,
+        &job,
+        "content_identity",
+        true,
+        None,
+        job.plan.members.len() as u32,
+        0,
+    );
+    log_content_identity_completed(&job, collection_started);
     if let Err(error) = initialize_evidence_set(&connection, &job_repo, &job, app) {
         record_cluster_phase(
             &connection,
             &job,
-            "initialize",
+            "member_setup",
             false,
             Some(&error.message),
             0,
@@ -61,13 +89,14 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
         );
         return Err(error);
     }
-    record_cluster_phase(&connection, &job, "initialize", true, None, 0, 0);
+    record_cluster_phase(&connection, &job, "member_setup", true, None, 0, 0);
     let Some(summary) = execution::import_members(
         &connection,
         &job_repo,
         &job,
         app,
         &cancel_token,
+        collection_plan,
         task_manager,
     )?
     else {
@@ -91,6 +120,62 @@ pub(crate) fn run_background_linux_evidence_set_import_with_scheduler(
         cancel_token,
         projection_task_manager,
     )
+}
+
+fn begin_content_identity(
+    job_repo: &JobRepo<'_>,
+    app: Option<&AppHandle>,
+    job: &BackgroundLinuxEvidenceSetImportJob,
+) -> Result<(), CommandError> {
+    job_repo
+        .update_progress(&job.job_id, 10, "Hashing shared source content")
+        .map_err(app_services::connection::command_error_from_db)?;
+    if let Some(app) = app {
+        event_bridge::emit_job_progress(app, &job.job_id.0, 10, "Hashing shared source content");
+    }
+    tracing::info!(
+        import_set_id = %job.plan.import_set_id,
+        members = job.plan.members.len(),
+        "Linux evidence-set content identity started"
+    );
+    Ok(())
+}
+
+fn handle_content_identity_failure(
+    connection: &rusqlite::Connection,
+    job_repo: &JobRepo<'_>,
+    job: &BackgroundLinuxEvidenceSetImportJob,
+    app: Option<&AppHandle>,
+    error: CommandError,
+) -> Result<Option<BrowseableEvidenceSetImport>, CommandError> {
+    record_cluster_phase(
+        connection,
+        job,
+        "content_identity",
+        false,
+        Some(&error.message),
+        0,
+        0,
+    );
+    if error.category == "cancelled" {
+        cancel_job(
+            job_repo,
+            &job.job_id,
+            app,
+            "Linux evidence-set content identity cancelled",
+        );
+        return Ok(None);
+    }
+    fail_linux_evidence_set_job(job_repo, &job.job_id, app, None, error).map(|()| None)
+}
+
+fn log_content_identity_completed(job: &BackgroundLinuxEvidenceSetImportJob, started: Instant) {
+    tracing::info!(
+        import_set_id = %job.plan.import_set_id,
+        members = job.plan.members.len(),
+        elapsed_ms = started.elapsed().as_millis() as u64,
+        "Linux evidence-set content identity completed"
+    );
 }
 
 fn start_cluster_job(

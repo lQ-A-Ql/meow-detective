@@ -20,6 +20,9 @@ fn shared_plan_failure_and_cancellation_close_collection_jobs() {
                 .unwrap();
         }
         let plan = cluster_service::plan_linux_evidence_set_import(&input, None).unwrap();
+        let collection_plan = plan
+            .prepare_shared_sources(&AtomicBool::new(false))
+            .unwrap();
         let case = case_service::create_case(root.path(), "Collection admission", None).unwrap();
         let connection = case.connection().unwrap();
         cluster_service::register_linux_evidence_set_import(&connection, &case.meta.id, &plan)
@@ -49,6 +52,7 @@ fn shared_plan_failure_and_cancellation_close_collection_jobs() {
             &job,
             None,
             &Arc::new(AtomicBool::new(cancelled)),
+            collection_plan,
             None,
         );
         if cancelled {

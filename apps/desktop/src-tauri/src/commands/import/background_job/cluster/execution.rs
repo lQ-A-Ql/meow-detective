@@ -18,9 +18,18 @@ pub(super) fn import_members(
     job: &BackgroundLinuxEvidenceSetImportJob,
     app: Option<&AppHandle>,
     cancel_token: &Arc<AtomicBool>,
+    collection_plan: Arc<app_services::datasource_service::ImageCollectionPlan>,
     task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<EvidenceSetImportSummary>, CommandError> {
-    match import_evidence_set_members(connection, job_repo, job, app, cancel_token, task_manager) {
+    match import_evidence_set_members(
+        connection,
+        job_repo,
+        job,
+        app,
+        cancel_token,
+        collection_plan,
+        task_manager,
+    ) {
         Ok(summary) => Ok(summary),
         Err(error) => {
             record_cluster_phase(

@@ -26,9 +26,10 @@ pub(super) fn import_evidence_set_members(
     job: &BackgroundLinuxEvidenceSetImportJob,
     app: Option<&AppHandle>,
     cancel_token: &Arc<AtomicBool>,
+    collection_plan: Arc<app_services::datasource_service::ImageCollectionPlan>,
     task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<EvidenceSetImportSummary>, CommandError> {
-    let configs = match job.plan.member_import_configs(cancel_token) {
+    let configs = match job.plan.member_import_configs_from_plan(collection_plan) {
         Ok(configs) => configs,
         Err(error) => {
             let error = CommandError::from_typed_service_error(error);
