@@ -48,3 +48,34 @@ pub(super) fn require_current(
         })
         .map_err(command_error_from_db)
 }
+
+pub(super) fn record_collection_verification(
+    ctx: &ImportJobContext<'_>,
+) -> Result<(), CommandError> {
+    let Some(plan) = ctx.import_config.collection_plan.as_ref() else {
+        return Ok(());
+    };
+    let identity = ctx
+        .runtime
+        .as_ref()
+        .ok_or_else(|| CommandError::internal("Collection source runtime missing"))?
+        .identity();
+    let record = domain::structure::CollectionMemberVerification {
+        source: SourceRevisionRef {
+            case_id: identity.case_id.clone(),
+            source_id: identity.data_source_id.0.clone(),
+            revision: identity.revision,
+        },
+        collection_fingerprint: plan.content_fingerprint(),
+    };
+    require_current(ctx.conn, identity)?;
+    let json = serde_json::to_string(&record).map_err(CommandError::from_service_error)?;
+    persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(
+        ctx.source_connection()?,
+    )
+    .write(
+        persistence_sqlite::repositories::source_meta_repo::COLLECTION_MEMBER_VERIFICATION_KEY,
+        &json,
+    )
+    .map_err(command_error_from_db)
+}

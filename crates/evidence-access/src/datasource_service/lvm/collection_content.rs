@@ -16,6 +16,7 @@ pub(super) struct CollectionContent {
     identities: Vec<Arc<SourceContent>>,
     factories: Vec<evidence_core::SharedReaderFactory>,
     _permits: Arc<Vec<ResourcePermit>>,
+    failed_reads: Arc<AtomicBool>,
 }
 
 impl std::fmt::Debug for CollectionContent {
@@ -108,6 +109,7 @@ impl CollectionContent {
             identities,
             factories,
             _permits: Arc::new(permits),
+            failed_reads: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -141,28 +143,20 @@ impl CollectionContent {
             inner,
             Arc::clone(identity),
             self._permits.clone(),
+            self.failed_reads.clone(),
         ))
+    }
+
+    pub(super) fn validate_reads(&self) -> Result<(), CollectionPlanError> {
+        if self.failed_reads.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(content::ContentError::Changed.into());
+        }
+        Ok(())
     }
 
     pub(super) fn verify(&self, cancel: &AtomicBool) -> Result<(), CollectionPlanError> {
         for (identity, factory) in self.identities.iter().zip(&self.factories) {
             identity.verify_factory(factory, cancel)?;
-        }
-        Ok(())
-    }
-
-    pub(super) fn verify_sources(
-        &self,
-        paths: &std::collections::BTreeSet<std::path::PathBuf>,
-        cancel: &AtomicBool,
-    ) -> Result<(), CollectionPlanError> {
-        for path in paths {
-            let index = self
-                .identities
-                .iter()
-                .position(|identity| Path::new(&identity.source_path) == path)
-                .ok_or(CollectionPlanError::MemberMismatch)?;
-            self.identities[index].verify_factory(&self.factories[index], cancel)?;
         }
         Ok(())
     }

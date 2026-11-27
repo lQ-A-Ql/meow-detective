@@ -23,6 +23,9 @@ pub enum ImportAnalysisError {
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
 
+    #[error("verified analysis evidence read failed: {0}")]
+    Evidence(#[from] evidence_access::file_service::FileServiceError),
+
     /// Staging subsystem context error (merge failures, contextual wraps).
     #[error("staging error: {0}")]
     Staging(String),
@@ -37,9 +40,11 @@ impl transport::ServiceErrorCategory for ImportAnalysisError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
             Self::UnsupportedPlatform(_) => transport::ErrorCategory::Unsupported,
-            Self::Db(_) | Self::Persistence(_) | Self::Storage(_) | Self::Io(_) => {
-                transport::ErrorCategory::Io
-            }
+            Self::Db(_)
+            | Self::Persistence(_)
+            | Self::Storage(_)
+            | Self::Io(_)
+            | Self::Evidence(_) => transport::ErrorCategory::Io,
             Self::Staging(_) => transport::ErrorCategory::Validation,
             Self::Other(_) => transport::ErrorCategory::Internal,
         }

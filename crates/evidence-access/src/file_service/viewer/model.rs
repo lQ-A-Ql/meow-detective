@@ -90,6 +90,9 @@ pub struct PreviewLvmPhysicalVolumeSource {
 }
 
 pub trait PreviewReadContext {
+    fn requires_bound_reads(&self) -> bool {
+        false
+    }
     fn conn(&self) -> &rusqlite::Connection;
 
     fn case_id(&self) -> &str {
@@ -165,6 +168,9 @@ impl<T> PreviewReadContext for &mut T
 where
     T: PreviewReadContext + ?Sized,
 {
+    fn requires_bound_reads(&self) -> bool {
+        (**self).requires_bound_reads()
+    }
     fn conn(&self) -> &rusqlite::Connection {
         (**self).conn()
     }

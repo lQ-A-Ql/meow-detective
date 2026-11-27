@@ -48,6 +48,10 @@ where
 
 pub struct FileHeaderReadCache {
     case_id: String,
+    bound: Option<(
+        domain::DataSourceId,
+        crate::file_service::BoundEvidenceReaderResolver,
+    )>,
     pub(crate) descriptors: RefCell<HashMap<String, Value>>,
 }
 
@@ -55,6 +59,19 @@ impl FileHeaderReadCache {
     pub fn new(case_id: impl Into<String>) -> Self {
         Self {
             case_id: case_id.into(),
+            bound: None,
+            descriptors: RefCell::new(HashMap::new()),
+        }
+    }
+
+    pub fn with_bound_readers(
+        case_id: impl Into<String>,
+        source_id: domain::DataSourceId,
+        resolver: crate::file_service::BoundEvidenceReaderResolver,
+    ) -> Self {
+        Self {
+            case_id: case_id.into(),
+            bound: Some((source_id, resolver)),
             descriptors: RefCell::new(HashMap::new()),
         }
     }
@@ -65,6 +82,17 @@ impl FileHeaderReadCache {
         file_id: &FileEntryId,
         max_bytes: usize,
     ) -> Result<Vec<u8>, FileServiceError> {
+        if let Some((source, resolver)) = &self.bound {
+            return crate::file_service::bound_header::read_header(
+                conn,
+                &self.case_id,
+                source,
+                &self.descriptors,
+                resolver,
+                file_id,
+                max_bytes,
+            );
+        }
         if self.case_id.is_empty() {
             return read_file_header_by_id(conn, file_id, max_bytes);
         }

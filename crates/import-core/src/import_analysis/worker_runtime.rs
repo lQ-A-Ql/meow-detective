@@ -154,7 +154,7 @@ impl AnalysisWorkerRuntime {
         let file = task.to_file_entry();
         self.stats.processed_count += 1;
         shared.processed_total.fetch_add(1, Ordering::Relaxed);
-        self.index_text(&file, options, shared);
+        self.index_text(&file, options, shared)?;
         self.flush_if_needed()
     }
 
@@ -163,7 +163,7 @@ impl AnalysisWorkerRuntime {
         file: &FileEntry,
         options: &ImportAnalysisOptions,
         shared: &SharedAnalysisState,
-    ) {
+    ) -> Result<(), ImportAnalysisError> {
         if options.enable_text_indexing
             && should_read_text_index(file, options.platform)
             && options.analysis_mode.allows_content()
@@ -172,15 +172,19 @@ impl AnalysisWorkerRuntime {
             && shared.indexed_total.load(Ordering::Relaxed)
                 < infrastructure::constants::IMPORT_TEXT_INDEX_LIMIT
         {
-            if let Ok(bytes) =
-                read_text_index_bytes(&mut self.source_reader, &self.main_conn, &file.id)
-            {
+            let bytes =
+                match read_text_index_bytes(&mut self.source_reader, &self.main_conn, &file.id) {
+                    Ok(bytes) => Some(bytes),
+                    Err(error) if options.bound_readers.is_some() => return Err(error.into()),
+                    Err(_) => None,
+                };
+            if let Some(bytes) = bytes {
                 if let Err(reason) = classify_text_content(&bytes, file, options.platform) {
                     self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
                     if matches!(reason, TextSkipReason::UnsupportedEncoding) {
                         self.stats.warning_count = self.stats.warning_count.saturating_add(1);
                     }
-                    return;
+                    return Ok(());
                 }
                 let mime = mime_hint_for_entry(file, options.platform);
                 let text = extract_text(Cursor::new(bytes), &file.id.0, mime);
@@ -210,6 +214,7 @@ impl AnalysisWorkerRuntime {
         {
             self.stats.skipped_count = self.stats.skipped_count.saturating_add(1);
         }
+        Ok(())
     }
 
     fn flush_if_needed(&mut self) -> Result<(), ImportAnalysisError> {

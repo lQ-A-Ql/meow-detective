@@ -4,6 +4,8 @@ use evidence_access::datasource_service;
 
 mod audit_parser;
 mod capability;
+mod collection_publication;
+pub use collection_publication::validate_collection_publication;
 mod etcd_bolt;
 mod etcd_wal;
 mod events;

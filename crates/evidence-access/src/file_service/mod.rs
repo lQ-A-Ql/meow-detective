@@ -1,6 +1,8 @@
 //! File browsing, metadata routing, preview, and extraction services.
 
 mod block_filesystem;
+mod bound_header;
+pub use bound_header::BoundEvidenceReaderResolver;
 mod browse;
 mod catalog_browse;
 mod cephfs_adapter;
@@ -23,6 +25,7 @@ mod partition_roots;
 mod preview_runtime;
 mod source_read;
 mod viewer;
+pub(crate) use viewer::preview_lvm_identity_from_datasource;
 mod visibility;
 
 pub use block_filesystem::open_block_filesystem;

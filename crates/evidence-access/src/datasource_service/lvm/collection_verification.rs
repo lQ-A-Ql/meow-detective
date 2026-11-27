@@ -3,7 +3,7 @@ use crate::datasource_service::LvmLogicalVolumeIdentity;
 use std::{collections::BTreeSet, path::Path, sync::atomic::AtomicBool};
 
 impl ImageCollectionPlan {
-    pub fn verify_member_content(
+    pub fn validate_member_inputs(
         &self,
         index: usize,
         path: &Path,
@@ -32,7 +32,9 @@ impl ImageCollectionPlan {
         {
             append_dependencies(identity, &mut sources)?;
         }
-        self.verify_sources(&sources, cancel)?;
+        for path in sources {
+            self.validate_input_identity(&path)?;
+        }
         self.validate_snapshot()
     }
 }

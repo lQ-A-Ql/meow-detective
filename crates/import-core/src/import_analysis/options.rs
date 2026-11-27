@@ -33,6 +33,7 @@ impl ImportAnalysisMode {
 
 #[derive(Debug, Clone)]
 pub struct ImportAnalysisOptions {
+    pub bound_readers: Option<evidence_access::file_service::BoundEvidenceReaderResolver>,
     pub publication_lease: Option<source_kernel::source_runtime::SourcePublicationLease>,
     pub case_root: PathBuf,
     pub db_path: PathBuf,
@@ -92,6 +93,7 @@ impl JobOutcomeCounts {
 
 #[derive(Debug, Clone)]
 pub struct PostImportPipelineOptions {
+    pub bound_readers: Option<evidence_access::file_service::BoundEvidenceReaderResolver>,
     pub publication_lease: Option<source_kernel::source_runtime::SourcePublicationLease>,
     pub case_root: PathBuf,
     pub db_path: PathBuf,

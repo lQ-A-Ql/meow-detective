@@ -73,6 +73,37 @@ fn build_analysis_options(
     analysis_mode: import_analysis::ImportAnalysisMode,
 ) -> import_analysis::PostImportPipelineOptions {
     import_analysis::PostImportPipelineOptions {
+        bound_readers: ctx.import_config.collection_plan.as_ref().map(|plan| {
+            let plan = Arc::clone(plan);
+            let cancel = Arc::clone(ctx.options.cancel_token);
+            let lease = ctx
+                .runtime
+                .as_ref()
+                .map(|runtime| runtime.publication_lease());
+            evidence_access::file_service::BoundEvidenceReaderResolver::new(move |path, kind| {
+                if let Some(lease) = &lease {
+                    lease.validate()?;
+                }
+                let kind = match kind {
+                    "e01" => domain::DataSourceKind::E01,
+                    "raw" => domain::DataSourceKind::Raw,
+                    _ => {
+                        return Err(std::io::Error::new(
+                            std::io::ErrorKind::Unsupported,
+                            "Collection analysis source kind is unsupported",
+                        ))
+                    }
+                };
+                let reader = plan
+                    .verified_factory(path, &kind, &cancel)
+                    .map_err(std::io::Error::other)?
+                    .open_reader_with_cancel(&cancel)?;
+                if let Some(lease) = &lease {
+                    lease.validate()?;
+                }
+                Ok(reader)
+            })
+        }),
         publication_lease: ctx.runtime.as_ref().map(|r| r.publication_lease()),
         case_root: ctx.case_root.to_path_buf(),
         db_path: source_db::source_db_path(ctx.case_root, &data_source.id),

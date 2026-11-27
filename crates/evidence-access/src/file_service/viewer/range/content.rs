@@ -39,6 +39,14 @@ pub(crate) fn open_file_content_for_descriptor_with_context<C>(
 where
     C: PreviewReadContext,
 {
+    if context.requires_bound_reads() {
+        return Ok(
+            match open_descriptor_image_file_with_context(context, descriptor)? {
+                RangeContentReader::Seekable(reader) => reader as Box<dyn Read>,
+                RangeContentReader::Streaming(reader) => reader,
+            },
+        );
+    }
     if matches!(
         descriptor.source_kind.as_str(),
         "e01" | "raw" | "local_disk" | "android_sparse"
@@ -86,6 +94,9 @@ pub(crate) fn open_range_content_for_descriptor_with_context<C>(
 where
     C: PreviewReadContext,
 {
+    if context.requires_bound_reads() {
+        return open_descriptor_image_file_with_context(context, descriptor);
+    }
     if matches!(
         descriptor.source_kind.as_str(),
         "e01" | "raw" | "local_disk" | "android_sparse"

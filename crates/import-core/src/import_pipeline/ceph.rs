@@ -136,6 +136,24 @@ fn open_bluestore_reader(
         source: volume.source,
         lvm_identity: volume.lvm_identity.clone(),
     };
+    if let Some(plan) = &ctx.import_config.collection_plan {
+        let scope = ctx
+            .runtime
+            .as_ref()
+            .and_then(|runtime| runtime.factory().reader_scope());
+        if let Some(identity) = &candidate.lvm_identity {
+            return plan
+                .open_verified_lvm_reader(identity, scope)
+                .map_err(CommandError::from_typed_service_error);
+        }
+        let runtime = ctx
+            .runtime
+            .as_ref()
+            .ok_or_else(|| CommandError::internal("Collection source runtime missing"))?;
+        return runtime
+            .open_reader_with_cancel(ctx.options.cancel_token)
+            .map_err(CommandError::from_typed_service_error);
+    }
     crate::import_pipeline::partition::open_candidate_reader(
         &ctx.import_config.source_path,
         &ctx.import_config.kind,

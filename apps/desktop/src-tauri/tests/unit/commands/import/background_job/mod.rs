@@ -314,11 +314,23 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
         .find_members(&plan.import_set_id)
         .expect("query evidence-set members");
     eprintln!(
-        "PVE cluster outcome: runner={result:?}, state=ready, ready={}, failed={}, error={:?}",
+        "PVE cluster outcome: runner={result:?}, members={}, ready={}, failed={}",
         import_set.len(),
-        0,
-        Option::<String>::None
+        import_set
+            .iter()
+            .filter(|member| matches!(member.import_state.as_str(), "ready" | "ready_metadata"))
+            .count(),
+        import_set
+            .iter()
+            .filter(|member| member.import_state == "failed")
+            .count(),
     );
+    for member in &import_set {
+        eprintln!(
+            "PVE registered member: index={} state={} source={:?} error={:?}",
+            member.member_index, member.import_state, member.data_source_id, member.last_error
+        );
+    }
     let sources = DataSourceRepo::new(&case_conn)
         .find_by_case(&case_id)
         .expect("query diagnostic data sources");
@@ -340,6 +352,7 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
             source.name, storage.import_state, storage.last_error
         );
     }
+    result.expect("complete PVE cluster import and automatic derived processing");
     assert_control_database_is_tree_free(&case_conn);
     assert_manifest(&case_root, &plan);
     assert_member_storage_and_content(&case_conn, &case_root, &case_id, &plan);

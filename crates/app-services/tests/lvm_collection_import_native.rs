@@ -39,6 +39,7 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
         configs[0].collection_plan.as_ref().unwrap(),
         configs[1].collection_plan.as_ref().unwrap()
     ));
+    let shared = configs[0].collection_plan.as_ref().unwrap().clone();
     let case = case_service::create_case(workspace.path(), "Shared native LVM", None).unwrap();
     let connection = case.connection().unwrap();
     cluster_service::register_linux_evidence_set_import(&connection, &case.meta.id, &plan).unwrap();
@@ -66,6 +67,24 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
         .unwrap();
         assert_eq!(counts.failed_count, 0);
     }
+    cluster_service::validate_collection_publication(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &plan,
+        &shared,
+        &cancel,
+    )
+    .unwrap();
+    assert!(cluster_service::validate_collection_publication(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &plan,
+        &shared,
+        &AtomicBool::new(true)
+    )
+    .is_err());
     let sources = DataSourceRepo::new(&connection)
         .find_by_case(&case.meta.id)
         .unwrap();
@@ -73,6 +92,7 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
     let mut evidence_files = 0;
     let mut logical_views = 0;
     let mut committed_metadata_sources = 0;
+    let mut analysis_target = None;
     for source in sources {
         let revisions =
             persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
@@ -127,6 +147,30 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
                     preview,
                     std::fs::read(fixtures.join("mdraid/oracle.bin")).unwrap()[..1024]
                 );
+                let verified_plan = shared.clone();
+                let resolver = file_service::BoundEvidenceReaderResolver::new(move |path, kind| {
+                    let kind = match kind {
+                        "raw" => domain::DataSourceKind::Raw,
+                        "e01" => domain::DataSourceKind::E01,
+                        _ => return Err(std::io::Error::other("Unexpected source kind")),
+                    };
+                    verified_plan
+                        .verified_factory(path, &kind, &AtomicBool::new(false))
+                        .map_err(std::io::Error::other)?
+                        .open_reader()
+                });
+                let bound = file_service::FileHeaderReadCache::with_bound_readers(
+                    case.meta.id.0.clone(),
+                    source.id.clone(),
+                    resolver,
+                );
+                assert_eq!(
+                    bound
+                        .read_file_header_by_id(&source_connection, &file.id, 1024)
+                        .unwrap(),
+                    preview
+                );
+                analysis_target = Some((source.clone(), file.clone()));
                 assert_eq!(
                     file_service::read_file_header_by_id(&source_connection, &file.id, 1024)
                         .unwrap(),
@@ -174,4 +218,87 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
     assert_eq!(logical_views, 1);
     assert_eq!(evidence_files, 1);
     assert_eq!(committed_metadata_sources, 1);
+    let source = DataSourceRepo::new(&connection)
+        .find_by_case(&case.meta.id)
+        .unwrap()
+        .remove(0);
+    let source_conn = source_db::open_source_db(&case.case_root, &source.id).unwrap();
+    let key =
+        persistence_sqlite::repositories::source_meta_repo::COLLECTION_MEMBER_VERIFICATION_KEY;
+    let metadata =
+        persistence_sqlite::repositories::source_meta_repo::SourceMetaRepo::new(&source_conn);
+    let original = metadata.read(key).unwrap().unwrap();
+    let mut record: domain::structure::CollectionMemberVerification =
+        serde_json::from_str(&original).unwrap();
+    record.source.revision += 1;
+    metadata
+        .write(key, &serde_json::to_string(&record).unwrap())
+        .unwrap();
+    assert!(cluster_service::validate_collection_publication(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &plan,
+        &shared,
+        &cancel
+    )
+    .is_err());
+    metadata.write(key, &original).unwrap();
+    cluster_service::validate_collection_publication(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &plan,
+        &shared,
+        &cancel,
+    )
+    .unwrap();
+    let payload = std::fs::read(fixtures.join("mdraid/oracle.bin")).unwrap();
+    let mut changed_payload = false;
+    for member in &plan.members {
+        let bytes = std::fs::read(&member.source_path).unwrap();
+        if let Some(offset) = bytes.windows(64).position(|bytes| bytes == &payload[..64]) {
+            use std::io::{Seek, SeekFrom, Write};
+            let modified = member.source_path.metadata().unwrap().modified().unwrap();
+            let mut writer = std::fs::OpenOptions::new()
+                .write(true)
+                .open(&member.source_path)
+                .unwrap();
+            writer.seek(SeekFrom::Start(offset as u64)).unwrap();
+            writer.write_all(&[payload[0] ^ 0x80]).unwrap();
+            writer.sync_all().unwrap();
+            writer
+                .set_times(std::fs::FileTimes::new().set_modified(modified))
+                .unwrap();
+            changed_payload = true;
+            break;
+        }
+    }
+    assert!(changed_payload);
+    let (target_source, target_file) = analysis_target.unwrap();
+    let target_conn = source_db::open_source_db(&case.case_root, &target_source.id).unwrap();
+    let verified_plan = shared.clone();
+    let resolver = file_service::BoundEvidenceReaderResolver::new(move |path, _| {
+        verified_plan
+            .verified_factory(path, &domain::DataSourceKind::Raw, &AtomicBool::new(false))
+            .map_err(std::io::Error::other)?
+            .open_reader()
+    });
+    let bound = file_service::FileHeaderReadCache::with_bound_readers(
+        case.meta.id.0.clone(),
+        target_source.id,
+        resolver,
+    );
+    assert!(bound
+        .read_file_header_by_id(&target_conn, &target_file.id, 1024)
+        .is_err());
+    assert!(cluster_service::validate_collection_publication(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &plan,
+        &shared,
+        &cancel
+    )
+    .is_err());
 }

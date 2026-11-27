@@ -38,8 +38,10 @@ pub(super) fn run_analysis_workers(
         analysis_started: config.analysis_started,
         progress_cb,
     };
-    collect_worker_results(&group, &mut stats, &context);
-    finish_worker_group(group, &mut stats)?;
+    let worker_result = collect_worker_results(&group, &mut stats, &context);
+    let group_result = finish_worker_group(group, &mut stats);
+    worker_result?;
+    group_result?;
     Ok(stats)
 }
 
@@ -136,14 +138,22 @@ fn collect_worker_results(
     group: &AnalysisWorkerGroup,
     stats: &mut ImportAnalysisStats,
     context: &WorkerRunContext<'_, '_>,
-) {
+) -> Result<(), ImportAnalysisError> {
     let worker_count = stats.worker_ids.len();
     let mut completed = 0usize;
+    let mut evidence_error = None;
     while completed < worker_count {
         match group.result_rx.recv_timeout(Duration::from_millis(250)) {
             Ok((_worker_id, worker_result)) => {
                 completed += 1;
-                record_worker_result(stats, worker_result);
+                match worker_result {
+                    Err(error) if context.options.bound_readers.is_some() => {
+                        if evidence_error.is_none() {
+                            evidence_error = Some(error);
+                        }
+                    }
+                    result => record_worker_result(stats, result),
+                }
                 emit_worker_completion(context, &group.shared, completed, worker_count);
             }
             Err(crossbeam_channel::RecvTimeoutError::Timeout) => {
@@ -152,6 +162,7 @@ fn collect_worker_results(
             Err(crossbeam_channel::RecvTimeoutError::Disconnected) => break,
         }
     }
+    evidence_error.map_or(Ok(()), Err)
 }
 
 fn record_worker_result(

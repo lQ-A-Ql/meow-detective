@@ -146,6 +146,10 @@ where
     C: PreviewReadContext,
 {
     let length = clamp_range_length(length);
+    if context.requires_bound_reads() {
+        return open_range_content_for_descriptor_with_context(context, descriptor)
+            .and_then(|reader| read_from_range_reader(reader, offset, length));
+    }
     if descriptor.source_kind == "ceph_fs" {
         return context
             .read_cephfs_range(descriptor, offset, length)?

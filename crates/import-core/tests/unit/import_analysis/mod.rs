@@ -331,6 +331,7 @@ fn analysis_options(
 ) -> ImportAnalysisOptions {
     seal_source_fixture(&db_path, &ds_id);
     ImportAnalysisOptions {
+        bound_readers: None,
         publication_lease: None,
         case_root: tmp.path().to_path_buf(),
         db_path,
@@ -399,6 +400,7 @@ fn post_import_options(
 ) -> PostImportPipelineOptions {
     seal_source_fixture(&db_path, &ds_id);
     PostImportPipelineOptions {
+        bound_readers: None,
         publication_lease: None,
         case_root: tmp.path().to_path_buf(),
         db_path,
@@ -421,6 +423,7 @@ fn post_import_skip_uses_progress_sink_without_running_workers() {
     let (db_path, data_source_id) = setup_source_db(&tmp);
     seal_source_fixture(&db_path, &data_source_id);
     let options = PostImportPipelineOptions {
+        bound_readers: None,
         publication_lease: None,
         case_root: tmp.path().to_path_buf(),
         db_path,

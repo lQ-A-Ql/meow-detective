@@ -17,6 +17,13 @@ impl AnalysisSourceReader {
         options: &ImportAnalysisOptions,
         derived_runtime: Option<Arc<ceph_reconstruction::ceph_reconstruction::DerivedRbdRuntime>>,
     ) -> Self {
+        if let Some(resolver) = &options.bound_readers {
+            return Self::Host(file_service::FileHeaderReadCache::with_bound_readers(
+                options.case_id.clone(),
+                options.data_source_id.clone(),
+                resolver.clone(),
+            ));
+        }
         Self::for_source(
             options.case_id.clone(),
             options.data_source_id.clone(),

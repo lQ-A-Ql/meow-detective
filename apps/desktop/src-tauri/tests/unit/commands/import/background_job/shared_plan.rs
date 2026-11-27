@@ -70,7 +70,7 @@ fn shared_plan_failure_and_cancellation_close_collection_jobs() {
 }
 
 #[test]
-fn final_collection_verification_rejects_changed_content_and_cancellation() {
+fn collection_publication_rejects_unpublished_members_and_cancellation() {
     use std::io::{Read, Seek, SeekFrom, Write};
     for cancelled in [false, true] {
         let root = tempfile::tempdir().unwrap();

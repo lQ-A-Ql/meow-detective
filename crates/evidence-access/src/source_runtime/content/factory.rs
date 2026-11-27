@@ -2,12 +2,19 @@ use super::{ContentVerifiedReader, SourceContent, CONTENT_CHUNK_BYTES};
 use evidence_core::{
     EvidenceReader, EvidenceReaderFactory, ReaderCapabilities, SharedReaderFactory,
 };
-use std::{io, sync::Arc};
+use std::{
+    io,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+};
 
 pub struct VerifiedFactory {
     inner: SharedReaderFactory,
     content: Arc<SourceContent>,
     _manifest: Arc<dyn evidence_core::reader::ReaderResourceHold>,
+    failed_reads: Arc<AtomicBool>,
 }
 
 impl VerifiedFactory {
@@ -15,11 +22,13 @@ impl VerifiedFactory {
         inner: SharedReaderFactory,
         content: Arc<SourceContent>,
         manifest: Arc<dyn evidence_core::reader::ReaderResourceHold>,
+        failed_reads: Arc<AtomicBool>,
     ) -> SharedReaderFactory {
         Arc::new(Self {
             inner,
             content,
             _manifest: manifest,
+            failed_reads,
         })
     }
 }
@@ -42,6 +51,7 @@ impl EvidenceReaderFactory for VerifiedFactory {
             reader: ContentVerifiedReader::new(source, Arc::clone(&self.content))?,
             _memory: memory,
             _manifest: self._manifest.clone(),
+            failed_reads: self.failed_reads.clone(),
         }))
     }
     fn logical_size(&self) -> u64 {
@@ -54,6 +64,12 @@ impl EvidenceReaderFactory for VerifiedFactory {
         self.inner.capabilities()
     }
     fn validate_snapshot(&self) -> io::Result<()> {
+        if self.failed_reads.load(Ordering::Acquire) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "collection verified read failed",
+            ));
+        }
         self.inner.validate_snapshot()
     }
     fn metadata_identity(&self) -> Option<&str> {
@@ -65,10 +81,15 @@ struct HeldReader {
     reader: ContentVerifiedReader,
     _memory: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
     _manifest: Arc<dyn evidence_core::reader::ReaderResourceHold>,
+    failed_reads: Arc<AtomicBool>,
 }
 impl io::Read for HeldReader {
     fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
-        self.reader.read(bytes)
+        let result = self.reader.read(bytes);
+        if result.is_err() {
+            self.failed_reads.store(true, Ordering::Release);
+        }
+        result
     }
 }
 impl io::Seek for HeldReader {

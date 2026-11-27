@@ -175,12 +175,14 @@ impl ImageCollectionPlan {
         Ok(&self.observations[index])
     }
 
-    pub(super) fn verify_sources(
-        &self,
-        paths: &std::collections::BTreeSet<std::path::PathBuf>,
-        cancel: &AtomicBool,
-    ) -> Result<(), CollectionPlanError> {
-        self.content.verify_sources(paths, cancel)
+    pub(super) fn validate_input_identity(&self, path: &Path) -> Result<(), CollectionPlanError> {
+        let source = self
+            .sources
+            .iter()
+            .find(|source| source.source_path == path)
+            .ok_or(CollectionPlanError::MemberMismatch)?;
+        self.content.get(path, &source.source_kind)?.validate()?;
+        Ok(())
     }
 
     pub(crate) fn source_snapshot(
@@ -235,7 +237,33 @@ impl ImageCollectionPlan {
             .any(|probe| probe.candidates.contains(candidate))
     }
 
+    pub(super) fn contains_lvm_identity(
+        &self,
+        identity: &datasource_service::LvmLogicalVolumeIdentity,
+    ) -> bool {
+        self.probes.iter().any(|probe| {
+            probe
+                .candidates
+                .iter()
+                .filter_map(|item| item.lvm_identity.as_ref())
+                .chain(
+                    probe
+                        .partitions
+                        .iter()
+                        .filter_map(|item| item.lvm_identity.as_ref()),
+                )
+                .chain(
+                    probe
+                        .unsupported_volumes
+                        .iter()
+                        .filter_map(|item| item.lvm_identity.as_ref()),
+                )
+                .any(|known| known == identity)
+        })
+    }
+
     pub fn validate_snapshot(&self) -> Result<(), CollectionPlanError> {
+        self.content.validate_reads()?;
         self.snapshot.validate()?;
         Ok(())
     }

@@ -60,7 +60,14 @@ pub fn replace_from_probe(
                     .lvm_identity
                     .as_ref()
                     .filter(|identity| !identity.pv_sources.is_empty())
-                    .map(|identity| serde_json::to_string(&identity.pv_sources))
+                    .map(|identity| {
+                        serde_json::to_string(
+                            &crate::file_service::preview_lvm_identity_from_datasource(
+                                identity,
+                            )
+                            .pv_sources,
+                        )
+                    })
                     .transpose()?,
                 gpt_disk_guid: gpt_disk_guid.map(str::to_owned),
                 gpt_partition_uuid: partition.gpt_partition_uuid.clone(),

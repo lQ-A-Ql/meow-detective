@@ -129,7 +129,7 @@ fn publish_outcome(
                     ctx.import_config.import_set.as_ref().ok_or_else(|| {
                         CommandError::internal("Collection member identity missing")
                     })?;
-                plan.verify_member_content(
+                plan.validate_member_inputs(
                     member.member_index as usize,
                     &ctx.import_config.source_path,
                     &ctx.import_config.kind,
@@ -140,6 +140,7 @@ fn publish_outcome(
             .and_then(|()| validate_current(ctx.conn, ctx.runtime.as_deref()));
     match validation {
         Ok(()) => {
+            super::source_revision::record_collection_verification(ctx)?;
             let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
             let result = {
                 let _fence = lease.as_ref().map(|lease| lease.fence_connection(ctx.conn));

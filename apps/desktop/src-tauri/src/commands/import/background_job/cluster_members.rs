@@ -118,7 +118,14 @@ pub(super) fn verify_collection(
     let Some(plan) = plan else {
         return Err(CommandError::internal("Collection image plan missing"));
     };
-    match plan.verify_content(coordinator.cancel_token) {
+    match app_services::cluster_service::validate_collection_publication(
+        coordinator.connection,
+        &coordinator.job.case_root,
+        &coordinator.job.case_id,
+        &coordinator.job.plan,
+        plan,
+        coordinator.cancel_token,
+    ) {
         Ok(()) => Ok(true),
         Err(_) if coordinator.cancel_token.load(Ordering::Acquire) => {
             cancel_evidence_set_members(

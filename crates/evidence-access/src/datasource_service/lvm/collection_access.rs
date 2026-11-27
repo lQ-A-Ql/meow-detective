@@ -12,6 +12,22 @@ use std::{
 };
 
 impl ImageCollectionPlan {
+    pub fn open_verified_lvm_reader(
+        &self,
+        identity: &LvmLogicalVolumeIdentity,
+        scope: Option<Arc<dyn evidence_core::reader::ReaderAllocationScope>>,
+    ) -> Result<Box<dyn EvidenceReader>, CollectionPlanError> {
+        if !self.contains_lvm_identity(identity) {
+            return Err(CollectionPlanError::MemberMismatch);
+        }
+        self.validate_snapshot()?;
+        let route = crate::source_runtime::resources::ResourceRoute::default();
+        if let Some(scope) = scope {
+            route.bind(scope);
+        }
+        Ok(open_volume(self, identity, &route)?)
+    }
+
     pub fn logical_volume_factory(
         self: &Arc<Self>,
         candidate: &ImageFilesystemCandidate,
