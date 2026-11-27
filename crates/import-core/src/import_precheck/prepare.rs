@@ -16,7 +16,7 @@ pub struct ImportSourceConfig {
     pub profile: Option<String>,
     pub mode: ImportSourceMode,
     pub import_set: Option<ImportSetMemberConfig>,
-    pub lvm_extra_sources: Vec<datasource_service::LvmDiscoverySource>,
+    pub collection_plan: Option<std::sync::Arc<datasource_service::ImageCollectionPlan>>,
     pub existing_data_source_id: Option<domain::DataSourceId>,
     pub prepared_probe: Option<datasource_service::ImageFilesystemProbe>,
 }
@@ -49,7 +49,7 @@ impl ImportSourceConfig {
                 staging_kind: "NestedRange",
             },
             import_set: None,
-            lvm_extra_sources: Vec::new(),
+            collection_plan: None,
             existing_data_source_id: Some(source.id.clone()),
             prepared_probe: None,
         }
@@ -129,7 +129,7 @@ pub fn prepare_import_source_config_from_path_with_kind(
         profile: None,
         mode,
         import_set: None,
-        lvm_extra_sources: Vec::new(),
+        collection_plan: None,
         existing_data_source_id: None,
         prepared_probe: None,
     })

@@ -5,9 +5,9 @@ use rusqlite::Connection;
 
 use crate::file_service::{
     viewer::{
-        block_partition_candidates, descriptor_image_path_candidates, e01_partition_candidates,
-        entry_image_path_candidates, exact_partition_candidate, open_e01_reader_cached,
-        resolve_partition_index_for_entry, PreviewDescriptor, PreviewPartitionCandidate,
+        descriptor_image_path_candidates, entry_image_path_candidates, exact_partition_candidate,
+        open_e01_reader_cached, published_partition_candidates, resolve_partition_index_for_entry,
+        PreviewDescriptor, PreviewPartitionCandidate,
     },
     FileServiceError,
 };
@@ -99,7 +99,7 @@ pub(super) fn read_entry_range(
     match source_kind.as_str() {
         "e01" => {
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
-            let candidates = e01_partition_candidates(conn, entry, partition_index)?;
+            let candidates = published_partition_candidates(conn, entry, partition_index)?;
             let mut factory = |path: &Path| {
                 open_e01_reader_cached(path, "")
                     .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
@@ -116,8 +116,7 @@ pub(super) fn read_entry_range(
         }
         "raw" | "local_disk" => {
             let partition_index = resolve_partition_index_for_entry(repo, entry)?;
-            let candidates =
-                block_partition_candidates(&source_path, partition_index, &source_kind)?;
+            let candidates = published_partition_candidates(conn, entry, partition_index)?;
             let mut factory = |path: &Path| {
                 if source_kind == "local_disk" {
                     evidence_core::LocalDiskReader::open(path)

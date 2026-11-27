@@ -7,11 +7,10 @@ use rusqlite::Connection;
 use super::{archive, logical};
 use crate::file_service::{
     viewer::{
-        exact_partition_candidate, open_android_sparse_file, open_descriptor_image_file,
+        exact_partition_candidate, open_descriptor_image_file,
         open_descriptor_image_file_with_context, open_e01_file, open_e01_reader_cached,
-        open_local_disk_file, open_mdraid_file, open_mdraid_file_seekable, open_raw_file,
-        resolve_partition_index_for_entry, validate_readable_file_entry, PreviewDescriptor,
-        PreviewReadContext, RangeContentReader,
+        open_mdraid_file, open_mdraid_file_seekable, resolve_partition_index_for_entry,
+        validate_readable_file_entry, PreviewDescriptor, PreviewReadContext, RangeContentReader,
     },
     FileServiceError,
 };
@@ -146,14 +145,9 @@ pub(crate) fn open_file_content_for_entry(
             open_e01_file(conn, &source_path, entry, partition_index)
         }
         "raw" | "local_disk" | "android_sparse" => {
-            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
-            if kind == "local_disk" {
-                open_local_disk_file(&source_path, entry, partition_index)
-            } else if kind == "android_sparse" {
-                open_android_sparse_file(&source_path, entry, partition_index)
-            } else {
-                open_raw_file(&source_path, entry, partition_index)
-            }
+            let descriptor =
+                crate::file_service::viewer::preview_descriptor_for_case(conn, "", &entry.id)?;
+            open_file_content_for_descriptor(&descriptor)
         }
         "md_raid" => open_mdraid_file(
             &source_path,
@@ -184,17 +178,9 @@ pub(crate) fn open_range_content_for_entry(
                 .map(RangeContentReader::Streaming)
         }
         "raw" | "local_disk" | "android_sparse" => {
-            let partition_index = resolve_partition_index_for_entry(repo, entry)?;
-            if kind == "local_disk" {
-                open_local_disk_file(&source_path, entry, partition_index)
-                    .map(RangeContentReader::Streaming)
-            } else if kind == "android_sparse" {
-                open_android_sparse_file(&source_path, entry, partition_index)
-                    .map(RangeContentReader::Streaming)
-            } else {
-                open_raw_file(&source_path, entry, partition_index)
-                    .map(RangeContentReader::Streaming)
-            }
+            let descriptor =
+                crate::file_service::viewer::preview_descriptor_for_case(conn, "", &entry.id)?;
+            open_raw_descriptor_file(&descriptor)
         }
         "md_raid" => open_mdraid_file_seekable(
             &source_path,

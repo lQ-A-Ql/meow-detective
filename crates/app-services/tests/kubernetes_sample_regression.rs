@@ -53,7 +53,12 @@ fn real_kubernetes_e01_import_matches_external_identity_and_auto_analysis() {
         .ok()
         .and_then(|value| value.parse::<usize>().ok())
         .unwrap_or(usize::MAX);
-    for config in plan.member_import_configs().into_iter().take(member_limit) {
+    for config in plan
+        .member_import_configs(&AtomicBool::new(false))
+        .expect("prepare shared storage plan")
+        .into_iter()
+        .take(member_limit)
+    {
         let job_id = JobRepo::new(&conn)
             .create(&case_id.0, "k8s sample member import")
             .expect("create member job");

@@ -12,7 +12,6 @@ use import_core::import_precheck::{ImportSetMemberConfig, ImportSourceConfig, Im
 use super::{ClusterServiceError, Result};
 
 mod scan;
-mod source_binding;
 use scan::collect_evidence_set_image_candidates;
 
 static MANIFEST_UPDATE_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
@@ -101,50 +100,33 @@ struct UnsignedLinuxEvidenceSetManifest<'a> {
 }
 
 impl LinuxEvidenceSetImportPlan {
-    pub fn member_import_configs(&self) -> Vec<ImportSourceConfig> {
+    pub fn member_import_configs(
+        &self,
+        cancel: &std::sync::atomic::AtomicBool,
+    ) -> Result<Vec<ImportSourceConfig>> {
         let member_count = self.members.len() as u32;
+        let sources = self
+            .members
+            .iter()
+            .map(|member| {
+                datasource_service::LvmDiscoverySource::new(
+                    &member.source_path,
+                    member.source_kind.clone(),
+                )
+            })
+            .collect::<Vec<_>>();
+        let collection_plan = std::sync::Arc::new(
+            datasource_service::ImageCollectionPlan::prepare(&sources, cancel)?,
+        );
         self.members
             .iter()
-            .filter_map(|member| {
-                let mode = match member.source_kind {
-                    DataSourceKind::E01 => ImportSourceMode::Image {
-                        staging_kind: "E01",
-                    },
-                    DataSourceKind::Raw => ImportSourceMode::Image {
-                        staging_kind: "Raw",
-                    },
-                    DataSourceKind::LocalDisk => {
-                        tracing::warn!(
-                            source = %member.source_path.display(),
-                            "local physical-disk sources cannot enter the Linux evidence-set import pipeline"
-                        );
-                        return None;
-                    }
-                    DataSourceKind::LogicalDirectory => ImportSourceMode::LogicalDirectory,
-                    DataSourceKind::LogicalArchive => {
-                        tracing::warn!(
-                            source = %member.source_path.display(),
-                            "logical archive sources cannot enter the Linux evidence-set import pipeline"
-                        );
-                        return None;
-                    }
-                    DataSourceKind::AndroidSparse => {
-                        tracing::warn!(
-                            source = %member.source_path.display(),
-                            "Android sparse sources cannot enter the Linux evidence-set import pipeline"
-                        );
-                        return None;
-                    }
-                    DataSourceKind::CephRbd | DataSourceKind::CephFs => {
-                        tracing::warn!(
-                            source = %member.source_path.display(),
-                            "Ceph RBD derived source cannot enter the host-path evidence-set import pipeline"
-                        );
-                        return None;
-                    }
-                    DataSourceKind::MdRaid | DataSourceKind::NestedRange => return None,
+            .map(|member| {
+                let staging_kind = match member.source_kind {
+                    DataSourceKind::E01 => "E01",
+                    DataSourceKind::Raw => "Raw",
+                    _ => return Err(ClusterServiceError::Unsupported),
                 };
-                Some(ImportSourceConfig {
+                Ok(ImportSourceConfig {
                     existing_data_source_id: None,
                     source_path: member.source_path.clone(),
                     source_path_display: member.source_path.display().to_string(),
@@ -152,16 +134,13 @@ impl LinuxEvidenceSetImportPlan {
                     kind: member.source_kind.clone(),
                     platform: DataSourcePlatform::Linux,
                     profile: None,
-                    mode,
+                    mode: ImportSourceMode::Image { staging_kind },
                     import_set: Some(ImportSetMemberConfig {
                         import_set_id: self.import_set_id.clone(),
                         member_index: member.member_index,
                         member_count,
                     }),
-                    lvm_extra_sources: source_binding::lvm_extra_sources(
-                        &self.members,
-                        &member.source_path,
-                    ),
+                    collection_plan: Some(std::sync::Arc::clone(&collection_plan)),
                     prepared_probe: None,
                 })
             })

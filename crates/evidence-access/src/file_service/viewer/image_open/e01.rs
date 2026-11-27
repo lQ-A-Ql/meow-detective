@@ -155,10 +155,16 @@ where
         _ if exfat_hint(source_path, target, fs_kind)? => {
             open_exfat(source_path, candidate, paths, open_reader)
         }
-        _ if is_linux_filesystem_kind(fs_kind) => {
-            open_linux_image_candidate(Path::new(source_path), candidate, paths, open_reader)
-                .map(range_content_reader_into_read)
-        }
+        _ if is_linux_filesystem_kind(fs_kind) => open_linux_image_candidate(
+            Path::new(source_path),
+            candidate,
+            paths,
+            entry
+                .size
+                .ok_or_else(|| FileServiceError::other("Published file size is missing"))?,
+            open_reader,
+        )
+        .map(range_content_reader_into_read),
         _ => return Ok(None),
     };
     result

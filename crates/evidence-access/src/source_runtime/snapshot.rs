@@ -5,6 +5,34 @@ use std::{io, path::PathBuf, time::SystemTime};
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceSnapshot(Vec<(PathBuf, u64, SystemTime, Option<SystemTime>)>);
 impl SourceSnapshot {
+    pub fn capture_images(
+        sources: &[crate::datasource_service::LvmDiscoverySource],
+    ) -> io::Result<Self> {
+        let mut paths = std::collections::BTreeSet::new();
+        for source in sources {
+            match source.source_kind {
+                domain::DataSourceKind::E01 => paths.extend(
+                    image_e01::E01Reader::open(&source.source_path)?
+                        .open_plan()?
+                        .segment_paths(),
+                ),
+                domain::DataSourceKind::Raw => paths.extend(
+                    evidence_core::RawImageReader::open(&source.source_path)?
+                        .backing_paths()
+                        .iter()
+                        .cloned(),
+                ),
+                _ => {
+                    return Err(io::Error::new(
+                        io::ErrorKind::Unsupported,
+                        "image snapshot requires RAW or E01 sources",
+                    ))
+                }
+            }
+        }
+        Self::capture(&paths.into_iter().collect::<Vec<_>>())
+    }
+
     pub(super) fn metadata_bytes(&self) -> u64 {
         (self.0.capacity() * std::mem::size_of::<(PathBuf, u64, SystemTime, Option<SystemTime>)>()
             + self.0.iter().map(|e| e.0.capacity()).sum::<usize>()) as u64

@@ -89,6 +89,8 @@ pub use summary::{get_linux_evidence_set_summary, list_linux_evidence_sets};
 
 #[derive(Debug, Error)]
 pub enum ClusterServiceError {
+    #[error("collection storage plan failed: {0}")]
+    CollectionPlan(#[from] datasource_service::CollectionPlanError),
     #[error("Kubernetes artifact parsing failed: {0}")]
     KubernetesParser(#[from] KubernetesParserError),
     #[error("Kubernetes artifact could not be read: {0}")]
@@ -132,6 +134,7 @@ impl From<rusqlite::Error> for ClusterServiceError {
 impl transport::ServiceErrorCategory for ClusterServiceError {
     fn category(&self) -> transport::ErrorCategory {
         match self {
+            Self::CollectionPlan(error) => error.category(),
             Self::KubernetesParser(error) => error.category(),
             Self::FileRead(error) => error.category(),
             Self::Unsupported => transport::ErrorCategory::Unsupported,

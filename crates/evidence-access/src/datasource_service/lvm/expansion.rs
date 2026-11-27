@@ -3,18 +3,15 @@ use super::super::read_filesystem_uuid;
 use super::super::reader::open_evidence_reader;
 use super::super::{
     ImageFilesystemCandidate, ImageFilesystemKind, ImageFilesystemProbe, ImageFilesystemSource,
-    LvmDiscoverySource, LvmLogicalVolumeIdentity, LvmPhysicalVolumeSource, PartitionRecord,
-    PartitionStatus,
+    LvmLogicalVolumeIdentity, LvmPhysicalVolumeSource, PartitionRecord, PartitionStatus,
 };
 use super::diagnostics::{
-    format_lvm_lv_summaries, format_lvm_pv_sources, lvm_lv_diagnostic_context,
-    lvm_vg_diagnostic_context,
+    format_lvm_lv_summaries, lvm_lv_diagnostic_context, lvm_vg_diagnostic_context,
 };
 use super::discovery::lvm_discovery_pv_groups;
 use super::model::{ExpandedPoolSources, LvmExpansionState};
 use super::source_identity::{
-    lvm_source_fingerprint, lvm_source_matches, lvm_sources_for_pv_mappings,
-    representative_lvm_candidate,
+    lvm_source_matches, normalize_lvm_uuid_for_match, representative_lvm_candidate,
 };
 use super::unsupported::classify_unsupported_logical_volume;
 use domain::DataSourceKind;
@@ -33,42 +30,35 @@ pub fn expand_lvm_pool_candidates(
     source_path: &Path,
     source_kind: &DataSourceKind,
 ) {
-    expand_lvm_pool_candidates_with_sources(probe, source_path, source_kind, &[]);
-}
-
-pub fn expand_lvm_pool_candidates_with_sources(
-    probe: &mut ImageFilesystemProbe,
-    source_path: &Path,
-    source_kind: &DataSourceKind,
-    extra_sources: &[LvmDiscoverySource],
-) {
     let lvm_indices = collect_lvm_candidates(probe);
     if lvm_indices.is_empty() {
         return;
     }
 
-    let discovery_groups = lvm_discovery_pv_groups(
-        &lvm_indices,
-        source_path,
-        source_kind,
-        extra_sources,
-        &mut probe.warnings,
-    );
+    let discovery_groups =
+        lvm_discovery_pv_groups(&lvm_indices, source_path, source_kind, &mut probe.warnings);
     let mut state = LvmExpansionState::default();
     for pv_sources in discovery_groups {
-        expand_discovery_group(
+        if let Err(error) = expand_discovery_group(
             probe,
             &lvm_indices,
             source_path,
             source_kind,
             pv_sources,
             &mut state,
-        );
+        ) {
+            probe
+                .warnings
+                .push(format!("LVM expansion failed: {error}"));
+            return;
+        }
     }
     apply_expansion_results(probe, state);
 }
 
-fn collect_lvm_candidates(probe: &ImageFilesystemProbe) -> Vec<(usize, ImageFilesystemCandidate)> {
+pub(super) fn collect_lvm_candidates(
+    probe: &ImageFilesystemProbe,
+) -> Vec<(usize, ImageFilesystemCandidate)> {
     probe
         .candidates
         .iter()
@@ -78,18 +68,17 @@ fn collect_lvm_candidates(probe: &ImageFilesystemProbe) -> Vec<(usize, ImageFile
         .collect()
 }
 
-fn expand_discovery_group(
+pub(super) fn expand_discovery_group(
     probe: &mut ImageFilesystemProbe,
     lvm_indices: &[(usize, ImageFilesystemCandidate)],
     source_path: &Path,
     source_kind: &DataSourceKind,
     pv_sources: Vec<LvmPhysicalVolumeSource>,
     state: &mut LvmExpansionState,
-) {
-    let Some((pool, seed_offset)) = discover_lvm_pool(probe, &pv_sources, source_kind) else {
-        return;
-    };
-    let expanded = expanded_pool_sources(&pool, &pv_sources, source_path, source_kind, seed_offset);
+) -> Result<(), fs_lvm::LvmError> {
+    let (pool, seed_offset) = discover_lvm_pool(&pv_sources, source_kind)?;
+    let expanded =
+        expanded_pool_sources(&pool, &pv_sources, source_path, source_kind, seed_offset)?;
     let representative = representative_lvm_candidate(
         lvm_indices,
         if expanded.primary_offsets.is_empty() {
@@ -113,7 +102,7 @@ fn expand_discovery_group(
     };
     if !state.expanded_vgs.insert(vg_key) {
         redirect_expanded_pool(probe, lvm_indices, &expanded.primary_offsets, state);
-        return;
+        return Ok(());
     }
 
     let lv_list = pool.list_volumes();
@@ -128,7 +117,7 @@ fn expand_discovery_group(
         representative,
         &expanded,
         state,
-    );
+    )?;
     redirect_expanded_pool(probe, lvm_indices, &expanded.primary_offsets, state);
     if state.new_candidates.len() == candidates_before {
         probe.warnings.push(format!(
@@ -137,13 +126,13 @@ fn expand_discovery_group(
             format_lvm_lv_summaries(vg)
         ));
     }
+    Ok(())
 }
 
 fn discover_lvm_pool(
-    probe: &mut ImageFilesystemProbe,
     pv_sources: &[LvmPhysicalVolumeSource],
     default_source_kind: &DataSourceKind,
-) -> Option<(fs_lvm::LvmPool, u64)> {
+) -> Result<(fs_lvm::LvmPool, u64), fs_lvm::LvmError> {
     let pv_offsets = pv_sources
         .iter()
         .map(|source| source.offset)
@@ -156,53 +145,9 @@ fn discover_lvm_pool(
             .source_kind
             .as_ref()
             .unwrap_or(default_source_kind);
-        match open_evidence_reader(reader_path, reader_kind) {
-            Ok(reader) => readers.push(reader),
-            Err(error) => {
-                warn_reader_open_failure(probe, pv_source, error);
-                return None;
-            }
-        }
+        readers.push(open_evidence_reader(reader_path, reader_kind)?);
     }
-    if readers.is_empty() {
-        return None;
-    }
-
-    match fs_lvm::LvmPool::discover(readers, pv_offsets) {
-        Ok(pool) => Some((pool, seed_offset)),
-        Err(error) => {
-            let formatted_sources = format_lvm_pv_sources(pv_sources);
-            probe.warnings.push(format!(
-                "LVM expand: discovery failed for PV source(s) {}: {}",
-                formatted_sources, error
-            ));
-            tracing::warn!(
-                "LVM expand: discovery failed for PV source(s) {}: {}",
-                formatted_sources,
-                error
-            );
-            None
-        }
-    }
-}
-
-fn warn_reader_open_failure(
-    probe: &mut ImageFilesystemProbe,
-    pv_source: &LvmPhysicalVolumeSource,
-    error: impl std::fmt::Display,
-) {
-    probe.warnings.push(format!(
-        "LVM expand: cannot open reader for PV source='{}' offset {}: {}",
-        lvm_source_fingerprint(&pv_source.source_path),
-        pv_source.offset,
-        error
-    ));
-    tracing::warn!(
-        "LVM expand: cannot open reader for PV source='{}' at offset {}: {}",
-        lvm_source_fingerprint(&pv_source.source_path),
-        pv_source.offset,
-        error
-    );
+    Ok((fs_lvm::LvmPool::discover(readers, pv_offsets)?, seed_offset))
 }
 
 fn expanded_pool_sources(
@@ -211,20 +156,35 @@ fn expanded_pool_sources(
     source_path: &Path,
     source_kind: &DataSourceKind,
     seed_offset: u64,
-) -> ExpandedPoolSources {
-    let pv_mappings = pool
-        .physical_volume_offsets()
-        .iter()
-        .map(|(pv_name, offset)| (pv_name.clone(), *offset))
-        .collect::<Vec<_>>();
-    let mapped_offsets = if pv_mappings.is_empty() {
-        vec![seed_offset]
-    } else {
-        pv_mappings.iter().map(|(_, offset)| *offset).collect()
-    };
-    let mut sources = lvm_sources_for_pv_mappings(pv_sources, &pv_mappings, &mapped_offsets);
-    if sources.len() != pv_sources.len() {
-        sources = pv_sources.to_vec();
+) -> Result<ExpandedPoolSources, fs_lvm::LvmError> {
+    let mut sources = Vec::new();
+    for (name, offset) in pool.physical_volume_offsets() {
+        let pv = pool
+            .volume_group()
+            .physical_volumes
+            .iter()
+            .find(|pv| pv.name == *name)
+            .ok_or_else(|| fs_lvm::LvmError::UnknownPhysicalVolume { name: name.clone() })?;
+        let matching = pv_sources
+            .iter()
+            .filter(|source| {
+                source.offset == *offset
+                    && normalize_lvm_uuid_for_match(&source.pv_uuid)
+                        == normalize_lvm_uuid_for_match(&pv.uuid)
+            })
+            .collect::<Vec<_>>();
+        let [source] = matching.as_slice() else {
+            return Err(fs_lvm::LvmError::MetadataParseError {
+                line: 0,
+                message: format!(
+                    "PV '{}' requires one exact UUID and coordinate binding",
+                    pv.uuid
+                ),
+            });
+        };
+        let mut source = (*source).clone();
+        source.pv_name = Some(name.clone());
+        sources.push(source);
     }
 
     let offsets = sources
@@ -241,13 +201,13 @@ fn expanded_pool_sources(
         .copied()
         .or_else(|| offsets.first().copied())
         .unwrap_or(seed_offset);
-    ExpandedPoolSources {
+    Ok(ExpandedPoolSources {
         sources,
         offsets,
         primary_offsets,
         candidate_offset,
         seed_offset,
-    }
+    })
 }
 
 fn trace_discovered_volumes(volume_count: usize, expanded: &ExpandedPoolSources) {
@@ -302,21 +262,10 @@ fn append_readable_volume_candidates(
     representative: Option<&ImageFilesystemCandidate>,
     expanded: &ExpandedPoolSources,
     state: &mut LvmExpansionState,
-) {
+) -> Result<(), fs_lvm::LvmError> {
     let vg = pool.volume_group();
     for (lv_idx, lv_info) in readable_volumes {
-        let mut lv_reader = match pool.open_volume_reader(lv_idx) {
-            Ok(reader) => reader,
-            Err(error) => {
-                probe.warnings.push(format!(
-                    "LVM expand: open logical volume failed; {}: {}",
-                    lvm_lv_diagnostic_context(vg, &lv_info, &expanded.sources),
-                    error
-                ));
-                tracing::warn!("LVM: open_volume '{}' failed: {}", lv_info.name, error);
-                continue;
-            }
-        };
+        let mut lv_reader = pool.open_volume_reader(lv_idx)?;
 
         let filesystem = read_boot_filesystem(&mut *lv_reader, 0);
         match filesystem {
@@ -353,15 +302,17 @@ fn append_readable_volume_candidates(
                 classify_unsupported_logical_volume(probe, &mut *lv_reader, vg, &lv_info, expanded);
             }
             Err(error) => {
-                probe.warnings.push(format!(
-                    "LVM expand: filesystem detection failed for logical volume; {}: {}",
-                    lvm_lv_diagnostic_context(vg, &lv_info, &expanded.sources),
-                    error
-                ));
-                tracing::debug!("LVM LV '{}': FS detection error: {}", lv_info.name, error);
+                return Err(fs_lvm::LvmError::MetadataParseError {
+                    line: 0,
+                    message: format!(
+                        "filesystem detection failed for logical volume '{}': {error}",
+                        lv_info.uuid
+                    ),
+                });
             }
         }
     }
+    Ok(())
 }
 
 fn build_logical_volume_candidate(
@@ -412,7 +363,10 @@ fn redirect_expanded_pool(
     remove_lvm_candidates_for_offsets(&mut state.remove_indices, lvm_indices, primary_offsets);
 }
 
-fn apply_expansion_results(probe: &mut ImageFilesystemProbe, mut state: LvmExpansionState) {
+pub(super) fn apply_expansion_results(
+    probe: &mut ImageFilesystemProbe,
+    mut state: LvmExpansionState,
+) {
     state.remove_indices.sort_unstable_by(|a, b| b.cmp(a));
     for index in state.remove_indices {
         probe.candidates.remove(index);
@@ -482,7 +436,7 @@ fn remove_lvm_candidates_for_offsets(
     }
 }
 
-fn mark_lvm_partitions_expanded(probe: &mut ImageFilesystemProbe, pv_offsets: &[u64]) {
+pub(super) fn mark_lvm_partitions_expanded(probe: &mut ImageFilesystemProbe, pv_offsets: &[u64]) {
     for partition in &mut probe.partitions {
         if pv_offsets.contains(&partition.offset)
             && matches!(partition.filesystem, Some(ImageFilesystemKind::LvmPool))

@@ -6,7 +6,6 @@ pub(super) struct LvmPvDiscoveryInfo {
     pub(super) source: LvmPhysicalVolumeSource,
     pub(super) label: fs_lvm::LvmLabel,
     pub(super) volume_group: Option<fs_lvm::VolumeGroup>,
-    pub(super) metadata_warnings: Vec<String>,
 }
 
 pub(super) struct LvmMetadataGroup {

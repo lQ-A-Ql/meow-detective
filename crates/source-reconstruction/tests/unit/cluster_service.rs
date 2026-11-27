@@ -86,10 +86,21 @@ fn evidence_set_requires_multiple_images() {
 #[test]
 fn evidence_set_member_configs_are_linux_scoped_not_cluster_profiled() {
     let tmp = tempfile::TempDir::new().unwrap();
-    std::fs::write(tmp.path().join("a.raw"), b"raw").unwrap();
-    std::fs::write(tmp.path().join("b.raw"), b"raw").unwrap();
+    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/fixtures/public-small/lvm-native/shared-ext4");
+    for index in 0..2 {
+        std::io::copy(
+            &mut flate2::read::GzDecoder::new(
+                std::fs::File::open(fixture.join(format!("pv-{index}.raw.gz"))).unwrap(),
+            ),
+            &mut std::fs::File::create(tmp.path().join(format!("pv-{index}.raw"))).unwrap(),
+        )
+        .unwrap();
+    }
     let plan = plan_linux_evidence_set_import(tmp.path(), None).unwrap();
-    let configs = plan.member_import_configs();
+    let configs = plan
+        .member_import_configs(&std::sync::atomic::AtomicBool::new(false))
+        .unwrap();
 
     assert_eq!(configs.len(), 2);
     assert_eq!(configs[0].platform, DataSourcePlatform::Linux);
@@ -101,16 +112,24 @@ fn evidence_set_member_configs_are_linux_scoped_not_cluster_profiled() {
             .map(|value| value.import_set_id.as_str()),
         Some(plan.import_set_id.as_str())
     );
-    assert_eq!(configs[0].lvm_extra_sources.len(), 1);
+    assert!(std::sync::Arc::ptr_eq(
+        configs[0].collection_plan.as_ref().unwrap(),
+        configs[1].collection_plan.as_ref().unwrap()
+    ));
+    let shared = configs[0].collection_plan.as_ref().unwrap();
     assert_eq!(
-        configs[0].lvm_extra_sources[0].source_path,
-        plan.members[1].source_path
+        shared
+            .member_probe(0, &configs[0].source_path, &configs[0].kind)
+            .unwrap()
+            .candidates
+            .len(),
+        1
     );
-    assert_eq!(configs[1].lvm_extra_sources.len(), 1);
-    assert_eq!(
-        configs[1].lvm_extra_sources[0].source_path,
-        plan.members[0].source_path
-    );
+    assert!(shared
+        .member_probe(1, &configs[1].source_path, &configs[1].kind)
+        .unwrap()
+        .candidates
+        .is_empty());
 }
 
 #[test]

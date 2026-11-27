@@ -73,22 +73,13 @@ fn preview_descriptor_for_entry(
 
     let partition_candidates = match source_kind.as_str() {
         "logical_directory" | "logical_archive" | "ceph_fs" | "md_raid" => Vec::new(),
-        "e01" | "ceph_rbd" | "nested_range" => {
+        "e01" | "ceph_rbd" | "nested_range" | "raw" | "local_disk" | "android_sparse" => {
             let expected_partition_index =
                 crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
-            crate::file_service::viewer::e01_partition_candidates(
+            crate::file_service::viewer::published_partition_candidates(
                 conn,
                 entry,
                 expected_partition_index,
-            )?
-        }
-        "raw" | "local_disk" | "android_sparse" => {
-            let expected_partition_index =
-                crate::file_service::viewer::resolve_partition_index_for_entry(repo, entry)?;
-            crate::file_service::viewer::block_partition_candidates(
-                &source_path,
-                expected_partition_index,
-                &source_kind,
             )?
         }
         other => {

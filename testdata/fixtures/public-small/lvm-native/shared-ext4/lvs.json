@@ -1,0 +1,13 @@
+  {
+      "report": [
+          {
+              "seg": [
+                  {"lv_name":"logical", "lv_uuid":"Z45gFi-BJi6-ILss-fJiT-xFRf-2Ice-dASSwf", "seg_start_pe":"0", "seg_size_pe":"63", "devices":"/dev/loop0(0)"},
+                  {"lv_name":"logical", "lv_uuid":"Z45gFi-BJi6-ILss-fJiT-xFRf-2Ice-dASSwf", "seg_start_pe":"63", "seg_size_pe":"17", "devices":"/dev/loop1(0)"}
+              ]
+          }
+      ]
+      ,
+      "log": [
+      ]
+  }

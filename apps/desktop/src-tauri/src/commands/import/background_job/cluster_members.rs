@@ -28,7 +28,30 @@ pub(super) fn import_evidence_set_members(
     cancel_token: &Arc<AtomicBool>,
     task_manager: Option<Arc<TaskManager>>,
 ) -> Result<Option<EvidenceSetImportSummary>, CommandError> {
-    let configs = job.plan.member_import_configs();
+    let configs = match job.plan.member_import_configs(cancel_token) {
+        Ok(configs) => configs,
+        Err(error) => {
+            let error = CommandError::from_typed_service_error(error);
+            if error.category == "cancelled" {
+                cancel_evidence_set_members(
+                    connection,
+                    job_repo,
+                    job,
+                    app,
+                    &EvidenceSetImportSummary::new(),
+                );
+                return Ok(None);
+            }
+            return fail_linux_evidence_set_job(
+                job_repo,
+                &job.job_id,
+                app,
+                Some((connection, &job.plan.import_set_id, 0, 0)),
+                error,
+            )
+            .map(|()| None);
+        }
+    };
     let total_members = configs.len() as u32;
     if total_members == 0 {
         return Ok(Some(EvidenceSetImportSummary::new()));

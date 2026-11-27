@@ -137,7 +137,7 @@ impl<'a> SourceReadContext<'a> {
             ));
         }
         let partition_candidates =
-            self.partition_candidates_for(hint, partition_index, &source_kind, &source_path)?;
+            self.partition_candidates_for(hint, partition_index, &source_kind)?;
         let selected = match partition_candidates.as_slice() {
             [] if matches!(
                 source_kind.as_str(),
@@ -190,25 +190,17 @@ impl<'a> SourceReadContext<'a> {
         hint: &SourceReadFileHint,
         partition_index: usize,
         source_kind: &str,
-        source_path: &str,
     ) -> Result<Vec<crate::file_service::viewer::PreviewPartitionCandidate>, FileServiceError> {
         if let Some(cached) = self.partition_candidates.get(&partition_index) {
             return Ok(cached.clone());
         }
         let entry = metadata::hint_file_entry(hint);
         let candidates = match source_kind {
-            "e01" | "ceph_rbd" | "nested_range" => {
-                crate::file_service::viewer::e01_partition_candidates(
+            "e01" | "ceph_rbd" | "nested_range" | "raw" | "local_disk" | "android_sparse" => {
+                crate::file_service::viewer::published_partition_candidates(
                     self.source_conn,
                     &entry,
                     Some(partition_index),
-                )?
-            }
-            "raw" | "local_disk" | "android_sparse" => {
-                crate::file_service::viewer::block_partition_candidates(
-                    source_path,
-                    Some(partition_index),
-                    source_kind,
                 )?
             }
             "logical_directory" | "logical_archive" | "md_raid" => Vec::new(),

@@ -15,8 +15,9 @@ pub use fs_magic::{is_exfat_boot_sector, read_boot_filesystem};
 pub fn list_local_disks() -> Result<Vec<evidence_core::LocalDiskInfo>> {
     evidence_core::list_local_disks().map_err(DataSourceError::Io)
 }
-pub use lvm::{expand_lvm_pool_candidates, expand_lvm_pool_candidates_with_sources};
+pub use lvm::expand_lvm_pool_candidates;
 pub use lvm::{lvm_source_fingerprint, normalize_lvm_uuid_for_match};
+pub use lvm::{CollectionPlanError, ImageCollectionPlan};
 pub use partition_index::{assign_effective_partition_indices, effective_partition_index};
 pub use probe::identity::read_filesystem_uuid;
 pub use probe::{detect_image_filesystem, partition_display_name, volume_display_name};

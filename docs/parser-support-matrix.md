@@ -200,6 +200,21 @@ Kubernetes 清单保留固定数量且顺序稳定的候选，同时统计全部
 集合摘要使用同一次读取完成清单摘要验证和元数据投影，并呈现清单记录的扫描缺口。
 事件与拓扑共用成员准入，成员记录与实际数据源均须处于就绪状态。
 
+集合普通镜像导入共用一个 `Arc<ImageCollectionPlan>`：每个镜像执行一次直接探测，
+按 PV UUID 汇集完整 VG，每个 VG 只展开一次可读取逻辑卷。
+规范路径排序确定稳定目录所属成员，全部物理成员分别保存来源数据库与 PV 分区记录；
+逻辑分区保存 VG/LV UUID 和全部 PV 来源，其他 PV 不重复枚举同一逻辑目录。
+计划获取及目录发布前验证全部 RAW backing file/E01 segment 的 metadata snapshot；
+这项检查表示来源文件元数据身份，内容摘要的强校验范围见上述 MD 说明。
+重复输入、重复 PV UUID、冲突 committed metadata 和 thin 打开错误会终止共享计划准备。
+`evidence-access --test lvm_collection_native` 和
+`app-services --test lvm_collection_import_native` 使用 LVM2/mkfs.ext4 原生镜像，
+覆盖没有 metadata copy 的 PV、相同坐标上的多个 PV、反向成员顺序、
+完整 80 MiB 逻辑字节摘要、单次目录发布和文件身份预览。
+RAW、E01、LocalDisk、AndroidSparse 预览统一使用已发布分区记录，
+跨 PV 预览按记录中的全部来源重新打开，并验证 VG/LV UUID。
+文件流与范围读取共用文件系统打开入口及有界读取组件。
+
 ### 4c. dm-thin 一致性边界
 
 `fs-lvm --test thin_native` 使用 LVM2、Linux device-mapper、

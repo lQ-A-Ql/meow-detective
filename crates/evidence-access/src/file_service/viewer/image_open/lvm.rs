@@ -271,6 +271,14 @@ fn open_lvm_volume_from_pool(
     pool: &fs_lvm::LvmPool,
     identity: &PreviewLvmIdentity,
 ) -> std::io::Result<Box<dyn EvidenceReader>> {
+    if identity.vg_uuid.is_empty()
+        || normalize_lvm_uuid_for_match(&pool.volume_group().id)
+            != normalize_lvm_uuid_for_match(&identity.vg_uuid)
+    {
+        return Err(invalid_input(
+            "LVM preview volume group UUID does not match the published identity",
+        ));
+    }
     let index = find_lvm_preview_volume_index(pool, identity).ok_or_else(|| {
         std::io::Error::new(
             std::io::ErrorKind::NotFound,
@@ -293,17 +301,11 @@ pub fn find_lvm_preview_volume_index(
     identity: &PreviewLvmIdentity,
 ) -> Option<usize> {
     let volumes = pool.list_volumes();
-    if !identity.lv_uuid.is_empty() {
-        if let Some(index) = volumes
-            .iter()
-            .position(|volume| volume.uuid == identity.lv_uuid)
-        {
-            return Some(index);
-        }
-    }
-    volumes
-        .iter()
-        .position(|volume| volume.name == identity.lv_name)
+    volumes.iter().position(|volume| {
+        !identity.lv_uuid.is_empty()
+            && normalize_lvm_uuid_for_match(&volume.uuid)
+                == normalize_lvm_uuid_for_match(&identity.lv_uuid)
+    })
 }
 
 fn invalid_input(message: impl Into<String>) -> std::io::Error {

@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+mod shared_plan;
 use std::fmt::Write;
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};

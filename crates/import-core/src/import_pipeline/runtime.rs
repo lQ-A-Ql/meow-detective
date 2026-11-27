@@ -118,7 +118,16 @@ fn publish_outcome(
     ready_state: &str,
     message: String,
 ) -> Result<String, CommandError> {
-    match validate_current(ctx.runtime.as_deref()) {
+    let validation = ctx
+        .import_config
+        .collection_plan
+        .as_ref()
+        .map_or(Ok(()), |plan| {
+            plan.validate_snapshot()
+                .map_err(CommandError::from_typed_service_error)
+        })
+        .and_then(|()| validate_current(ctx.runtime.as_deref()));
+    match validation {
         Ok(()) => {
             let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
             let result = {

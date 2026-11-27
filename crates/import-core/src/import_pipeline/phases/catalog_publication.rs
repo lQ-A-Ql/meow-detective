@@ -10,6 +10,10 @@ pub(super) fn finish_catalog(
     stats: &mut file_service::EnumerationStats,
 ) -> Result<(), CommandError> {
     let started = std::time::Instant::now();
+    if let Some(plan) = &ctx.import_config.collection_plan {
+        plan.validate_snapshot()
+            .map_err(CommandError::from_typed_service_error)?;
+    }
     super::super::runtime::validate_current(ctx.runtime.as_deref())?;
     super::super::runtime::finish_indexes(ctx)?;
     populate_file_graph(ctx, source, stats);

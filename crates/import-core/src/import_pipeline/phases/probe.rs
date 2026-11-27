@@ -26,12 +26,7 @@ pub(super) fn seed_manifest_if_needed(
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Probe,
         || probe_image(ctx),
     )?;
-    datasource_service::expand_lvm_pool_candidates_with_sources(
-        &mut probe,
-        &ctx.import_config.source_path,
-        &ctx.import_config.kind,
-        &ctx.import_config.lvm_extra_sources,
-    );
+    expand_local_lvm(ctx, &mut probe);
     report_probe(ctx, data_source, "probe", &probe, started.elapsed());
     if is_exclusively_bluestore_probe(&probe) {
         reject_multiple_bluestore_volumes(&probe)?;
@@ -39,6 +34,9 @@ pub(super) fn seed_manifest_if_needed(
         return Ok(ProbeSeedOutcome::CephBlueStoreMetadata);
     }
     persist_probe(ctx, data_source, &probe, manifest)?;
+    if shared_member_only(ctx, &probe) {
+        return Ok(ProbeSeedOutcome::SharedStorageMember);
+    }
     *candidates = probe.candidates;
     Ok(ProbeSeedOutcome::Filesystem)
 }
@@ -47,6 +45,7 @@ pub(super) fn seed_manifest_if_needed(
 pub(super) enum ProbeSeedOutcome {
     Filesystem,
     CephBlueStoreMetadata,
+    SharedStorageMember,
 }
 
 pub(super) fn refresh_partition_statuses(
@@ -76,12 +75,7 @@ pub(super) fn load_resume_candidates(
         transport::dto::import_benchmark::ImportBenchmarkPhaseDto::Probe,
         || probe_image(ctx),
     )?;
-    datasource_service::expand_lvm_pool_candidates_with_sources(
-        &mut probe,
-        &ctx.import_config.source_path,
-        &ctx.import_config.kind,
-        &ctx.import_config.lvm_extra_sources,
-    );
+    expand_local_lvm(ctx, &mut probe);
     if is_exclusively_bluestore_probe(&probe) {
         return Err(CommandError::internal(
             "Ceph BlueStore metadata import was already completed and has no filesystem resume work",
@@ -96,6 +90,18 @@ pub(super) fn load_resume_candidates(
 fn probe_image(
     ctx: &ImportJobContext<'_>,
 ) -> Result<datasource_service::ImageFilesystemProbe, CommandError> {
+    if let Some(plan) = &ctx.import_config.collection_plan {
+        let member = ctx.import_config.import_set.as_ref().ok_or_else(|| {
+            CommandError::internal("collection image plan requires a member identity")
+        })?;
+        return plan
+            .member_probe(
+                member.member_index as usize,
+                &ctx.import_config.source_path,
+                &ctx.import_config.kind,
+            )
+            .map_err(CommandError::from_typed_service_error);
+    }
     if let Some(probe) = &ctx.import_config.prepared_probe {
         return Ok(probe.clone());
     }
@@ -138,6 +144,33 @@ fn probe_image(
     };
     datasource_service::detect_image_filesystem(&mut reader)
         .map_err(CommandError::from_typed_service_error)
+}
+
+fn expand_local_lvm(
+    ctx: &ImportJobContext<'_>,
+    probe: &mut datasource_service::ImageFilesystemProbe,
+) {
+    if ctx.import_config.collection_plan.is_none() {
+        datasource_service::expand_lvm_pool_candidates(
+            probe,
+            &ctx.import_config.source_path,
+            &ctx.import_config.kind,
+        );
+    }
+}
+
+fn shared_member_only(
+    ctx: &ImportJobContext<'_>,
+    probe: &datasource_service::ImageFilesystemProbe,
+) -> bool {
+    probe.candidates.is_empty()
+        && probe.unsupported_volumes.is_empty()
+        && ctx
+            .import_config
+            .collection_plan
+            .as_ref()
+            .zip(ctx.import_config.import_set.as_ref())
+            .is_some_and(|(plan, member)| plan.is_shared_member(member.member_index as usize))
 }
 
 pub(crate) fn is_exclusively_bluestore_probe(

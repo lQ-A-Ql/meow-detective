@@ -21,9 +21,8 @@ use app_services::{
         MdRaidMemberOrigin,
     },
     datasource_service::{
-        detect_image_filesystem, expand_lvm_pool_candidates,
-        expand_lvm_pool_candidates_with_sources, ImageFilesystemCandidate, ImageFilesystemKind,
-        ImageFilesystemSource, PartitionRecord,
+        detect_image_filesystem, expand_lvm_pool_candidates, ImageFilesystemCandidate,
+        ImageFilesystemKind, ImageFilesystemSource, PartitionRecord,
     },
     file_service,
     import_pipeline::{
@@ -3228,20 +3227,31 @@ fn pve_cluster_multi_pv_lvm_expands_across_members() {
         .expect("multi-PV evidence set should be planned");
     assert!(plan.members.len() >= 2);
 
-    let configs = plan.member_import_configs();
+    let configs = plan
+        .member_import_configs(&std::sync::atomic::AtomicBool::new(false))
+        .unwrap();
     assert_eq!(configs.len(), plan.members.len());
     for (member, config) in plan.members.iter().zip(configs) {
-        let mut reader = E01Reader::open(&member.source_path).expect("open E01 member");
-        let mut probe = detect_image_filesystem(&mut reader).expect("probe E01 member");
-        expand_lvm_pool_candidates_with_sources(
-            &mut probe,
-            &member.source_path,
-            &member.source_kind,
-            &config.lvm_extra_sources,
-        );
-        let paired_pv_warning = probe.warnings.iter().any(|warning| {
-            warning.contains("PV source(s)=") && warning.matches("path-sha256:").count() >= 2
-        });
+        let probe = config
+            .collection_plan
+            .as_ref()
+            .unwrap()
+            .member_probe(
+                member.member_index as usize,
+                &member.source_path,
+                &member.source_kind,
+            )
+            .unwrap();
+        let paired_pv_warning = probe
+            .candidates
+            .iter()
+            .filter_map(|candidate| candidate.lvm_identity.as_ref())
+            .any(|identity| identity.pv_sources.len() >= 2)
+            || config
+                .collection_plan
+                .as_ref()
+                .unwrap()
+                .is_shared_member(member.member_index as usize);
         assert!(
             paired_pv_warning,
             "cross-member LVM should inspect PVs from both E01 members: {:?}",
@@ -3257,15 +3267,20 @@ fn pve_cluster_nested_mdraid_members_are_reported() {
     let plan = plan_linux_evidence_set_import(&root, Some("mdraid".to_string()))
         .expect("MD RAID evidence set should be planned");
     let mut diagnostics = Vec::new();
-    for (member, config) in plan.members.iter().zip(plan.member_import_configs()) {
-        let mut reader = E01Reader::open(&member.source_path).expect("open E01 member");
-        let mut probe = detect_image_filesystem(&mut reader).expect("probe E01 member");
-        expand_lvm_pool_candidates_with_sources(
-            &mut probe,
-            &member.source_path,
-            &member.source_kind,
-            &config.lvm_extra_sources,
-        );
+    for (member, config) in plan.members.iter().zip(
+        plan.member_import_configs(&std::sync::atomic::AtomicBool::new(false))
+            .unwrap(),
+    ) {
+        let probe = config
+            .collection_plan
+            .as_ref()
+            .unwrap()
+            .member_probe(
+                member.member_index as usize,
+                &member.source_path,
+                &member.source_kind,
+            )
+            .unwrap();
         diagnostics.extend(
             probe
                 .warnings

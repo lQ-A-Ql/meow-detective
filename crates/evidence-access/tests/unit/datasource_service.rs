@@ -1,14 +1,8 @@
-use super::fs_magic::SECTOR_SIZE;
 use super::lvm::source_identity::lvm_pv_source_key;
 use super::*;
 use domain::{CaseId, CaseMeta, DataSourceHashStatus, DataSourceKind, DataSourceProvenanceStatus};
 use persistence_sqlite::repositories::{case_repo::CaseRepo, datasource_repo::DataSourceRepo};
 use tempfile::TempDir;
-const SYNTHETIC_PV_SIZE: u64 = 2_097_152;
-const SYNTHETIC_PV_OFFSET: u64 = 1_048_576;
-const SYNTHETIC_DATA_AREA_START: u64 = 2560;
-const SYNTHETIC_PV0_UUID: &str = "00000000000000000000000000000000";
-const SYNTHETIC_PV1_UUID: &str = "11111111111111111111111111111111";
 fn setup_case() -> (rusqlite::Connection, CaseId) {
     let conn = persistence_sqlite::connection::open_in_memory().unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();
@@ -118,7 +112,7 @@ fn attach_data_source_records_directory_provenance_without_size() {
 
 #[test]
 fn detect_image_filesystem_detects_raw_lvm_pv_at_offset_zero() {
-    let (pv0, _pv1) = build_synthetic_multi_pv_lvm_disks();
+    let (pv0, _pv1) = native_multi_pv_lvm_disks();
     let mut reader = std::io::Cursor::new(pv0);
 
     let probe = detect_image_filesystem(&mut reader).unwrap();
@@ -134,25 +128,31 @@ fn detect_image_filesystem_detects_raw_lvm_pv_at_offset_zero() {
 }
 
 #[test]
-fn expand_lvm_pool_candidates_with_sources_groups_extra_pvs() {
+fn collection_plan_groups_native_pvs() {
     let tmp = TempDir::new().unwrap();
     let primary_path = tmp.path().join("pv0.raw");
     let extra_path = tmp.path().join("pv1.raw");
-    let (mut pv0, pv1) = build_synthetic_multi_pv_lvm_disks();
-    let data_area_start = SYNTHETIC_DATA_AREA_START as usize;
-    pv0[data_area_start..data_area_start + 4].copy_from_slice(b"XFSB");
-    std::fs::write(&primary_path, build_synthetic_lvm_mbr_image(&pv0)).unwrap();
-    std::fs::write(&extra_path, build_synthetic_lvm_mbr_image(&pv1)).unwrap();
+    let (pv0, pv1) = native_multi_pv_lvm_disks();
+    let uuid0 = fs_lvm::label::parse_pv_label(&mut std::io::Cursor::new(&pv0), 0)
+        .unwrap()
+        .pv_uuid;
+    let uuid1 = fs_lvm::label::parse_pv_label(&mut std::io::Cursor::new(&pv1), 0)
+        .unwrap()
+        .pv_uuid;
+    std::fs::write(&primary_path, pv0).unwrap();
+    std::fs::write(&extra_path, pv1).unwrap();
 
-    let mut reader = evidence_core::RawImageReader::open(&primary_path).unwrap();
-    let mut probe = detect_image_filesystem(&mut reader).unwrap();
-
-    expand_lvm_pool_candidates_with_sources(
-        &mut probe,
-        &primary_path,
-        &DataSourceKind::Raw,
-        &[LvmDiscoverySource::new(&extra_path, DataSourceKind::Raw)],
-    );
+    let plan = ImageCollectionPlan::prepare(
+        &[
+            LvmDiscoverySource::new(&primary_path, DataSourceKind::Raw),
+            LvmDiscoverySource::new(&extra_path, DataSourceKind::Raw),
+        ],
+        &std::sync::atomic::AtomicBool::new(false),
+    )
+    .unwrap();
+    let probe = plan
+        .member_probe(0, &primary_path, &DataSourceKind::Raw)
+        .unwrap();
 
     let lvm_candidate = probe
         .candidates
@@ -164,30 +164,30 @@ fn expand_lvm_pool_candidates_with_sources_groups_extra_pvs() {
                 probe.candidates, probe.warnings
             )
         });
-    assert_eq!(lvm_candidate.kind, ImageFilesystemKind::Xfs);
+    assert_eq!(lvm_candidate.kind, ImageFilesystemKind::Ext4);
     let identity = lvm_candidate.lvm_identity.as_ref().unwrap();
-    assert_eq!(identity.vg_name, "test_vg");
-    assert_eq!(identity.lv_name, "root");
+    assert!(!identity.vg_name.is_empty());
+    assert_eq!(identity.lv_name, "logical");
     assert_eq!(identity.pv_sources.len(), 2);
     assert_eq!(
-        identity.pv_sources[0].source_path,
-        primary_path.display().to_string()
+        std::path::Path::new(&identity.pv_sources[0].source_path),
+        primary_path.canonicalize().unwrap()
     );
     assert_eq!(
         identity.pv_sources[0].source_kind,
         Some(DataSourceKind::Raw)
     );
-    assert_eq!(identity.pv_sources[0].pv_uuid, SYNTHETIC_PV0_UUID);
+    assert_eq!(identity.pv_sources[0].pv_uuid, uuid0);
     assert_eq!(identity.pv_sources[0].pv_name.as_deref(), Some("pv0"));
     assert_eq!(
-        identity.pv_sources[1].source_path,
-        extra_path.display().to_string()
+        std::path::Path::new(&identity.pv_sources[1].source_path),
+        extra_path.canonicalize().unwrap()
     );
     assert_eq!(
         identity.pv_sources[1].source_kind,
         Some(DataSourceKind::Raw)
     );
-    assert_eq!(identity.pv_sources[1].pv_uuid, SYNTHETIC_PV1_UUID);
+    assert_eq!(identity.pv_sources[1].pv_uuid, uuid1);
     assert_eq!(identity.pv_sources[1].pv_name.as_deref(), Some("pv1"));
     assert!(probe
         .partitions
@@ -214,13 +214,11 @@ fn expand_lvm_pool_candidates_with_sources_groups_extra_pvs() {
 }
 
 #[test]
-fn expand_lvm_pool_candidates_keeps_legacy_single_source_api() {
+fn source_local_expansion_requires_all_native_pvs() {
     let tmp = TempDir::new().unwrap();
     let primary_path = tmp.path().join("pv0.raw");
-    let (mut pv0, _pv1) = build_synthetic_multi_pv_lvm_disks();
-    let data_area_start = SYNTHETIC_DATA_AREA_START as usize;
-    pv0[data_area_start..data_area_start + 4].copy_from_slice(b"XFSB");
-    std::fs::write(&primary_path, build_synthetic_lvm_mbr_image(&pv0)).unwrap();
+    let (_, pv1) = native_multi_pv_lvm_disks();
+    std::fs::write(&primary_path, pv1).unwrap();
 
     let mut reader = evidence_core::RawImageReader::open(&primary_path).unwrap();
     let mut probe = detect_image_filesystem(&mut reader).unwrap();
@@ -295,115 +293,19 @@ fn lvm_pv_source_key_includes_source_kind() {
     assert_ne!(lvm_pv_source_key(&e01), lvm_pv_source_key(&raw));
 }
 
-fn build_synthetic_multi_pv_lvm_disks() -> (Vec<u8>, Vec<u8>) {
-    let metadata_text = format!(
-        r#"test_vg {{
-    id = "vg-multi-pv-1234"
-    seqno = 2
-    extent_size = 1
-
-    physical_volumes {{
-        pv0 {{
-            id = "{}"
-            device = "/dev/sda1"
-            pe_start = 5
-            pe_count = 16
-        }}
-        pv1 {{
-            id = "{}"
-            device = "/dev/sdb1"
-            pe_start = 5
-            pe_count = 16
-        }}
-    }}
-
-    logical_volumes {{
-        root {{
-            id = "lv-root-uuid"
-            status = ["READ","WRITE","VISIBLE"]
-            segment_count = 1
-            segment1 {{
-                start_extent = 0
-                extent_count = 1
-                type = "linear"
-                stripe_count = 1
-                stripes = ["pv0", 0]
-            }}
-        }}
-    }}
-}}
-"#,
-        SYNTHETIC_PV0_UUID, SYNTHETIC_PV1_UUID
-    );
-
-    let mut pv0 = vec![0u8; SYNTHETIC_PV_SIZE as usize];
-    let mut pv1 = vec![0u8; SYNTHETIC_PV_SIZE as usize];
-    write_synthetic_lvm_pv_label(&mut pv0, SYNTHETIC_PV0_UUID);
-    write_synthetic_lvm_pv_label(&mut pv1, SYNTHETIC_PV1_UUID);
-    write_synthetic_lvm_metadata(&mut pv0, &metadata_text);
-    (pv0, pv1)
-}
-
-fn build_synthetic_lvm_mbr_image(pv: &[u8]) -> Vec<u8> {
-    let image_len = SYNTHETIC_PV_OFFSET as usize + pv.len();
-    let mut image = vec![0u8; image_len];
-    image[SYNTHETIC_PV_OFFSET as usize..].copy_from_slice(pv);
-    write_synthetic_mbr_partition(&mut image, SYNTHETIC_PV_OFFSET / SECTOR_SIZE, pv.len());
-    image
-}
-
-fn write_synthetic_mbr_partition(image: &mut [u8], lba_start: u64, byte_len: usize) {
-    let sector_count = (byte_len as u64 / SECTOR_SIZE) as u32;
-    let lba_start = lba_start as u32;
-    let entry = &mut image[446..462];
-    entry[4] = 0x8e;
-    entry[8..12].copy_from_slice(&lba_start.to_le_bytes());
-    entry[12..16].copy_from_slice(&sector_count.to_le_bytes());
-    image[510] = 0x55;
-    image[511] = 0xaa;
-}
-
-fn write_synthetic_lvm_pv_label(disk: &mut [u8], pv_uuid: &str) {
-    let pv_size = disk.len() as u64;
-    let sec = &mut disk[512..1024];
-    sec[0..8].copy_from_slice(b"LABELONE");
-    sec[8..16].copy_from_slice(&1u64.to_le_bytes());
-    sec[20..24].copy_from_slice(&32u32.to_le_bytes());
-    sec[24..32].copy_from_slice(b"LVM2 001");
-    sec[32..64].copy_from_slice(format!("{pv_uuid:32}").as_bytes());
-    sec[64..72].copy_from_slice(&pv_size.to_le_bytes());
-    sec[72..80].copy_from_slice(&SYNTHETIC_DATA_AREA_START.to_le_bytes());
-    sec[80..88].copy_from_slice(&(pv_size - SYNTHETIC_DATA_AREA_START).to_le_bytes());
-    sec[104..112].copy_from_slice(&1024u64.to_le_bytes());
-    sec[112..120].copy_from_slice(&(4 * 512u64).to_le_bytes());
-    let crc = fs_lvm::crc::lvm_crc32(&sec[20..512]);
-    sec[16..20].copy_from_slice(&crc.to_le_bytes());
-}
-
-fn write_synthetic_lvm_metadata(disk: &mut [u8], metadata_text: &str) {
-    let text_bytes = metadata_text.as_bytes();
-    let text_offset = 1536usize;
-    let text_end = text_offset + text_bytes.len();
-    assert!(text_end <= disk.len());
-
-    {
-        let mda = &mut disk[1024..1536];
-        mda[4..20].copy_from_slice(b" LVM2 x[5A%r0N*>");
-        mda[20..24].copy_from_slice(&1u32.to_le_bytes());
-        mda[24..32].copy_from_slice(&1024u64.to_le_bytes());
-        mda[32..40].copy_from_slice(&1536u64.to_le_bytes());
-        mda[40..48].copy_from_slice(&512u64.to_le_bytes());
+fn native_multi_pv_lvm_disks() -> (Vec<u8>, Vec<u8>) {
+    use std::io::Read;
+    let root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../testdata/fixtures/public-small/lvm-native/shared-ext4");
+    let mut images = Vec::new();
+    for index in 0..2 {
+        let mut bytes = Vec::new();
+        flate2::read::GzDecoder::new(
+            std::fs::File::open(root.join(format!("pv-{index}.raw.gz"))).unwrap(),
+        )
+        .read_to_end(&mut bytes)
+        .unwrap();
+        images.push(bytes);
     }
-
-    disk[text_offset..text_end].copy_from_slice(text_bytes);
-
-    let text_size = text_bytes.len() as u64;
-    let text_crc = fs_lvm::crc::lvm_crc32(text_bytes);
-    {
-        let mda = &mut disk[1024..1536];
-        mda[48..56].copy_from_slice(&text_size.to_le_bytes());
-        mda[56..60].copy_from_slice(&text_crc.to_le_bytes());
-        let mda_crc = fs_lvm::crc::lvm_crc32(&mda[4..512]);
-        mda[0..4].copy_from_slice(&mda_crc.to_le_bytes());
-    }
+    (images.remove(0), images.remove(0))
 }

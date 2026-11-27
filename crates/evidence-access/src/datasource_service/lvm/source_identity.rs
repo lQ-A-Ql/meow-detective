@@ -76,34 +76,3 @@ pub(super) fn representative_lvm_candidate<'a>(
     }
     None
 }
-
-pub(super) fn lvm_sources_for_pv_mappings(
-    sources: &[LvmPhysicalVolumeSource],
-    pv_mappings: &[(String, u64)],
-    pv_offsets: &[u64],
-) -> Vec<LvmPhysicalVolumeSource> {
-    if !pv_mappings.is_empty() {
-        return pv_mappings
-            .iter()
-            .filter_map(|(pv_name, offset)| {
-                sources
-                    .iter()
-                    .find(|source| {
-                        source.offset == *offset
-                            && source.pv_name.as_deref().is_none_or(|name| name == pv_name)
-                    })
-                    .cloned()
-                    .map(|mut source| {
-                        source.pv_name = Some(pv_name.clone());
-                        source
-                    })
-            })
-            .collect();
-    }
-
-    pv_offsets
-        .iter()
-        .filter_map(|offset| sources.iter().find(|source| source.offset == *offset))
-        .cloned()
-        .collect()
-}

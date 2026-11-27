@@ -87,32 +87,11 @@ pub(super) fn capture_array_sources(
             }
         }
     }
-    let mut backing_paths = std::collections::BTreeSet::new();
-    for (source_path, kind) in paths {
-        let path = std::path::Path::new(&source_path);
-        match kind {
-            DataSourceKind::E01 => backing_paths.extend(
-                image_e01::E01Reader::open(path)?
-                    .open_plan()?
-                    .segment_paths(),
-            ),
-            DataSourceKind::Raw => backing_paths.extend(
-                evidence_core::RawImageReader::open(path)?
-                    .backing_paths()
-                    .iter()
-                    .cloned(),
-            ),
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Unsupported,
-                    "MD RAID requires immutable RAW or E01 sources",
-                )
-                .into())
-            }
-        }
-    }
-    Ok(SourceSnapshot::capture(
-        &backing_paths.into_iter().collect::<Vec<_>>(),
+    Ok(SourceSnapshot::capture_images(
+        &paths
+            .into_iter()
+            .map(|(path, kind)| datasource_service::LvmDiscoverySource::new(path, kind))
+            .collect::<Vec<_>>(),
     )?)
 }
 
