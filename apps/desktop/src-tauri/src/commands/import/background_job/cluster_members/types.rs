@@ -37,14 +37,14 @@ pub(super) struct MemberExecutionContext {
     pub(super) defer_linux_artifacts: bool,
 }
 
-pub(super) struct MemberCoordinator<'a, 'db> {
-    pub(super) connection: &'a rusqlite::Connection,
-    pub(super) job_repo: &'a JobRepo<'db>,
-    pub(super) job: &'a BackgroundLinuxEvidenceSetImportJob,
-    pub(super) app: Option<&'a AppHandle>,
-    pub(super) cancel_token: &'a Arc<AtomicBool>,
-    pub(super) total_members: u32,
-    pub(super) task_manager: Option<Arc<TaskManager>>,
+pub(in crate::commands::import::background_job) struct MemberCoordinator<'a, 'db> {
+    pub(in crate::commands::import::background_job) connection: &'a rusqlite::Connection,
+    pub(in crate::commands::import::background_job) job_repo: &'a JobRepo<'db>,
+    pub(in crate::commands::import::background_job) job: &'a BackgroundLinuxEvidenceSetImportJob,
+    pub(in crate::commands::import::background_job) app: Option<&'a AppHandle>,
+    pub(in crate::commands::import::background_job) cancel_token: &'a Arc<AtomicBool>,
+    pub(in crate::commands::import::background_job) total_members: u32,
+    pub(in crate::commands::import::background_job) task_manager: Option<Arc<TaskManager>>,
 }
 
 pub(super) fn update_cluster_progress(

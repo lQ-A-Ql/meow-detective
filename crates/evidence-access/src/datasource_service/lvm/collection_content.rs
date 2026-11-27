@@ -151,4 +151,20 @@ impl CollectionContent {
         }
         Ok(())
     }
+
+    pub(super) fn verify_sources(
+        &self,
+        paths: &std::collections::BTreeSet<std::path::PathBuf>,
+        cancel: &AtomicBool,
+    ) -> Result<(), CollectionPlanError> {
+        for path in paths {
+            let index = self
+                .identities
+                .iter()
+                .position(|identity| Path::new(&identity.source_path) == path)
+                .ok_or(CollectionPlanError::MemberMismatch)?;
+            self.identities[index].verify_factory(&self.factories[index], cancel)?;
+        }
+        Ok(())
+    }
 }

@@ -2,7 +2,7 @@ mod coordinator;
 mod deferred;
 mod execution;
 mod queue;
-mod types;
+pub(super) mod types;
 
 pub(super) use persistence_sqlite::repositories::job_repo::JobRepo;
 pub(super) use tauri::AppHandle;
@@ -98,6 +98,9 @@ pub(super) fn import_evidence_set_members(
         task_manager,
     };
     let mut summary = run_member_workers(&coordinator, scheduling, work)?;
+    if !verify_collection(&coordinator, collection_plan.as_deref(), &summary)? {
+        return Ok(None);
+    }
     summary.collection_plan = collection_plan;
     summary.member_messages.sort();
     if cancel_token.load(Ordering::Acquire) {
@@ -105,4 +108,40 @@ pub(super) fn import_evidence_set_members(
         return Ok(None);
     }
     Ok(Some(summary))
+}
+
+pub(super) fn verify_collection(
+    coordinator: &MemberCoordinator<'_, '_>,
+    plan: Option<&app_services::datasource_service::ImageCollectionPlan>,
+    summary: &EvidenceSetImportSummary,
+) -> Result<bool, CommandError> {
+    let Some(plan) = plan else {
+        return Err(CommandError::internal("Collection image plan missing"));
+    };
+    match plan.verify_content(coordinator.cancel_token) {
+        Ok(()) => Ok(true),
+        Err(_) if coordinator.cancel_token.load(Ordering::Acquire) => {
+            cancel_evidence_set_members(
+                coordinator.connection,
+                coordinator.job_repo,
+                coordinator.job,
+                coordinator.app,
+                summary,
+            );
+            Ok(false)
+        }
+        Err(error) => fail_linux_evidence_set_job(
+            coordinator.job_repo,
+            &coordinator.job.job_id,
+            coordinator.app,
+            Some((
+                coordinator.connection,
+                &coordinator.job.plan.import_set_id,
+                summary.ready_count,
+                summary.failed_count,
+            )),
+            CommandError::from_typed_service_error(error),
+        )
+        .map(|()| false),
+    }
 }

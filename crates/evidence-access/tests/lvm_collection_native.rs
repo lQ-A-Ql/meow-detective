@@ -202,6 +202,9 @@ fn collection_content_detects_replacement_with_unchanged_length_and_timestamps()
         .unwrap();
     drop(file);
     plan.validate_snapshot().unwrap();
+    assert!(plan
+        .verify_member_content(0, &sources[0].source_path, &DataSourceKind::Raw, &cancel)
+        .is_err());
     assert!(matches!(
         plan.verify_content(&cancel),
         Err(CollectionPlanError::Content(
@@ -295,4 +298,26 @@ fn independently_complete_cloned_vgs_keep_separate_content_and_physical_owners()
             );
         }
     }
+    let modified = second.metadata().unwrap().modified().unwrap();
+    let mut changed = File::options()
+        .read(true)
+        .write(true)
+        .open(&second)
+        .unwrap();
+    changed.seek(SeekFrom::End(-1)).unwrap();
+    changed.read_exact(&mut byte).unwrap();
+    changed.seek(SeekFrom::End(-1)).unwrap();
+    changed.write_all(&[byte[0] ^ 0x40]).unwrap();
+    changed.sync_all().unwrap();
+    changed
+        .set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+    drop(changed);
+    plan.validate_snapshot().unwrap();
+    plan.verify_member_content(0, &first, &DataSourceKind::Raw, &AtomicBool::new(false))
+        .unwrap();
+    assert!(plan
+        .verify_member_content(1, &second, &DataSourceKind::Raw, &AtomicBool::new(false))
+        .is_err());
+    assert!(plan.verify_content(&AtomicBool::new(false)).is_err());
 }

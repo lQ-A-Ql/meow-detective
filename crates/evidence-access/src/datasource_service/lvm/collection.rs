@@ -155,6 +155,14 @@ impl ImageCollectionPlan {
         self.content.fingerprint()
     }
 
+    pub(super) fn verify_sources(
+        &self,
+        paths: &std::collections::BTreeSet<std::path::PathBuf>,
+        cancel: &AtomicBool,
+    ) -> Result<(), CollectionPlanError> {
+        self.content.verify_sources(paths, cancel)
+    }
+
     pub(crate) fn source_snapshot(
         &self,
         sources: &[LvmDiscoverySource],

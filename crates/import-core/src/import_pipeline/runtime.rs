@@ -118,15 +118,24 @@ fn publish_outcome(
     ready_state: &str,
     message: String,
 ) -> Result<String, CommandError> {
-    let validation = ctx
-        .import_config
-        .collection_plan
-        .as_ref()
-        .map_or(Ok(()), |plan| {
-            plan.verify_content(ctx.options.cancel_token)
+    let validation =
+        ctx.import_config
+            .collection_plan
+            .as_ref()
+            .map_or(Ok(()), |plan| {
+                let member =
+                    ctx.import_config.import_set.as_ref().ok_or_else(|| {
+                        CommandError::internal("Collection member identity missing")
+                    })?;
+                plan.verify_member_content(
+                    member.member_index as usize,
+                    &ctx.import_config.source_path,
+                    &ctx.import_config.kind,
+                    ctx.options.cancel_token,
+                )
                 .map_err(CommandError::from_typed_service_error)
-        })
-        .and_then(|()| validate_current(ctx.runtime.as_deref()));
+            })
+            .and_then(|()| validate_current(ctx.runtime.as_deref()));
     match validation {
         Ok(()) => {
             let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());

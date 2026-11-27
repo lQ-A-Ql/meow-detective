@@ -3,6 +3,7 @@ mod collection_access;
 mod collection_content;
 mod collection_groups;
 mod collection_memory;
+mod collection_verification;
 mod diagnostics;
 mod discovery;
 mod expansion;

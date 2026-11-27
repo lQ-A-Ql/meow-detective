@@ -154,7 +154,6 @@ pub fn materialize_linux_evidence_set_mdraid_with_cancel(
     cancel: &AtomicBool,
 ) -> Result<Vec<DataSource>, MdRaidPlanError> {
     ensure_not_cancelled(cancel)?;
-    plan.verify_content(cancel)?;
     discover_mdraid_from_collection(plan, cancel)?
         .iter()
         .map(|array| materialize_mdraid_array_with_cancel(conn, case_root, case_id, array, cancel))

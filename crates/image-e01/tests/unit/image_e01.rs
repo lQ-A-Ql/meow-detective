@@ -19,7 +19,7 @@ fn bounded_mutation_smoke_e01_table_geometry_and_open_limits() {
 
 impl E01Reader {
     fn cached_chunk_indices_for_test(&self) -> Vec<u64> {
-        self.chunk_cache.iter().map(|chunk| chunk.idx).collect()
+        self.chunk_cache_order.iter().copied().collect()
     }
 
     fn cache_bytes_for_test(&self) -> usize {
@@ -203,6 +203,32 @@ fn seek_resets_sequential_prefetch_hint() {
     assert!(!cached.contains(&5));
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn sequential_cache_evicts_fifo_and_retains_independent_borrowed_bytes() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("bounded.E01");
+    write_multichunk_e01(&path, 4100).unwrap();
+    let mut reader = E01Reader::open(&path).unwrap();
+    let mut first = [0; 4];
+    reader.read_exact(&mut first).unwrap();
+    let borrowed = reader.chunk_cache.get(&0).unwrap().clone();
+    let mut block = vec![0; 4096];
+    for index in 1..4100u32 {
+        reader
+            .read_exact_at(u64::from(index) * 4096, &mut block)
+            .unwrap();
+        assert_eq!(&block[..4], &index.to_le_bytes());
+    }
+    assert!(!reader.chunk_cache.contains_key(&0));
+    assert_eq!(&borrowed[..4], &0u32.to_le_bytes());
+    assert_eq!(reader.chunk_cache.len(), reader.chunk_cache_order.len());
+    assert!(reader.chunk_cache_bytes <= crate::reader::SEQUENTIAL_CACHE_MAX_BYTES);
+    let mut cloned = reader.try_clone().unwrap();
+    assert!(cloned.chunk_cache.is_empty());
+    cloned.read_exact(&mut first).unwrap();
+    assert_eq!(first, 0u32.to_le_bytes());
 }
 
 #[test]

@@ -101,6 +101,7 @@ impl E01OpenPlan {
             segment_metadata: Some(self.segments.clone()),
             cursor: 0,
             chunk_cache: Default::default(),
+            chunk_cache_order: Default::default(),
             chunk_cache_bytes: 0,
             chunk_cache_enabled: true,
             last_chunk_read: None,
@@ -124,6 +125,7 @@ impl E01OpenPlan {
             .saturating_mul(4)
             .saturating_add(stored.saturating_mul(2))
             .saturating_add(chunk.max(16 * 1024 * 1024))
+            .saturating_add((16 * 1024 * 1024 / chunk.max(1)).saturating_mul(128))
             .saturating_add(
                 65536
                     + 2 * crate::paged_index::PAGE_BYTES as u64

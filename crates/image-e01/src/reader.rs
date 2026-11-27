@@ -1,5 +1,5 @@
 use evidence_core::{EvidenceReader, ReaderInfo};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::io::{self, Read, Seek, SeekFrom};
 use std::path::Path;
 use std::sync::Arc;
@@ -8,11 +8,6 @@ use crate::{build_segment_path, geometry::MAX_STORED_CHUNK_BYTES};
 
 const SEQUENTIAL_PREFETCH_CHUNKS: u64 = 3;
 pub(crate) const SEQUENTIAL_CACHE_MAX_BYTES: usize = 16 * 1024 * 1024;
-
-pub(crate) struct CachedChunk {
-    pub(crate) idx: u64,
-    pub(crate) data: Arc<[u8]>,
-}
 
 /// E01 reader with multi-segment support.
 ///
@@ -26,7 +21,8 @@ pub struct E01Reader {
     pub(crate) segment_files: Vec<std::fs::File>,
     pub(crate) segment_metadata: Option<Vec<(u64, std::time::SystemTime)>>,
     pub(crate) cursor: u64,
-    pub(crate) chunk_cache: VecDeque<CachedChunk>,
+    pub(crate) chunk_cache: HashMap<u64, Arc<[u8]>>,
+    pub(crate) chunk_cache_order: VecDeque<u64>,
     pub(crate) chunk_cache_bytes: usize,
     pub(crate) chunk_cache_enabled: bool,
     pub(crate) last_chunk_read: Option<u64>,
@@ -65,7 +61,8 @@ impl E01Reader {
             segment_files,
             segment_metadata,
             cursor: 0,
-            chunk_cache: VecDeque::new(),
+            chunk_cache: HashMap::new(),
+            chunk_cache_order: VecDeque::new(),
             chunk_cache_bytes: 0,
             chunk_cache_enabled: true,
             last_chunk_read: None,
@@ -128,7 +125,8 @@ impl E01Reader {
             segment_files,
             segment_metadata: self.segment_metadata.clone(),
             cursor: 0,
-            chunk_cache: VecDeque::new(),
+            chunk_cache: HashMap::new(),
+            chunk_cache_order: VecDeque::new(),
             chunk_cache_bytes: 0,
             chunk_cache_enabled: true,
             last_chunk_read: None,
@@ -142,6 +140,7 @@ impl E01Reader {
     pub fn without_chunk_cache(mut self) -> Self {
         self.chunk_cache_enabled = false;
         self.chunk_cache.clear();
+        self.chunk_cache_order.clear();
         self.chunk_cache_bytes = 0;
         self
     }
@@ -218,23 +217,23 @@ impl E01Reader {
     }
 
     fn cached_chunk(&self, idx: u64) -> Option<Arc<[u8]>> {
-        self.chunk_cache
-            .iter()
-            .find(|chunk| chunk.idx == idx)
-            .map(|chunk| Arc::clone(&chunk.data))
+        self.chunk_cache.get(&idx).cloned()
     }
 
     fn insert_cached_chunk(&mut self, idx: u64, data: Arc<[u8]>) {
-        if data.len() > SEQUENTIAL_CACHE_MAX_BYTES
-            || self.chunk_cache.iter().any(|chunk| chunk.idx == idx)
-        {
+        if data.len() > SEQUENTIAL_CACHE_MAX_BYTES || self.chunk_cache.contains_key(&idx) {
             return;
         }
         self.chunk_cache_bytes = self.chunk_cache_bytes.saturating_add(data.len());
-        self.chunk_cache.push_back(CachedChunk { idx, data });
+        self.chunk_cache.insert(idx, data);
+        self.chunk_cache_order.push_back(idx);
         while self.chunk_cache_bytes > SEQUENTIAL_CACHE_MAX_BYTES && self.chunk_cache.len() > 1 {
-            if let Some(old) = self.chunk_cache.pop_front() {
-                self.chunk_cache_bytes = self.chunk_cache_bytes.saturating_sub(old.data.len());
+            if let Some(old) = self.chunk_cache_order.pop_front() {
+                let data = self
+                    .chunk_cache
+                    .remove(&old)
+                    .expect("FIFO entry must have cached bytes");
+                self.chunk_cache_bytes = self.chunk_cache_bytes.saturating_sub(data.len());
             }
         }
     }
