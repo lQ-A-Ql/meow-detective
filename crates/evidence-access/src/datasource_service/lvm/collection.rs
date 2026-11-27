@@ -72,6 +72,7 @@ pub struct ImageCollectionPlan {
     source_snapshots: Vec<SourceSnapshot>,
     content: super::collection_content::CollectionContent,
     md_members: Vec<crate::mdraid::MdRaidMemberPlan>,
+    observations: Vec<Vec<domain::structure::NativeObservation>>,
     _memory: std::sync::Arc<super::collection_memory::PlanMemory>,
 }
 
@@ -124,6 +125,8 @@ impl ImageCollectionPlan {
         for probe in &mut probes {
             probe.warnings.extend(warnings.iter().cloned());
         }
+        let observations =
+            super::collection_observations::collect(&canonical, &pv_infos, &md_members)?;
         snapshot.validate()?;
         let memory = super::collection_memory::retain(
             preparation,
@@ -131,6 +134,7 @@ impl ImageCollectionPlan {
             &probes,
             &snapshot,
             &md_members,
+            &observations,
         )?;
         Ok(Self {
             sources: canonical,
@@ -140,6 +144,7 @@ impl ImageCollectionPlan {
             source_snapshots,
             content,
             md_members,
+            observations,
             _memory: memory,
         })
     }
@@ -153,6 +158,21 @@ impl ImageCollectionPlan {
 
     pub fn content_fingerprint(&self) -> String {
         self.content.fingerprint()
+    }
+
+    pub fn native_observations(
+        &self,
+        path: &Path,
+        kind: &domain::DataSourceKind,
+    ) -> Result<&[domain::structure::NativeObservation], CollectionPlanError> {
+        self.validate_snapshot()?;
+        let path = path.canonicalize()?;
+        let index = self
+            .sources
+            .iter()
+            .position(|source| source.source_path == path && source.source_kind == *kind)
+            .ok_or(CollectionPlanError::MemberMismatch)?;
+        Ok(&self.observations[index])
     }
 
     pub(super) fn verify_sources(

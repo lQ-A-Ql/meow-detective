@@ -36,6 +36,7 @@ pub(crate) mod profile;
 mod progress;
 mod runtime;
 mod setup;
+mod source_revision;
 
 pub use emit::{ImportEventSink, NoopImportEventSink};
 pub use execute::{

@@ -55,8 +55,8 @@ invalid-input，而不是静默拼接不同快照。仍需支持的 offset 请�
 | Rust workspace crate | 53 |
 | Tauri commands | 173 |
 | app-services source modules | 58 |
-| SQLite repositories | 68 logical repositories |
-| SQLite migration scripts | 81 |
+| SQLite repositories | 69 logical repositories |
+| SQLite migration scripts | 82 |
 | frontend test files | 177 |
 
 | 路径 | 数量 |

@@ -19,9 +19,11 @@ pub(super) fn source_is_pending(
 }
 
 pub(super) fn validate_current(
+    conn: &rusqlite::Connection,
     runtime: Option<&evidence_access::source_runtime::SourceRuntime>,
 ) -> Result<(), CommandError> {
     if let Some(runtime) = runtime {
+        super::source_revision::require_current(conn, runtime.identity())?;
         runtime
             .publication_lease()
             .validate()
@@ -135,7 +137,7 @@ fn publish_outcome(
                 )
                 .map_err(CommandError::from_typed_service_error)
             })
-            .and_then(|()| validate_current(ctx.runtime.as_deref()));
+            .and_then(|()| validate_current(ctx.conn, ctx.runtime.as_deref()));
     match validation {
         Ok(()) => {
             let lease = ctx.runtime.as_ref().map(|r| r.publication_lease());
@@ -218,12 +220,13 @@ pub(super) fn prepare_runtime(
             initialize_view,
         )
         .map_err(CommandError::from_typed_service_error)?;
+        let revision = super::source_revision::bind(ctx, ds, factory.as_ref(), initialize_view)?;
         ctx.runtime = Some(std::sync::Arc::new(
             evidence_access::source_runtime::SourceRuntime::new(
                 evidence_access::source_runtime::SourceIdentity {
                     case_id: ctx.case_id.0.clone(),
                     data_source_id: ds.id.clone(),
-                    revision: 0,
+                    revision,
                     source_kind: ctx.import_config.kind.clone(),
                     path: ctx.import_config.source_path.clone(),
                 },

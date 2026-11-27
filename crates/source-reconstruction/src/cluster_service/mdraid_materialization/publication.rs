@@ -55,6 +55,7 @@ pub(super) fn publish_build(
     digest: &str,
 ) -> Result<(), MdRaidPlanError> {
     super::ensure_not_cancelled(request.cancel)?;
+    super::inputs::validate(request.case_conn, request.source)?;
     request
         .attempt
         .refresh(request.case_conn, &request.source.id, request.fingerprint)?;
@@ -67,6 +68,7 @@ pub(super) fn publish_build(
     )?;
     source_db::publish_source_build_db(request.case_root, &request.source.id, &request.attempt.id)?;
     let transaction = request.case_conn.unchecked_transaction()?;
+    super::inputs::validate(&transaction, request.source)?;
     CatalogPublicationRepo::new(&transaction).mark_published(
         &request.source.id,
         &publication.attempt_id,
@@ -86,6 +88,7 @@ pub(super) fn verify_publication(
     source: &DataSource,
     fingerprint: &str,
 ) -> Result<(), MdRaidPlanError> {
+    super::inputs::validate(conn, source)?;
     let publications = CatalogPublicationRepo::new(conn);
     let stored = publications
         .find(&source.id)?

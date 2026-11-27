@@ -72,7 +72,30 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
     assert_eq!(sources.len(), 2);
     let mut evidence_files = 0;
     let mut logical_views = 0;
+    let mut committed_metadata_sources = 0;
     for source in sources {
+        let revisions =
+            persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
+                &connection,
+            );
+        let reference = domain::structure::SourceRevisionRef {
+            case_id: case.meta.id.0.clone(),
+            source_id: source.id.0.clone(),
+            revision: 1,
+        };
+        revisions.require_current(&reference).unwrap();
+        let facts = revisions.observations(&reference).unwrap();
+        assert!(facts
+            .iter()
+            .any(|fact| matches!(fact.version, domain::structure::NativeVersion::LvmLabel)));
+        if facts.iter().any(|fact| {
+            matches!(
+                fact.version,
+                domain::structure::NativeVersion::LvmCommitted { .. }
+            )
+        }) {
+            committed_metadata_sources += 1;
+        }
         let source_connection = source_db::open_source_db(&case.case_root, &source.id).unwrap();
         let native =
             source_db::open_registered_fjall_source_read_only(&case.case_root, &source.id).unwrap();
@@ -150,4 +173,5 @@ fn native_collection_import_publishes_one_cross_pv_catalog_and_previews_the_file
     }
     assert_eq!(logical_views, 1);
     assert_eq!(evidence_files, 1);
+    assert_eq!(committed_metadata_sources, 1);
 }

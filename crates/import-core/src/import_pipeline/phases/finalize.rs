@@ -16,7 +16,7 @@ pub(crate) fn run_finalize_phase(
     stats: &file_service::EnumerationStats,
     pipeline_message: &str,
 ) -> Result<String, CommandError> {
-    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
+    super::super::runtime::validate_current(ctx.conn, ctx.runtime.as_deref())?;
     queue_timeline(ctx, data_source)?;
     ctx.report_job_progress(95, "Finalizing...")?;
     super::super::profile::emit_timed_phase_profile(
@@ -98,13 +98,13 @@ pub(crate) fn emit_data_source_ready(
     ctx: &ImportJobContext<'_>,
     source: &domain::DataSource,
 ) -> Result<(), CommandError> {
-    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
+    super::super::runtime::validate_current(ctx.conn, ctx.runtime.as_deref())?;
     let summary = file_service::get_data_sources_for_case(ctx.conn, ctx.case_root, ctx.case_id)
         .map_err(CommandError::from_service_error)?
         .into_iter()
         .find(|item| item.id == source.id.0)
         .ok_or_else(|| CommandError::internal("published source summary is missing"))?;
-    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
+    super::super::runtime::validate_current(ctx.conn, ctx.runtime.as_deref())?;
     super::super::emit::emit_data_source_imported(
         ctx.event_sink(),
         &ctx.case_id.0,

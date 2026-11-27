@@ -8,6 +8,7 @@ use crate::datasource_service::{self, LvmLogicalVolumeIdentity};
 mod content;
 pub(crate) mod discovery;
 mod filesystem;
+mod persisted_inputs;
 
 use crate::source_runtime::content::SourceContent;
 pub use content::{mdraid_reader_content_bytes, verify_mdraid_source_content};

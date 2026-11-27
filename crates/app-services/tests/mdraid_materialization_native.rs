@@ -58,6 +58,7 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     .unwrap();
     let case = case_service::create_case(workspace.path(), "Native MD filesystem", None).unwrap();
     let connection = case.connection().unwrap();
+    register_inputs(&connection, &case.meta.id, &shared, &plans[0]);
     let source = cluster_service::materialize_mdraid_array(
         &connection,
         &case.case_root,
@@ -177,6 +178,56 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     )
     .is_err());
     let updated = cluster_service::discover_linux_evidence_set_mdraid(&members).unwrap();
+    let revisions = persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
+        &connection,
+    );
+    let old_inputs = revisions.inputs(&case.meta.id.0, &source.id.0).unwrap();
+    let changed_parent = old_inputs
+        .iter()
+        .find(|input| {
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
+                .find_by_case(&case.meta.id)
+                .unwrap()
+                .iter()
+                .any(|parent| {
+                    parent.id.0 == input.source_id
+                        && parent.source_path.canonicalize().unwrap()
+                            == paths[0].canonicalize().unwrap()
+                })
+        })
+        .unwrap();
+    let (_, mut content) = revisions
+        .current(&case.meta.id.0, &changed_parent.source_id)
+        .unwrap();
+    content.logical_sha256 = Some(
+        updated[0]
+            .source_content
+            .iter()
+            .find(|content| {
+                std::path::Path::new(&content.source_path) == paths[0].canonicalize().unwrap()
+            })
+            .unwrap()
+            .logical_sha256
+            .clone(),
+    );
+    let facts = revisions.observations(changed_parent).unwrap();
+    revisions
+        .bind(
+            &case.meta.id.0,
+            &changed_parent.source_id,
+            &content,
+            &facts,
+            true,
+        )
+        .unwrap();
+    assert!(revisions
+        .require_current_inputs(&case.meta.id.0, &source.id.0)
+        .is_err());
+    assert!(
+        file_service::FileHeaderReadCache::new(case.meta.id.0.clone())
+            .read_file_header_by_id(&source_connection, &file.id, 1024)
+            .is_err()
+    );
     let replacement = cluster_service::materialize_mdraid_array(
         &connection,
         &case.case_root,
@@ -195,6 +246,42 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .find_by_case(&case.meta.id)
             .unwrap()
             .len(),
-        2,
+        4,
     );
+}
+
+fn register_inputs(
+    conn: &rusqlite::Connection,
+    case_id: &domain::CaseId,
+    shared: &evidence_access::datasource_service::ImageCollectionPlan,
+    plan: &evidence_access::mdraid::MdRaidArrayPlan,
+) {
+    for (index, content) in plan.source_content.iter().enumerate() {
+        let source = domain::DataSource {
+            id: domain::DataSourceId(format!("physical-{index}")),
+            name: format!("Physical {index}"),
+            kind: content.source_kind.clone(),
+            source_path: PathBuf::from(&content.source_path),
+            imported_at: chrono::Utc::now(),
+            provenance: Default::default(),
+        };
+        persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(conn)
+            .insert(case_id, &source)
+            .unwrap();
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
+            .bind(
+                &case_id.0,
+                &source.id.0,
+                &domain::structure::SourceRevisionContent {
+                    logical_size: content.logical_size,
+                    metadata_identity: None,
+                    logical_sha256: Some(content.logical_sha256.clone()),
+                },
+                shared
+                    .native_observations(&source.source_path, &source.kind)
+                    .unwrap(),
+                true,
+            )
+            .unwrap();
+    }
 }

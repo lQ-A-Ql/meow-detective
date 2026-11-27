@@ -58,6 +58,7 @@ pub mod provenance_assertion_repo;
 pub mod report_repo;
 pub mod source_capability_repo;
 pub mod source_meta_repo;
+pub mod source_revision_repo;
 pub mod storage_control_repo;
 pub mod storage_object_repo;
 pub mod storage_recovery_repo;

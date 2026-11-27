@@ -205,12 +205,16 @@ fn collection_content_detects_replacement_with_unchanged_length_and_timestamps()
     assert!(plan
         .verify_member_content(0, &sources[0].source_path, &DataSourceKind::Raw, &cancel)
         .is_err());
-    assert!(matches!(
-        plan.verify_content(&cancel),
-        Err(CollectionPlanError::Content(
-            evidence_access::source_runtime::content::ContentError::Changed
-        ))
-    ));
+    let verification = plan.verify_content(&cancel);
+    assert!(
+        matches!(
+            verification,
+            Err(CollectionPlanError::Content(
+                evidence_access::source_runtime::content::ContentError::Changed
+            ))
+        ),
+        "{verification:?}"
+    );
     let mut direct = plan
         .verified_factory(&sources[1].source_path, &DataSourceKind::Raw, &cancel)
         .unwrap()
@@ -277,6 +281,12 @@ fn independently_complete_cloned_vgs_keep_separate_content_and_physical_owners()
             .logical_sha256
     );
     for (index, source) in sources.iter().enumerate() {
+        let facts = plan
+            .native_observations(&source.source_path, &source.source_kind)
+            .unwrap();
+        assert!(facts
+            .iter()
+            .any(|fact| matches!(fact.version, domain::structure::NativeVersion::LvmLabel)));
         let probe = plan
             .member_probe(index, &source.source_path, &source.source_kind)
             .unwrap();

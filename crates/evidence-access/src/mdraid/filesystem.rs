@@ -46,6 +46,8 @@ pub(crate) fn open_mdraid_partition(
     path: &Path,
     partition_index: Option<usize>,
 ) -> Result<Box<dyn FileSystemReader + Send>, FileServiceError> {
+    super::persisted_inputs::validate(path)
+        .map_err(|error| FileServiceError::other(error.to_string()))?;
     let probe = probe_mdraid_filesystems(path)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
     let candidates = probe

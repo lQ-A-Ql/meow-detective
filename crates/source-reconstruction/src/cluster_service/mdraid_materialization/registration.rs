@@ -26,6 +26,7 @@ pub(super) fn register_mdraid_array(
     let fingerprint = mdraid_array_fingerprint(plan)?;
     let id = source_id(plan, &fingerprint);
     let repo = DataSourceRepo::new(conn);
+    let inputs = super::inputs::resolve(conn, case_id, plan)?;
     if let Some(existing) = repo
         .find_by_case(case_id)?
         .into_iter()
@@ -38,6 +39,8 @@ pub(super) fn register_mdraid_array(
         if persisted != *plan {
             return Err(MdRaidPlanError::InvalidPublication);
         }
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
+            .bind_inputs(&case_id.0, &existing.id.0, &inputs)?;
         return Ok(existing);
     }
     let descriptor_path = write_mdraid_descriptor(case_root, plan)?;
@@ -62,10 +65,14 @@ pub(super) fn register_mdraid_array(
             warnings: Vec::new(),
         },
     };
-    repo.insert_with_storage(
+    let transaction = conn.unchecked_transaction()?;
+    DataSourceRepo::new(&transaction).insert_with_storage(
         case_id,
         &source,
         &DataSourceStorage::source_db(&source.id.0, Some("linux"), Some("mdraid".to_string())),
     )?;
+    persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&transaction)
+        .bind_inputs(&case_id.0, &source.id.0, &inputs)?;
+    transaction.commit()?;
     Ok(source)
 }

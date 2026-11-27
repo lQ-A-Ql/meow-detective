@@ -181,6 +181,20 @@ fn native_lvm_members_include_a_pv_without_metadata_and_preserve_file_bytes() {
         .unwrap()
     );
     assert_eq!(plans[0].members.len(), 2);
+    for path in &paths {
+        let facts = collection.native_observations(path, &kind).unwrap();
+        assert!(facts.iter().any(|fact| matches!(
+            fact.version,
+            domain::structure::NativeVersion::Md { .. }
+        ) && fact.native_checksum_verified));
+        assert!(facts
+            .iter()
+            .filter(|fact| matches!(fact.version, domain::structure::NativeVersion::Md { .. }))
+            .all(|fact| matches!(
+                fact.location,
+                domain::structure::ObservationLocation::Unavailable { .. }
+            )));
+    }
     assert!(plans[0].members.iter().all(|member| matches!(
         &member.origin,
         evidence_access::mdraid::MdRaidMemberOrigin::Lvm { identity, .. }

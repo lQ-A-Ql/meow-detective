@@ -14,7 +14,7 @@ pub(super) fn finish_catalog(
         plan.validate_snapshot()
             .map_err(CommandError::from_typed_service_error)?;
     }
-    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
+    super::super::runtime::validate_current(ctx.conn, ctx.runtime.as_deref())?;
     super::super::runtime::finish_indexes(ctx)?;
     populate_file_graph(ctx, source, stats);
     ctx.counts.add_warnings(stats.warnings.len());

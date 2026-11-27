@@ -58,7 +58,7 @@ fn ensure_active(ctx: &ImportJobContext<'_>) -> Result<(), CommandError> {
     if ctx.cancel_requested() {
         return Err(CommandError::cancelled("Import cancelled by user"));
     }
-    super::runtime::validate_current(ctx.runtime.as_deref())
+    super::runtime::validate_current(ctx.conn, ctx.runtime.as_deref())
 }
 
 pub fn artifact_extraction_categories(

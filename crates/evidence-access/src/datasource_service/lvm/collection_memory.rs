@@ -31,8 +31,13 @@ pub(super) fn retain(
     probes: &[ImageFilesystemProbe],
     snapshot: &SourceSnapshot,
     md_members: &[crate::mdraid::MdRaidMemberPlan],
+    observations: &[Vec<domain::structure::NativeObservation>],
 ) -> std::io::Result<Arc<PlanMemory>> {
     let mut bytes = snapshot.metadata_bytes() + 4096;
+    bytes += serde_json::to_vec(observations)
+        .map_err(std::io::Error::other)?
+        .len() as u64
+        * 4;
     bytes += md_members
         .iter()
         .map(|member| {

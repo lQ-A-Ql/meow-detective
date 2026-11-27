@@ -30,7 +30,8 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
     let temporary = tempfile::tempdir().expect("temporary directory");
     let case_root = temporary.path().join("case");
     std::fs::create_dir_all(&case_root).expect("case root");
-    let conn = persistence_sqlite::connection::open_in_memory().expect("case database");
+    let conn = persistence_sqlite::connection::open_or_create(&case_root.join("app.db"))
+        .expect("case database");
     persistence_sqlite::runner::run_all(&conn).expect("case migrations");
     let case_id = CaseId("mdraid-btrfs-materialization".into());
     let now = chrono::Utc::now();
@@ -47,6 +48,32 @@ fn mdraid_btrfs_catalog_materializes_to_completion() {
         .expect("create case");
 
     let started = Instant::now();
+    for (index, content) in array.source_content.iter().enumerate() {
+        let source = domain::DataSource {
+            id: domain::DataSourceId(format!("physical-{index}")),
+            name: format!("Physical {index}"),
+            kind: content.source_kind.clone(),
+            source_path: std::path::PathBuf::from(&content.source_path),
+            imported_at: chrono::Utc::now(),
+            provenance: Default::default(),
+        };
+        DataSourceRepo::new(&conn)
+            .insert(&case_id, &source)
+            .unwrap();
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&conn)
+            .bind(
+                &case_id.0,
+                &source.id.0,
+                &domain::structure::SourceRevisionContent {
+                    logical_size: content.logical_size,
+                    metadata_identity: None,
+                    logical_sha256: Some(content.logical_sha256.clone()),
+                },
+                &[],
+                true,
+            )
+            .unwrap();
+    }
     let source = materialize_mdraid_array(&conn, &case_root, &case_id, &array)
         .expect("materialize MD RAID Btrfs");
     let elapsed = started.elapsed();

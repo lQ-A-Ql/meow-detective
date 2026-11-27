@@ -19,7 +19,7 @@ pub(crate) fn run_analyze_phase(
     ctx: &mut ImportJobContext<'_>,
     data_source: &domain::DataSource,
 ) -> Result<String, CommandError> {
-    super::super::runtime::validate_current(ctx.runtime.as_deref())?;
+    super::super::runtime::validate_current(ctx.conn, ctx.runtime.as_deref())?;
     if ctx.content_kind == crate::import_pipeline::context::ImportContentKind::CephBlueStoreMetadata
     {
         ctx.report_job_progress(94, "Ceph BlueStore metadata inventory completed")?;

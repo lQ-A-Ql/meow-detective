@@ -11,6 +11,7 @@ pub mod graph;
 pub mod job;
 pub mod ledger;
 pub mod notebook;
+pub mod structure;
 pub mod timeline;
 pub mod timestamp;
 pub mod topology;
