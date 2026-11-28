@@ -87,26 +87,20 @@ fn open_volume(
     identity: &LvmLogicalVolumeIdentity,
     route: &crate::source_runtime::resources::ResourceRoute,
 ) -> io::Result<Box<dyn EvidenceReader>> {
-    let mut readers = Vec::new();
-    for source in &identity.pv_sources {
-        let kind = source
-            .source_kind
-            .as_ref()
-            .ok_or_else(|| io::Error::other("PV source kind missing"))?;
-        let factory = plan
-            .verified_factory(
-                Path::new(&source.source_path),
-                kind,
-                &AtomicBool::new(false),
-            )
-            .map_err(io::Error::other)?;
-        if let Some(scope) = route.scope() {
-            factory.bind_reader_scope(scope);
-        }
-        readers.push(factory.open_reader()?);
-    }
-    let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())
-        .map_err(io::Error::other)?;
+    let pool = crate::lvm::mapping_cache::open(
+        &identity.pv_sources,
+        |source| {
+            let kind = source
+                .source_kind
+                .as_ref()
+                .ok_or_else(|| io::Error::other("PV source kind missing"))?;
+            plan.source_content(Path::new(&source.source_path), kind)
+                .cloned()
+                .map_err(io::Error::other)
+        },
+        &AtomicBool::new(false),
+        route.scope(),
+    )?;
     if normalize_lvm_uuid_for_match(&pool.volume_group().id)
         != normalize_lvm_uuid_for_match(&identity.vg_uuid)
     {
@@ -117,5 +111,5 @@ fn open_volume(
         .iter()
         .position(|volume| volume.uuid == identity.lv_uuid)
         .ok_or_else(|| io::Error::other("logical volume identity changed"))?;
-    pool.open_volume_reader(index).map_err(io::Error::other)
+    pool.open_volume(index)
 }

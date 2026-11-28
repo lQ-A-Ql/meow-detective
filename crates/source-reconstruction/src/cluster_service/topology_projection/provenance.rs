@@ -162,7 +162,6 @@ fn persist_lineage_provenance(
 pub(super) fn persist_analysis_links(
     case_connection: &Connection,
     case_root: &std::path::Path,
-    import_set_id: &str,
     member_sources: &[(u32, String, String)],
 ) -> Result<()> {
     let mut artifact_insert = case_connection.prepare_cached(
@@ -178,7 +177,16 @@ pub(super) fn persist_analysis_links(
          VALUES (?1, 'timeline_event', ?2, NULL, ?3, 'observed_on', NULL)",
     )?;
     for (_, source_id, _) in member_sources {
-        let environment_object_id = format!("env:os:{import_set_id}:{source_id}");
+        let case_id =
+            persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(case_connection)
+                .case_id(&domain::DataSourceId(source_id.clone()))?;
+        let reference =
+            persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
+                case_connection,
+            )
+            .current(&case_id.0, source_id)?
+            .0;
+        let environment_object_id = format!("source:{source_id}@{}", reference.revision);
         let fjall = source_kernel::source_db::open_registered_fjall_source_read_only(
             case_root,
             &domain::DataSourceId(source_id.clone()),

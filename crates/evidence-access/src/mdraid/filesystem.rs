@@ -55,21 +55,9 @@ pub(crate) fn open_mdraid_partition(
 ) -> Result<Box<dyn FileSystemReader + Send>, FileServiceError> {
     super::persisted_inputs::validate(&domain::DataSourceId(source_id.to_owned()), path)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
-    let cancel = std::sync::atomic::AtomicBool::new(false);
-    let probe = probe_mdraid_filesystems(path, &cancel)
-        .map_err(|error| FileServiceError::other(error.to_string()))?;
-    let candidates = probe
-        .candidates
-        .iter()
-        .filter(|candidate| candidate.kind != datasource_service::ImageFilesystemKind::LvmPool)
-        .filter(|candidate| {
-            partition_index.is_none_or(|index| candidate.partition_index == Some(index))
-        })
-        .collect::<Vec<_>>();
-    if candidates.len() != 1 {
-        return Err(FileServiceError::other(
-            "MD RAID preview requires an unambiguous filesystem identity",
-        ));
-    }
-    open_mdraid_filesystem(path, candidates[0])
+    crate::file_service::registered_partition::open_registered_partition(
+        source_id,
+        path,
+        partition_index,
+    )
 }

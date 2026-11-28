@@ -44,7 +44,7 @@ use transport::commands::{
 use transport::dto::ViewerRangeRequestDto;
 
 use super::{
-    complete_browseable_evidence_set_job, continue_ceph_rbd_processing,
+    complete_browseable_evidence_set_job, continue_derived_source_processing,
     BackgroundLinuxEvidenceSetImportJob,
 };
 
@@ -106,7 +106,7 @@ fn run_background_linux_cluster_import_job(
         run_background_linux_evidence_set_import_until_browseable(job, app, cancel_token.clone())?;
     if let Some(outcome) = processing {
         complete_browseable_evidence_set_job(&outcome, app)?;
-        continue_ceph_rbd_processing(&outcome.processing, &cancel_token)?;
+        continue_derived_source_processing(&outcome.processing, &cancel_token)?;
     }
     Ok(())
 }
@@ -296,8 +296,9 @@ fn real_pve_cluster_import_attempts_every_member_and_isolates_source_databases()
     let result = processing.and_then(|processing| {
         let post_processing_started = Instant::now();
         let result = match processing {
-            Some(outcome) => complete_browseable_evidence_set_job(&outcome, None)
-                .and_then(|()| continue_ceph_rbd_processing(&outcome.processing, &cancel_token)),
+            Some(outcome) => complete_browseable_evidence_set_job(&outcome, None).and_then(|()| {
+                continue_derived_source_processing(&outcome.processing, &cancel_token)
+            }),
             None => Ok(()),
         };
         eprintln!(

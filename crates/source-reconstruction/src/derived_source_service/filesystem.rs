@@ -424,51 +424,18 @@ fn open_rbd_filesystem(
     cancel_token: &AtomicBool,
 ) -> DerivedSourceResult<Box<dyn FileSystemReader + Send>> {
     ensure_not_cancelled(cancel_token)?;
-    let (reader, offset) = if let Some(identity) = &candidate.lvm_identity {
-        let base = open_rbd_descriptor(provider, descriptor)?;
-        let pool = fs_lvm::LvmPool::discover(
-            vec![Box::new(base) as Box<dyn EvidenceReader>],
-            identity.pv_offsets.clone(),
-        )
-        .map_err(|error| DerivedSourceError::UnsupportedLvm(error.to_string()))?;
-        let index = pool
-            .list_volumes()
-            .iter()
-            .position(|volume| {
-                (!identity.lv_uuid.is_empty() && volume.uuid == identity.lv_uuid)
-                    || volume.name == identity.lv_name
-            })
-            .ok_or_else(|| DerivedSourceError::UnsupportedLvm(identity.lv_name.clone()))?;
-        (
-            pool.open_volume_reader(index)
-                .map_err(|error| DerivedSourceError::UnsupportedLvm(error.to_string()))?,
-            0,
-        )
-    } else {
-        (
-            Box::new(open_rbd_descriptor(provider, descriptor)?) as Box<dyn EvidenceReader>,
-            candidate.offset,
-        )
-    };
-    let fs: Box<dyn FileSystemReader + Send> = match candidate.kind {
-        ImageFilesystemKind::Ext4 => Box::new(
-            fs_ext4::Ext4Reader::open(reader, offset)
-                .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?,
-        ),
-        ImageFilesystemKind::Xfs => Box::new(
-            fs_xfs::XfsReader::open(reader, offset)
-                .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?,
-        ),
-        ImageFilesystemKind::Btrfs => Box::new(
-            fs_btrfs::BtrfsReader::open(reader, offset)
-                .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?,
-        ),
-        other => {
-            return Err(DerivedSourceError::NoFilesystem(format!(
-                "unsupported RBD filesystem {other:?}"
-            )))
-        }
-    };
+    if !matches!(
+        candidate.kind,
+        ImageFilesystemKind::Ext4 | ImageFilesystemKind::Xfs | ImageFilesystemKind::Btrfs
+    ) {
+        return Err(DerivedSourceError::NoFilesystem(format!(
+            "unsupported RBD filesystem {:?}",
+            candidate.kind
+        )));
+    }
+    let reader = Box::new(open_rbd_descriptor(provider, descriptor)?) as Box<dyn EvidenceReader>;
+    let fs = file_service::open_source_filesystem(reader, candidate)
+        .map_err(|error| DerivedSourceError::Reconstruction(error.to_string()))?;
     ensure_not_cancelled(cancel_token)?;
     Ok(fs)
 }

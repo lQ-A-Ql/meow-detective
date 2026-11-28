@@ -51,6 +51,11 @@ fn a_source_connection_pins_before_any_generation_lookup() {
     let source_directory = path.parent().unwrap();
     let untouched = open_source_database_read_only(&source_db_path(root.path(), &id)).unwrap();
     assert!(try_begin_generation_gc(source_directory).unwrap().is_none());
+    assert!(
+        persistence_source::runtime::close_source_store(root.path(), &id.0)
+            .unwrap()
+            .is_none()
+    );
     drop(untouched);
     assert!(try_begin_generation_gc(source_directory).unwrap().is_some());
 }
@@ -179,14 +184,6 @@ fn a_new_reader_waits_for_gc_and_reads_the_retained_generation() {
         receiver.recv_timeout(std::time::Duration::from_millis(50)),
         Err(std::sync::mpsc::RecvTimeoutError::Timeout)
     ));
-    // Coverage boundary: this proves the reader blocks while the GC guard is
-    // held and, after release, reads the newly bound generation
-    // (source.fjall.build.analysis-next). It does NOT prove close-while-waiting:
-    // try_close_retired_generation runs after the reader joins, outside the wait
-    // window. The reader's fixed 2s budget covers only the mutex unlock + condvar
-    // notify; the close path acquires a connection pin on this same retiring
-    // directory under parallel load and would otherwise consume that 2s budget,
-    // and filesystem deletion never enters that window either.
     drop(exclusive);
     assert_eq!(
         receiver
@@ -196,7 +193,6 @@ fn a_new_reader_waits_for_gc_and_reads_the_retained_generation() {
         b"source.fjall.build.analysis-next"
     );
     reader.join().unwrap();
-    // Deferred retired-generation bookkeeping; the reader has released its pin.
     let exclusive = try_begin_generation_gc(original.parent().unwrap())
         .unwrap()
         .unwrap();
@@ -273,5 +269,83 @@ fn source_deletion_waits_for_a_direct_handle_to_a_retired_generation() {
     drop(closed);
     assert!(
         persistence_source::fjall::open_shared_source_store(&retired, Default::default()).is_ok()
+    );
+}
+
+#[test]
+fn source_close_waits_for_generation_reclamation_then_owns_the_directory() {
+    let root = tempfile::tempdir().unwrap();
+    let id = DataSourceId("close-during-gc".into());
+    let control = open_source_db(root.path(), &id).unwrap();
+    let original = bound_source_generation_root(&control, &id).unwrap();
+    seal(&original, &id);
+    drop(control);
+    let exclusive = try_begin_generation_gc(original.parent().unwrap())
+        .unwrap()
+        .unwrap();
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+    let closing_barrier = std::sync::Arc::clone(&barrier);
+    let case_root = root.path().to_path_buf();
+    let source_id = id.0.clone();
+    let closer = std::thread::spawn(move || {
+        closing_barrier.wait();
+        sender
+            .send(persistence_source::runtime::close_source_store(
+                case_root, &source_id,
+            ))
+            .unwrap();
+    });
+    barrier.wait();
+    assert!(matches!(
+        receiver.recv_timeout(std::time::Duration::from_millis(50)),
+        Err(std::sync::mpsc::RecvTimeoutError::Timeout)
+    ));
+    drop(exclusive);
+    let closed = receiver
+        .recv_timeout(std::time::Duration::from_secs(5))
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    closer.join().unwrap();
+    assert!(try_begin_generation_gc(original.parent().unwrap())
+        .unwrap()
+        .is_none());
+    assert!(
+        persistence_source::fjall::open_shared_source_store(&original, Default::default()).is_err()
+    );
+    drop(closed);
+    assert!(open_source_database_read_only(&source_db_path(root.path(), &id)).is_ok());
+}
+
+#[test]
+fn source_close_reports_a_typed_busy_error_when_reclamation_exceeds_its_wait() {
+    let root = tempfile::tempdir().unwrap();
+    let id = DataSourceId("close-gc-timeout".into());
+    drop(open_source_db(root.path(), &id).unwrap());
+    let database = source_db_path(root.path(), &id);
+    let exclusive = try_begin_generation_gc(database.parent().unwrap())
+        .unwrap()
+        .unwrap();
+    let error = persistence_source::runtime::close_source_store(root.path(), &id.0)
+        .err()
+        .expect("active reclamation must exhaust the bounded wait");
+    let persistence_source::runtime::StorageRuntimeError::Control(persistence_sqlite::DbError::Io(
+        error,
+    )) = error
+    else {
+        panic!("expected typed I/O busy");
+    };
+    assert_eq!(error.kind(), std::io::ErrorKind::WouldBlock);
+    assert!(error
+        .get_ref()
+        .unwrap()
+        .downcast_ref::<persistence_source::control::connections::SourceGenerationBusy>()
+        .is_some());
+    drop(exclusive);
+    assert!(
+        persistence_source::runtime::close_source_store(root.path(), &id.0)
+            .unwrap()
+            .is_some()
     );
 }

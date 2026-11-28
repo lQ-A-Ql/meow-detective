@@ -8,7 +8,7 @@ use transport::CommandError;
 
 use super::super::background_job::{
     cancel_browseable_evidence_set_job, complete_browseable_evidence_set_job,
-    continue_ceph_rbd_processing, fail_browseable_evidence_set_job,
+    continue_derived_source_processing, fail_browseable_evidence_set_job,
     run_background_linux_evidence_set_import_with_scheduler, BackgroundDerivedSourceProcessingJob,
     BackgroundLinuxEvidenceSetImportJob,
 };
@@ -159,7 +159,7 @@ fn schedule_derived_processing(
     let worker_cancel = Arc::clone(&cancel_token);
     task_manager
         .spawn_scoped_heavy(task_id.clone(), scope, cancel_token, move || {
-            continue_ceph_rbd_processing(&job, &worker_cancel).map_err(|error| {
+            continue_derived_source_processing(&job, &worker_cancel).map_err(|error| {
                 tracing::warn!(
                     import_set_id = %job.import_set_id,
                     data_source_id = data_source_id_value,

@@ -42,7 +42,7 @@ pub(super) fn bind(
     })?;
     let version = StorageObjectVersion::new(
         native_object_id,
-        acquisition_ids(inputs),
+        SourceRevisionRepo::new(conn).acquisition_ids(inputs)?,
         source.id.0.clone(),
         source.id.0.clone(),
         LVM_ADAPTER_VERSION.into(),
@@ -103,14 +103,4 @@ fn native_object_id(
         scope,
     )
     .map_err(|error| persistence_sqlite::DbError::System(error.to_string()))
-}
-
-fn acquisition_ids(inputs: &[domain::structure::SourceRevisionRef]) -> Vec<AcquisitionId> {
-    let mut source_ids = inputs
-        .iter()
-        .map(|input| input.source_id.clone())
-        .collect::<Vec<_>>();
-    source_ids.sort();
-    source_ids.dedup();
-    source_ids.into_iter().map(AcquisitionId).collect()
 }

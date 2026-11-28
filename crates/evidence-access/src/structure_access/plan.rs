@@ -59,8 +59,6 @@ pub enum TargetAccessError {
     Cancelled,
     #[error("target source kind is not supported by the registered access path")]
     UnsupportedTarget,
-    #[error("verified digest mismatch: expected {expected}, actual {actual}")]
-    DigestMismatch { expected: String, actual: String },
 }
 
 impl From<TargetAccessError> for MdRaidPlanError {
@@ -75,7 +73,6 @@ impl From<TargetAccessError> for MdRaidPlanError {
                 Self::InvalidContentIdentity
             }
             TargetAccessError::UnsupportedTarget => Self::InvalidPublication,
-            TargetAccessError::DigestMismatch { .. } => Self::SourceContentChanged,
         }
     }
 }
@@ -158,33 +155,6 @@ pub(crate) fn open_discovery_view<'a>(
 ) -> Result<VerifiedView<'a>, TargetAccessError> {
     check_cancel(cancel)?;
     Ok(VerifiedView::new(plan.reader, plan.ranges, cancel, None)?)
-}
-
-pub fn verify_derived_view(
-    plan: TargetAccessPlan,
-    expected_sha256: &str,
-    cancel: &AtomicBool,
-) -> Result<String, TargetAccessError> {
-    let mut view = open_verified_view(plan, cancel)?;
-    let mut digest = Sha256::new();
-    let mut buffer = vec![0u8; 1024 * 1024];
-    loop {
-        check_cancel(cancel)?;
-        let count = std::io::Read::read(&mut view, &mut buffer)?;
-        if count == 0 {
-            break;
-        }
-        digest.update(&buffer[..count]);
-    }
-    check_cancel(cancel)?;
-    let actual = hex::encode(digest.finalize());
-    if actual != expected_sha256 {
-        return Err(TargetAccessError::DigestMismatch {
-            expected: expected_sha256.to_owned(),
-            actual,
-        });
-    }
-    Ok(actual)
 }
 
 fn open_target(

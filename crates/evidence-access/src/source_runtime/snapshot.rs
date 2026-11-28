@@ -5,6 +5,9 @@ use std::{io, path::PathBuf, time::SystemTime};
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct SourceSnapshot(Vec<(PathBuf, u64, SystemTime, Option<SystemTime>)>);
 impl SourceSnapshot {
+    pub fn paths(&self) -> impl Iterator<Item = &std::path::Path> {
+        self.0.iter().map(|(path, ..)| path.as_path())
+    }
     pub fn contains(&self, path: &std::path::Path) -> bool {
         self.0.iter().any(|(known, ..)| known == path)
     }

@@ -159,6 +159,14 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
             .unwrap()
             .unwrap();
     assert_eq!(object.object_kind, "md_raid");
+    assert_eq!(
+        version.acquisition_ids,
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
+            &connection
+        )
+        .acquisition_ids(&version.parent_source_revisions)
+        .unwrap()
+    );
     let view_attempt =
         persistence_sqlite::repositories::structure_view_attempt_repo::StructureViewAttemptRepo::new(
             &connection,
@@ -437,6 +445,21 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
         ),
         Err(cluster_service::MdRaidPlanError::Cancelled),
     ));
+    app_services::source_processing::finalize_source_processing_with_cancel(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &source.id,
+        std::sync::Arc::new(AtomicBool::new(false)),
+    )
+    .unwrap();
+    let processing = persistence_sqlite::repositories::processing_phase_repo::DataSourceProcessingPhaseRepo::new(&connection)
+        .list_for_data_source(&source.id).unwrap();
+    assert_eq!(processing.len(), 6);
+    assert!(processing.iter().all(|phase| phase.state
+        == persistence_sqlite::repositories::processing_phase_repo::ProcessingPhaseState::Ready));
+    cluster_service::materialize_mdraid_source_catalog(&connection, &case.case_root, &source.id)
+        .unwrap();
     let descriptor_bytes = std::fs::read(&source.source_path).unwrap();
     let original_modified = std::fs::metadata(&paths[0]).unwrap().modified().unwrap();
     let mut changed = std::fs::OpenOptions::new()
@@ -621,6 +644,15 @@ fn register_inputs(
                     true,
                 )
                 .unwrap();
+        let root = std::path::PathBuf::from(conn.path().unwrap())
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let control = source_db::open_source_db(&root, &source.id).unwrap();
+        evidence_access::source_runtime::content::persist_registered_content(
+            &control, &reference, content,
+        )
+        .unwrap();
         inputs.push(reference);
     }
     inputs

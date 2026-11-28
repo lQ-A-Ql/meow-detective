@@ -1,3 +1,4 @@
+mod physical;
 mod reader;
 mod snapshot;
 
@@ -26,6 +27,7 @@ struct Scope {
     leases: Vec<SourceReadLease>,
     generation: Option<Generation>,
     manifest_identity: String,
+    physical: Option<physical::PhysicalScope>,
     _reservation: crate::resource_budget::ResourcePermit,
 }
 
@@ -81,10 +83,21 @@ impl SourceReadScope {
             leases,
             generation,
             manifest_identity,
+            physical: None,
             _reservation: reservation,
         }));
         scope.validate()?;
         Ok(scope)
+    }
+
+    pub fn with_backing_files(mut self, paths: &[std::path::PathBuf]) -> io::Result<Self> {
+        let physical = physical::PhysicalScope::acquire(paths)?;
+        let scope = Arc::get_mut(&mut self.0)
+            .ok_or_else(|| io::Error::other("physical scope must be bound before sharing"))?;
+        scope.fingerprint = format!("{}:{}", scope.fingerprint, physical.fingerprint());
+        scope.physical = Some(physical);
+        self.validate()?;
+        Ok(self)
     }
 
     pub fn source(&self) -> &SourceRevisionRef {
@@ -138,6 +151,9 @@ impl SourceReadScope {
     }
 
     pub fn validate_epoch(&self) -> io::Result<()> {
+        if let Some(physical) = &self.0.physical {
+            physical.validate()?;
+        }
         for lease in &self.0.leases {
             lease.validate()?;
         }

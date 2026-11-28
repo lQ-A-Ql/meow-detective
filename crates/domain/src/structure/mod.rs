@@ -2,12 +2,14 @@ mod identity;
 mod native_version;
 mod object_version;
 mod observation;
+mod physical_content;
 mod plan;
 mod range;
 mod read_demand;
 mod relation;
 mod revocation;
 mod verification;
+pub use physical_content::PhysicalContentBinding;
 pub use revocation::{
     revoke_case_revisions, revoke_source_generation, revoke_source_revision, RevisionReadLease,
 };

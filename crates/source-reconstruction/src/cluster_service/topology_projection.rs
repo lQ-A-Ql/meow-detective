@@ -18,8 +18,6 @@ use super::{Result, TopologyEdgeKind, TopologyMemberRole, TopologyScopeKind};
 
 mod pve;
 use pve::register_pve_scope;
-mod environment;
-use environment::project_environment_objects;
 mod helpers;
 mod provenance;
 use helpers::is_pve_path;
@@ -106,15 +104,9 @@ pub fn project_import_set_topology(
             )
         })
         .collect::<Vec<_>>();
-    project_environment_objects(
-        case_connection,
-        case_id,
-        import_set_id,
-        &projection,
-        &member_sources,
-    )?;
+    crate::structure_facts::index_source_scopes(case_connection, case_id, &member_sources)?;
     provenance::persist_topology_provenance(case_connection, case_id, import_set_id)?;
-    provenance::persist_analysis_links(case_connection, case_root, import_set_id, &member_sources)?;
+    provenance::persist_analysis_links(case_connection, case_root, &member_sources)?;
     Ok(projection)
 }
 

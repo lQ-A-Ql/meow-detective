@@ -5,6 +5,8 @@ mod journal;
 mod kubernetes;
 mod model;
 mod pve;
+mod source_index;
+pub(crate) use source_index::index_source_scopes;
 
 use domain::{structure::StructureGraph, CaseId};
 use persistence_sqlite::repositories::datasource_repo::DataSourceRepo;

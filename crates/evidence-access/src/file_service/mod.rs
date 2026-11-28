@@ -30,6 +30,8 @@ pub(crate) use viewer::preview_lvm_identity_from_datasource;
 mod visibility;
 
 pub use block_filesystem::open_block_filesystem;
+mod native_filesystem;
+pub(crate) mod registered_partition;
 pub use browse::{
     get_file_children_lazy, get_file_children_lazy_with_visibility, get_file_jump_context,
     get_file_rows_for_request, get_file_tree_real, get_file_tree_real_with_visibility,
@@ -80,6 +82,7 @@ pub use metadata::source_routing::{
     read_file_range_for_source_case, read_preview_bytes_for_source_case,
     text_preview_for_source_case,
 };
+pub use native_filesystem::open_source_filesystem;
 pub use parallel_enumeration::{
     enumerate_filesystem_parallel_with_factory, enumerate_partition_parallel_with_factory,
 };

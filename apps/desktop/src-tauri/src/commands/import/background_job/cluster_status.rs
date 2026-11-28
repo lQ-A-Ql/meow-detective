@@ -150,7 +150,7 @@ pub(super) fn materialize_ceph_scope_rbd_sources(
     }
 }
 
-pub(crate) fn continue_ceph_rbd_processing(
+pub(crate) fn continue_derived_source_processing(
     job: &BackgroundDerivedSourceProcessingJob,
     cancel_token: &Arc<AtomicBool>,
 ) -> Result<(), CommandError> {
@@ -165,20 +165,18 @@ pub(crate) fn continue_ceph_rbd_processing(
             );
             return Ok(());
         }
-        if let Err(error) =
-            app_services::derived_source_service::finalize_rbd_source_processing_with_cancel(
-                &connection,
-                &job.case_root,
-                &job.case_id,
-                data_source_id,
-                cancel_token.clone(),
-            )
-        {
+        if let Err(error) = app_services::source_processing::finalize_source_processing_with_cancel(
+            &connection,
+            &job.case_root,
+            &job.case_id,
+            data_source_id,
+            cancel_token.clone(),
+        ) {
             tracing::warn!(
                 import_set_id = %job.import_set_id,
                 data_source_id = %data_source_id.0,
                 error = %error,
-                "Browseable RBD source has incomplete background processing"
+                "Browseable derived source has incomplete background processing"
             );
             return Err(CommandError::internal(error.to_string()));
         }

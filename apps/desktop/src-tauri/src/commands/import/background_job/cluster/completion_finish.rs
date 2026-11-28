@@ -56,9 +56,16 @@ pub(super) fn finish_ready_import(
         .map(|_| None);
     }
     let derived_note = materialization_note(&state);
+    let mut processing_sources = state
+        .mdraid_sources
+        .iter()
+        .chain(&state.lvm_sources)
+        .chain(&state.btrfs_sources)
+        .map(|source| source.id.clone())
+        .collect::<Vec<_>>();
     let Some(ceph_scope_id) = state.ceph_scope_id else {
         return Ok(Some(BrowseableEvidenceSetImport {
-            processing: build_derived_processing_job(job, Vec::new()),
+            processing: build_derived_processing_job(job, processing_sources),
             parent_job_id: job.job_id.clone(),
             completion_detail: format!(
                 "Imported Linux evidence set {}: {}/{} source(s) ready; no Ceph scope proven{}",
@@ -103,8 +110,13 @@ pub(super) fn finish_ready_import(
         summaries = ?summary.member_messages,
         "Linux evidence-set import is browseable and awaiting derived-task admission"
     );
+    processing_sources.extend(
+        derived_sources
+            .into_iter()
+            .map(|source| source.data_source.id),
+    );
     Ok(Some(BrowseableEvidenceSetImport {
-        processing: build_derived_processing_job(job, derived_sources),
+        processing: build_derived_processing_job(job, processing_sources),
         parent_job_id: job.job_id.clone(),
         completion_detail,
     }))

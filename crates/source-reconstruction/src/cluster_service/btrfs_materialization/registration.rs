@@ -91,14 +91,7 @@ fn bind_version(
     );
     let object = NativeObjectId::new("fs-btrfs", "btrfs.fsid", native.fsid.clone(), scope.clone())
         .map_err(|_| BtrfsSourceError::Identity)?;
-    let acquisitions = inputs
-        .iter()
-        .map(|input| {
-            SourceRevisionRepo::new(conn)
-                .current(&case_id.0, &input.source_id)
-                .map(|(_, content)| content.acquisition_id)
-        })
-        .collect::<Result<Vec<_>, _>>()?;
+    let acquisitions = SourceRevisionRepo::new(conn).acquisition_ids(inputs)?;
     let version = StorageObjectVersion::new(
         object.clone(),
         acquisitions,

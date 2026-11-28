@@ -25,7 +25,6 @@ fn content_dag_rejects_cycles_while_control_edges_may_cycle() {
         edge(&b.id, &a.id, StructureRelationKind::DeploymentControl),
     ];
     graph.validate().unwrap();
-    assert_eq!(graph.content_dependency_order().unwrap().len(), 2);
 }
 
 #[test]

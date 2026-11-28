@@ -8,7 +8,7 @@ use persistence_sqlite::{
 };
 
 #[test]
-fn infrastructure_graph_projects_environment_and_storage_domains() {
+fn infrastructure_graph_leaves_environment_entities_to_the_structure_fact_projection() {
     let conn = open_in_memory().unwrap();
     runner::run_all(&conn).unwrap();
     conn.execute(
@@ -29,8 +29,6 @@ fn infrastructure_graph_projects_environment_and_storage_domains() {
         .unwrap();
     let repo = InfrastructureGraphRepo::new(&conn);
     let nodes = repo.list_nodes("case-graph").unwrap();
-    assert_eq!(nodes.len(), 1);
-    assert_eq!(nodes[0].domain, "environment");
-    assert_eq!(nodes[0].version.as_deref(), Some("openEuler 24.03"));
+    assert!(nodes.is_empty());
     assert!(repo.list_edges("case-graph").unwrap().is_empty());
 }

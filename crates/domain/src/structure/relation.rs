@@ -185,52 +185,6 @@ impl StructureGraph {
         self.validate_content_dag(&nodes)
     }
 
-    pub fn content_dependency_order(&self) -> Result<Vec<StructureNodeId>, StructureGraphError> {
-        self.validate()?;
-        let mut incoming = self
-            .nodes
-            .iter()
-            .map(|node| (node.id.clone(), 0usize))
-            .collect::<BTreeMap<_, _>>();
-        let mut outgoing = BTreeMap::<StructureNodeId, Vec<StructureNodeId>>::new();
-        for edge in self
-            .edges
-            .iter()
-            .filter(|edge| edge.kind == StructureRelationKind::ContentDependency)
-        {
-            *incoming
-                .get_mut(&edge.to)
-                .ok_or_else(|| StructureGraphError::MissingNode(edge.to.clone()))? += 1;
-            outgoing
-                .entry(edge.from.clone())
-                .or_default()
-                .push(edge.to.clone());
-        }
-        let mut ready = incoming
-            .iter()
-            .filter_map(|(node, count)| (*count == 0).then_some(node.clone()))
-            .collect::<BTreeSet<_>>();
-        let mut order = Vec::with_capacity(self.nodes.len());
-        while let Some(node) = ready.pop_first() {
-            order.push(node.clone());
-            if let Some(targets) = outgoing.get(&node) {
-                for target in targets {
-                    let count = incoming
-                        .get_mut(target)
-                        .ok_or_else(|| StructureGraphError::MissingNode(target.clone()))?;
-                    *count -= 1;
-                    if *count == 0 {
-                        ready.insert(target.clone());
-                    }
-                }
-            }
-        }
-        if order.len() != self.nodes.len() {
-            return Err(StructureGraphError::DependencyCycle);
-        }
-        Ok(order)
-    }
-
     fn validate_content_dag(
         &self,
         nodes: &BTreeMap<&StructureNodeId, &StructureNode>,

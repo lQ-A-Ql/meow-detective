@@ -167,6 +167,19 @@ fn exercise(profile: &str, members: usize) {
             .id,
         source.id
     );
+    app_services::source_processing::finalize_source_processing_with_cancel(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &source.id,
+        cancel.clone(),
+    )
+    .unwrap();
+    let processing = persistence_sqlite::repositories::processing_phase_repo::DataSourceProcessingPhaseRepo::new(&connection)
+        .list_for_data_source(&source.id).unwrap();
+    assert_eq!(processing.len(), 6);
+    assert!(processing.iter().all(|phase| phase.state
+        == persistence_sqlite::repositories::processing_phase_repo::ProcessingPhaseState::Ready));
     let source_connection =
         source_db::open_registered_source_db(&connection, &case.case_root, &source.id).unwrap();
     let file = FileRepo::new(&source_connection)

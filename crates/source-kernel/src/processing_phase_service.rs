@@ -30,7 +30,16 @@ pub fn retryable_derived_sources(
     for source in source_repo
         .find_by_case(case_id)?
         .into_iter()
-        .filter(|source| source.kind == domain::DataSourceKind::CephRbd)
+        .filter(|source| {
+            matches!(
+                source.kind,
+                domain::DataSourceKind::CephRbd
+                    | domain::DataSourceKind::CephFs
+                    | domain::DataSourceKind::MdRaid
+                    | domain::DataSourceKind::LvmLogicalVolume
+                    | domain::DataSourceKind::BtrfsPool
+            )
+        })
     {
         let Some(storage) = source_repo.find_storage(&source.id)? else {
             continue;

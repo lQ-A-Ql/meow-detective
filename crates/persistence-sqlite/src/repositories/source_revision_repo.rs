@@ -1,5 +1,5 @@
 use crate::{DbError, DbResult};
-use domain::structure::{SourceRevisionContent, SourceRevisionRef};
+use domain::structure::{AcquisitionId, SourceRevisionContent, SourceRevisionRef};
 use rusqlite::{params, Connection, OptionalExtension};
 
 mod ancestors;
@@ -97,6 +97,31 @@ impl<'a> SourceRevisionRepo<'a> {
             transaction.commit()?;
         }
         Ok(references)
+    }
+
+    pub fn acquisition_ids(
+        &self,
+        references: &[SourceRevisionRef],
+    ) -> DbResult<Vec<AcquisitionId>> {
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        let mut acquisitions = references
+            .iter()
+            .map(|reference| {
+                self.require_current(reference)?;
+                self.current(&reference.case_id, &reference.source_id)
+                    .map(|(_, content)| content.acquisition_id)
+            })
+            .collect::<DbResult<Vec<_>>>()?;
+        acquisitions.sort_by(|left, right| left.0.cmp(&right.0));
+        acquisitions.dedup();
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
+        Ok(acquisitions)
     }
 
     fn require_current_revision(&self, reference: &SourceRevisionRef) -> DbResult<()> {

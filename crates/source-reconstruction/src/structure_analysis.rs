@@ -1,5 +1,6 @@
 mod adapter;
 mod execution;
+mod execution_permit;
 mod graph_builder;
 mod planner;
 mod query;
@@ -13,10 +14,11 @@ pub use adapter::{
     REGISTERED_SOURCE_ADAPTER_ID,
 };
 pub use evidence_access::structure_access::{
-    open_verified_view, plan_registered_access, plan_target_access, verify_derived_view,
-    verify_registered_access, AccessTarget, RegisteredAccessRequest, TargetAccessError,
-    TargetAccessPlan, TargetAccessRequest, VerifiedView,
+    open_verified_view, plan_registered_access, plan_target_access, verify_registered_access,
+    AccessTarget, RegisteredAccessRequest, TargetAccessError, TargetAccessPlan,
+    TargetAccessRequest, VerifiedView,
 };
+pub(crate) use execution::execute_structure_analysis;
 pub use execution::run_structure_analysis;
 pub use planner::plan_structure_analysis;
 pub use query::get_structure_graph;

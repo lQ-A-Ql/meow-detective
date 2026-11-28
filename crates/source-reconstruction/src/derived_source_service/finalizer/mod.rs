@@ -19,11 +19,11 @@ pub(super) use catalog::{
     begin_catalog_phase, complete_catalog_phase, defer_catalog_phase, fail_catalog_phase,
     refresh_catalog_claim, start_catalog_heartbeat,
 };
-pub(super) use coordinator::finalize_derived_source;
+pub(crate) use coordinator::finalize_derived_source;
 pub(super) use fingerprint::catalog_phase_is_current;
 pub(super) use outcome::DerivedFinalizationReport;
 pub(super) use phase_runner::{PhaseClaim, ProcessingPhaseAttempt};
-pub(super) use queue::queue_post_catalog_phases;
+pub(crate) use queue::queue_post_catalog_phases;
 
 pub(super) struct DerivedSourceContext<'a> {
     pub(super) case_conn: &'a rusqlite::Connection,

@@ -9,6 +9,7 @@ use super::diagnostics::{
 };
 use super::discovery::lvm_discovery_pv_groups;
 use super::model::{ExpandedPoolSources, LvmExpansionState};
+use super::pool_access::discover_lvm_pool;
 use super::source_identity::{
     lvm_source_matches, normalize_lvm_uuid_for_match, representative_lvm_candidate,
 };
@@ -128,38 +129,6 @@ pub(super) fn expand_discovery_group(
         ));
     }
     Ok(())
-}
-
-fn discover_lvm_pool(
-    pv_sources: &[LvmPhysicalVolumeSource],
-    default_source_kind: &DataSourceKind,
-    content: Option<&super::collection_content::CollectionContent>,
-) -> Result<(fs_lvm::LvmPool, u64), fs_lvm::LvmError> {
-    let pv_offsets = pv_sources
-        .iter()
-        .map(|source| source.offset)
-        .collect::<Vec<_>>();
-    let seed_offset = pv_offsets.first().copied().unwrap_or_default();
-    let mut readers = Vec::with_capacity(pv_sources.len());
-    for pv_source in pv_sources {
-        let reader_path = Path::new(&pv_source.source_path);
-        let reader_kind = pv_source
-            .source_kind
-            .as_ref()
-            .unwrap_or(default_source_kind);
-        let factory = match content {
-            Some(content) => content
-                .factory(
-                    reader_path,
-                    reader_kind,
-                    &std::sync::atomic::AtomicBool::new(false),
-                )
-                .map_err(std::io::Error::other)?,
-            None => crate::source_runtime::open_factory(reader_path, reader_kind)?,
-        };
-        readers.push(factory.open_reader()?);
-    }
-    Ok((fs_lvm::LvmPool::discover(readers, pv_offsets)?, seed_offset))
 }
 
 fn expanded_pool_sources(

@@ -130,10 +130,7 @@ fn lvm_factory(path: &Path) -> io::Result<SharedReaderFactory> {
     let descriptor_snapshot =
         super::snapshot::SourceSnapshot::capture(std::slice::from_ref(&path))?;
     let plan = crate::lvm::read_lvm_descriptor(&path).map_err(io::Error::other)?;
-    let template =
-        crate::lvm::open_lvm_volume_reader(&plan, &std::sync::atomic::AtomicBool::new(false))
-            .map_err(io::Error::other)?;
-    let size = template.info().size;
+    let size = plan.logical_size;
     let metadata_identity = crate::lvm::lvm_volume_fingerprint(&plan).map_err(io::Error::other)?;
     let reader_bytes = crate::lvm::lvm_reader_content_bytes(&plan);
     let route = super::resources::ResourceRoute::default();

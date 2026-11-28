@@ -9,7 +9,7 @@ use super::fingerprint::{
     PROCESSING_PHASE_VERSION,
 };
 
-pub(in crate::derived_source_service) fn queue_post_catalog_phases(
+pub(crate) fn queue_post_catalog_phases(
     case_conn: &rusqlite::Connection,
     data_source_id: &DataSourceId,
     lineage_fingerprint: &str,
@@ -17,6 +17,9 @@ pub(in crate::derived_source_service) fn queue_post_catalog_phases(
     let catalog_identity = load_catalog_identity(case_conn, data_source_id, lineage_fingerprint)?;
     let repository = DataSourceProcessingPhaseRepo::new(case_conn);
     for phase in ProcessingPhase::ALL.into_iter().skip(1) {
+        if repository.find(data_source_id, phase)?.is_some() {
+            continue;
+        }
         let seed =
             phase_dependency_identity("post-catalog-pending", &[&catalog_identity, phase.as_str()]);
         let input_fingerprint = phase_input_fingerprint(&seed, phase);

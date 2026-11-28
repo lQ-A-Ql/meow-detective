@@ -55,20 +55,9 @@ pub fn open_lvm_partition(
 ) -> Result<Box<dyn FileSystemReader + Send>, FileServiceError> {
     super::persisted_inputs::validate(&domain::DataSourceId(source_id.to_owned()), descriptor_path)
         .map_err(|error| FileServiceError::other(error.to_string()))?;
-    let cancel = AtomicBool::new(false);
-    let probe = probe_lvm_filesystems(descriptor_path, &cancel)
-        .map_err(|error| FileServiceError::other(error.to_string()))?;
-    let candidates = probe
-        .candidates
-        .iter()
-        .filter(|candidate| {
-            partition_index.is_none_or(|index| candidate.partition_index == Some(index))
-        })
-        .collect::<Vec<_>>();
-    if candidates.len() != 1 {
-        return Err(FileServiceError::other(
-            "LVM logical volume preview requires an unambiguous filesystem identity",
-        ));
-    }
-    open_lvm_filesystem(descriptor_path, candidates[0])
+    crate::file_service::registered_partition::open_registered_partition(
+        source_id,
+        descriptor_path,
+        partition_index,
+    )
 }

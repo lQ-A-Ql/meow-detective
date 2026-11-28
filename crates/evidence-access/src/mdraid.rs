@@ -224,25 +224,21 @@ fn open_member_reader(
             identity,
             ..
         } => {
-            let readers = identity
-                .pv_sources
-                .iter()
-                .map(|source| {
-                    let kind = source.source_kind.as_ref().ok_or_else(|| {
-                        MdRaidPlanError::Classification(
-                            datasource_service::DataSourceError::Evidence(
-                                "LVM PV source kind is missing".to_string(),
-                            ),
-                        )
-                    })?;
-                    content::open_verified_source(
-                        plan,
-                        std::path::Path::new(&source.source_path),
-                        kind,
-                    )
-                })
-                .collect::<Result<Vec<_>, _>>()?;
-            let pool = fs_lvm::LvmPool::discover(readers, identity.pv_offsets.clone())?;
+            let pool = crate::lvm::mapping_cache::open(
+                &identity.pv_sources,
+                |source| {
+                    plan.source_content
+                        .iter()
+                        .find(|known| {
+                            known.source_path == source.source_path
+                                && source.source_kind.as_ref() == Some(&known.source_kind)
+                        })
+                        .cloned()
+                        .ok_or_else(|| std::io::Error::other("MD LVM source content is missing"))
+                },
+                &std::sync::atomic::AtomicBool::new(false),
+                None,
+            )?;
             if identity.vg_uuid.is_empty() || pool.volume_group().id != identity.vg_uuid {
                 return Err(fs_lvm::mdraid::MdRaidError::MetadataConflict(
                     "logical volume group identity does not match the read plan".to_string(),
@@ -258,7 +254,7 @@ fn open_member_reader(
                         format!("LVM logical volume '{lv_name}' was not found"),
                     ))
                 })?;
-            Ok(pool.open_volume_reader(index)?)
+            Ok(pool.open_volume(index)?)
         }
         MdRaidMemberOrigin::Direct {
             source_path,

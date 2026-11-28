@@ -36,7 +36,7 @@ pub fn plan_registered_access(
         cancel,
         request.demand.deadline_unix_ms,
     )?;
-    let scope = SourceReadScope::acquire(root, &request.demand.source_revision)?;
+    let scope = acquire_registered_scope(conn, root, &request.demand.source_revision)?;
     validate_target(conn, &request)?;
     let reader = scope.wrap(open_reader(conn, root, &request, cancel)?)?;
     Ok(TargetAccessPlan {
@@ -62,7 +62,7 @@ pub fn verify_registered_access(
         request.demand.deadline_unix_ms,
     )?;
     validate_target(conn, &request)?;
-    let scope = SourceReadScope::acquire(root, &request.demand.source_revision)?;
+    let scope = acquire_registered_scope(conn, root, &request.demand.source_revision)?;
     if fresh || batch.requires_input_verification() {
         super::deep::verify_inputs(conn, root, &request.demand, batch, cancel)?;
     }
@@ -225,5 +225,25 @@ fn open_reader(
             return Err(TargetAccessError::UnsupportedTarget);
         }
     }
+    if matches!(kind, DataSourceKind::Raw | DataSourceKind::E01) {
+        let (content, permit) =
+            crate::source_runtime::content::load_registered_content(conn, root, reference)?;
+        return Ok(crate::source_runtime::content::VerifiedFactory::wrap(
+            factory,
+            Arc::new(content),
+            Arc::new(permit),
+            Arc::new(AtomicBool::new(false)),
+        )
+        .open_reader_with_cancel(cancel)?);
+    }
     Ok(factory.open_reader_with_cancel(cancel)?)
+}
+
+pub fn acquire_registered_scope(
+    conn: &rusqlite::Connection,
+    root: &Path,
+    source: &domain::structure::SourceRevisionRef,
+) -> Result<SourceReadScope, TargetAccessError> {
+    let paths = crate::source_runtime::content::physical_backing_paths(conn, root, source)?;
+    Ok(SourceReadScope::acquire(root, source)?.with_backing_files(&paths)?)
 }

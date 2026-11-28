@@ -112,3 +112,53 @@ fn deletes_ceph_rbd_managed_storage_without_opening_virtual_source_path() {
     assert!(!source_dir.exists());
     assert!(!case_root.join("staging").join(&data_source_id.0).exists());
 }
+
+#[test]
+fn gc_timeout_retains_source_registration_and_reports_io_error() {
+    let workspace = tempfile::TempDir::new().unwrap();
+    let case = crate::case_service::create_case(workspace.path(), "source-close", None).unwrap();
+    let conn = case.connection().unwrap();
+    let source_path = workspace.path().join("evidence.raw");
+    std::fs::write(&source_path, [0; 512]).unwrap();
+    let id = domain::DataSourceId("gc-close".into());
+    let source = domain::DataSource {
+        id: id.clone(),
+        name: "source-close".into(),
+        kind: domain::DataSourceKind::Raw,
+        source_path: source_path.clone(),
+        imported_at: chrono::Utc::now(),
+        provenance: domain::DataSourceProvenance::unknown(),
+    };
+    let repo = DataSourceRepo::new(&conn);
+    repo.insert_with_storage(
+        &case.meta.id,
+        &source,
+        &DataSourceStorage::source_db(&id.0, Some("linux"), None),
+    )
+    .unwrap();
+    drop(crate::source_db::open_source_db(&case.case_root, &id).unwrap());
+    let directory = crate::source_db::source_dir(&case.case_root, &id);
+    let reclamation = persistence_source::control::connections::try_begin_generation_gc(&directory)
+        .unwrap()
+        .unwrap();
+    let error = delete_data_source_in(&conn, &case.case_root, &id.0).unwrap_err();
+    assert!(matches!(
+        transport::ServiceErrorCategory::category(&error),
+        transport::ErrorCategory::Io
+    ));
+    let CaseServiceError::Db(persistence_sqlite::DbError::Io(error)) = error else {
+        panic!("expected source reclamation I/O error");
+    };
+    assert!(error
+        .get_ref()
+        .unwrap()
+        .downcast_ref::<persistence_source::control::connections::SourceGenerationBusy>()
+        .is_some());
+    assert!(directory.is_dir());
+    assert!(repo.find_storage(&id).unwrap().is_some());
+    drop(reclamation);
+    delete_data_source_in(&conn, &case.case_root, &id.0).unwrap();
+    assert!(!directory.exists());
+    assert!(repo.find_storage(&id).unwrap().is_none());
+    assert_eq!(std::fs::read(source_path).unwrap(), [0; 512]);
+}

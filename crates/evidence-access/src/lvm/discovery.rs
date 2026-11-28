@@ -19,19 +19,19 @@ pub fn discover_volumes_from_collection(
         return Err(LvmPlanError::Cancelled);
     }
     collection.validate_snapshot()?;
-    let mut by_vg = BTreeMap::<String, Vec<&ImageFilesystemCandidate>>::new();
+    let mut by_pool = BTreeMap::<PoolKey, Vec<&ImageFilesystemCandidate>>::new();
     for candidate in collection.logical_volume_candidates() {
         let identity = candidate
             .lvm_identity
             .as_ref()
             .ok_or(LvmPlanError::InvalidContentIdentity)?;
-        by_vg
-            .entry(identity.vg_uuid.clone())
+        by_pool
+            .entry(pool_key(identity)?)
             .or_default()
             .push(candidate);
     }
     let mut plans = Vec::new();
-    for candidates in by_vg.values() {
+    for candidates in by_pool.values() {
         discover_group(collection, candidates, cancel, &mut plans)?;
     }
     plans.sort_by(|left, right| {
@@ -59,17 +59,21 @@ fn discover_group(
         .ok_or(LvmPlanError::InvalidContentIdentity)?;
     let discovery_sources = unique_sources(identity)?;
     let snapshot = collection.source_snapshot(&discovery_sources)?;
-    let mut readers = Vec::new();
-    for source in &discovery_sources {
-        if cancel.load(Ordering::Acquire) {
-            return Err(LvmPlanError::Cancelled);
-        }
-        let factory =
-            collection.verified_factory(&source.source_path, &source.source_kind, cancel)?;
-        readers.push(factory.open_reader_with_cancel(cancel)?);
-    }
-    let offsets = identity.pv_offsets.clone();
-    let pool = fs_lvm::LvmPool::discover(readers, offsets)?;
+    let pool = super::mapping_cache::open(
+        &identity.pv_sources,
+        |source| {
+            let kind = source
+                .source_kind
+                .as_ref()
+                .ok_or_else(|| std::io::Error::other("PV source kind is missing"))?;
+            collection
+                .source_content(Path::new(&source.source_path), kind)
+                .cloned()
+                .map_err(std::io::Error::other)
+        },
+        cancel,
+        None,
+    )?;
     let volume_group = pool.volume_group();
     if normalize(&volume_group.id) != normalize(&identity.vg_uuid) {
         return Err(LvmPlanError::SourceContentChanged);
@@ -151,4 +155,32 @@ fn unique_sources(
 
 fn normalize(uuid: &str) -> String {
     crate::datasource_service::normalize_lvm_uuid_for_match(uuid)
+}
+
+type PoolKey = (String, Vec<(std::path::PathBuf, String, u64, String)>);
+
+fn pool_key(
+    identity: &crate::datasource_service::LvmLogicalVolumeIdentity,
+) -> Result<PoolKey, LvmPlanError> {
+    let mut members = identity
+        .pv_sources
+        .iter()
+        .map(|source| {
+            Ok((
+                std::fs::canonicalize(&source.source_path)?,
+                source
+                    .source_kind
+                    .as_ref()
+                    .ok_or(LvmPlanError::InvalidContentIdentity)?
+                    .to_string(),
+                source.offset,
+                normalize(&source.pv_uuid),
+            ))
+        })
+        .collect::<Result<Vec<_>, LvmPlanError>>()?;
+    if members.is_empty() {
+        return Err(LvmPlanError::InvalidContentIdentity);
+    }
+    members.sort();
+    Ok((normalize(&identity.vg_uuid), members))
 }

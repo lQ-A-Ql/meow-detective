@@ -7,7 +7,7 @@ use thiserror::Error;
 mod catalog_build;
 mod catalog_manifest;
 mod filesystem;
-mod finalizer;
+pub(crate) mod finalizer;
 mod materialization;
 mod orchestration;
 

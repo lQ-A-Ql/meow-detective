@@ -168,7 +168,7 @@ pub fn close_source_store(
     let source_directory =
         canonicalize_or_resolve(&case_root.as_ref().join("sources").join(source_id))?;
     let sql = if source_directory.exists() {
-        let Some(guard) = crate::control::connections::try_begin_generation_gc(&source_directory)
+        let Some(guard) = crate::control::connections::begin_source_close(&source_directory)
             .map_err(StorageRuntimeError::Control)?
         else {
             return Ok(None);

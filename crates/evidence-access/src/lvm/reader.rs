@@ -3,7 +3,7 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 use evidence_core::{reader::ReaderInfo, EvidenceReader};
 
-use crate::source_runtime::content::{ContentVerifiedReader, CONTENT_CHUNK_BYTES};
+use crate::source_runtime::content::CONTENT_CHUNK_BYTES;
 
 use super::plan::{LvmPlanError, LvmVolumePlan};
 
@@ -55,20 +55,33 @@ pub fn open_lvm_reader(
     check_cancel(cancel)?;
     plan.validate()?;
     plan.source_snapshot.validate()?;
-    let mut readers = Vec::with_capacity(plan.sources.len());
-    for source in &plan.sources {
-        let reader = crate::datasource_service::open_evidence_reader(
-            std::path::Path::new(&source.source_path),
-            &source.source_kind,
-        )?;
-        readers.push(Box::new(ContentVerifiedReader::new(
-            reader,
-            Arc::new(source.content.clone()),
-        )?) as Box<dyn EvidenceReader>);
-    }
-    check_cancel(cancel)?;
-    let offsets = plan.sources.iter().map(|source| source.offset).collect();
-    let pool = fs_lvm::LvmPool::discover(readers, offsets)?;
+    let sources = plan
+        .sources
+        .iter()
+        .map(
+            |source| crate::datasource_service::LvmPhysicalVolumeSource {
+                source_path: source.source_path.clone(),
+                source_kind: Some(source.source_kind.clone()),
+                pv_uuid: source.pv_uuid.clone(),
+                offset: source.offset,
+                pv_name: None,
+            },
+        )
+        .collect::<Vec<_>>();
+    let pool = super::mapping_cache::open(
+        &sources,
+        |source| {
+            plan.sources
+                .iter()
+                .find(|known| {
+                    known.source_path == source.source_path && known.offset == source.offset
+                })
+                .map(|known| known.content.clone())
+                .ok_or_else(|| std::io::Error::other("LVM physical source is missing"))
+        },
+        cancel,
+        None,
+    )?;
     let volume_group = pool.volume_group();
     if crate::datasource_service::normalize_lvm_uuid_for_match(&volume_group.id)
         != crate::datasource_service::normalize_lvm_uuid_for_match(&plan.vg_uuid)
@@ -91,7 +104,7 @@ pub fn open_lvm_reader(
     }
     check_cancel(cancel)?;
     Ok(LvmVolumeReader {
-        inner: pool.open_volume_reader(index)?,
+        inner: pool.open_volume(index)?,
     })
 }
 

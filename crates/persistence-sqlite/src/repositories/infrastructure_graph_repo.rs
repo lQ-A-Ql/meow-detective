@@ -35,11 +35,6 @@ impl<'a> InfrastructureGraphRepo<'a> {
         let mut statement = self.conn.prepare(
             "SELECT id, domain, kind, name, status, confidence, provenance_json, version
              FROM (
-                 SELECT id, 'environment' AS domain, object_kind AS kind, name, status,
-                        identity_state AS confidence, provenance_json,
-                        json_extract(provenance_json, '$.version') AS version
-                 FROM environment_objects WHERE case_id = ?1
-                 UNION ALL
                  SELECT id, 'storage' AS domain, object_kind AS kind, name, status,
                         identity_state AS confidence, provenance_json,
                         json_extract(provenance_json, '$.version') AS version
@@ -75,24 +70,8 @@ impl<'a> InfrastructureGraphRepo<'a> {
     pub fn list_edges(&self, case_id: &str) -> DbResult<Vec<InfrastructureGraphEdgeRecord>> {
         let mut statement = self.conn.prepare(
             "SELECT source_object_id, target_object_id, relation_kind, confidence, provenance_json
-             FROM environment_relations
-             WHERE source_object_id IN (SELECT id FROM environment_objects WHERE case_id = ?1)
-             UNION ALL
-             SELECT source_object_id, target_object_id, relation_kind, confidence, provenance_json
              FROM storage_relations
              WHERE source_object_id IN (SELECT id FROM storage_objects WHERE case_id = ?1)
-             UNION ALL
-             SELECT source_scope_id, target_scope_id, edge_kind, confidence, provenance_json
-             FROM linux_topology_edges AS edge
-             JOIN linux_topology_scopes AS source ON source.id = edge.source_scope_id
-             WHERE source.case_id = ?1
-             UNION ALL
-             SELECT 'analysis:' || artifact.scope_id || ':' || artifact.data_source_id || ':' || IFNULL(artifact.file_id, artifact.artifact_kind),
-                    REPLACE(artifact.scope_id, 'scope:kubernetes:', 'env:kubernetes:'),
-                    'derived_from', 'candidate', artifact.diagnostics_json
-             FROM linux_topology_artifacts AS artifact
-             WHERE artifact.layer = 'orchestration'
-               AND artifact.data_source_id IN (SELECT id FROM data_sources WHERE case_id = ?1)
              ORDER BY source_object_id, target_object_id, relation_kind",
         )?;
         let rows = statement.query_map(params![case_id], |row| {

@@ -6,10 +6,10 @@ use persistence_sqlite::{DbError, DbResult};
 use rusqlite::{functions::FunctionFlags, Connection};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::{Condvar, Mutex, OnceLock};
+use std::sync::{Condvar, Mutex, MutexGuard, OnceLock};
 use std::time::{Duration, Instant};
 
-const OPEN_WAIT_LIMIT: Duration = Duration::from_secs(2);
+const RECLAMATION_WAIT_LIMIT: Duration = Duration::from_secs(2);
 
 #[derive(Default)]
 struct Connections {
@@ -21,6 +21,31 @@ struct Connections {
 struct ConnectionRegistry {
     state: Mutex<Connections>,
     changed: Condvar,
+}
+
+impl ConnectionRegistry {
+    fn wait_for_reclamation<'a>(
+        &self,
+        connections: MutexGuard<'a, Connections>,
+        source_directory: &Path,
+    ) -> DbResult<MutexGuard<'a, Connections>> {
+        let started = Instant::now();
+        let (connections, _) = self
+            .changed
+            .wait_timeout_while(connections, RECLAMATION_WAIT_LIMIT, |state| {
+                state.retiring.contains(source_directory)
+            })
+            .map_err(|_| DbError::System("source connection registry is poisoned".into()))?;
+        if connections.retiring.contains(source_directory) {
+            return Err(DbError::Io(std::io::Error::new(
+                std::io::ErrorKind::WouldBlock,
+                SourceGenerationBusy {
+                    waited: started.elapsed(),
+                },
+            )));
+        }
+        Ok(connections)
+    }
 }
 
 static CONNECTIONS: OnceLock<ConnectionRegistry> = OnceLock::new();
@@ -42,27 +67,11 @@ impl ConnectionPin {
             .ok_or_else(|| DbError::System("source database has no directory".into()))?;
         let source_directory = std::fs::canonicalize(parent)?;
         let registry = CONNECTIONS.get_or_init(ConnectionRegistry::default);
-        let mut connections = registry
+        let connections = registry
             .state
             .lock()
             .map_err(|_| DbError::System("source connection registry is poisoned".into()))?;
-        let started = Instant::now();
-        let deadline = started + OPEN_WAIT_LIMIT;
-        while connections.retiring.contains(&source_directory) {
-            let Some(remaining) = deadline.checked_duration_since(Instant::now()) else {
-                return Err(DbError::Io(std::io::Error::new(
-                    std::io::ErrorKind::WouldBlock,
-                    SourceGenerationBusy {
-                        waited: started.elapsed(),
-                    },
-                )));
-            };
-            connections = registry
-                .changed
-                .wait_timeout(connections, remaining)
-                .map_err(|_| DbError::System("source connection registry is poisoned".into()))?
-                .0;
-        }
+        let mut connections = registry.wait_for_reclamation(connections, &source_directory)?;
         *connections
             .readers
             .entry(source_directory.clone())
@@ -139,6 +148,26 @@ pub fn try_begin_generation_gc(
     if connections.readers.contains_key(&source_directory)
         || connections.retiring.contains(&source_directory)
     {
+        return Ok(None);
+    }
+    connections.retiring.insert(source_directory.clone());
+    Ok(Some(SourceGenerationGcGuard { source_directory }))
+}
+
+pub(crate) fn begin_source_close(
+    source_directory: &Path,
+) -> DbResult<Option<SourceGenerationGcGuard>> {
+    let source_directory = std::fs::canonicalize(source_directory)?;
+    let registry = CONNECTIONS.get_or_init(ConnectionRegistry::default);
+    let connections = registry
+        .state
+        .lock()
+        .map_err(|_| DbError::System("source connection registry is poisoned".into()))?;
+    if connections.readers.contains_key(&source_directory) {
+        return Ok(None);
+    }
+    let mut connections = registry.wait_for_reclamation(connections, &source_directory)?;
+    if connections.readers.contains_key(&source_directory) {
         return Ok(None);
     }
     connections.retiring.insert(source_directory.clone());

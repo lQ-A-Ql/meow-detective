@@ -2,6 +2,8 @@ mod descriptor;
 mod discovery;
 mod filesystem;
 mod identity;
+pub(crate) mod mapping_cache;
+pub use mapping_cache::mapping_discovery_count;
 pub(crate) mod persisted_inputs;
 mod plan;
 mod reader;

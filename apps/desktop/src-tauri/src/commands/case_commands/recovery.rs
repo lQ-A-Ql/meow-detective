@@ -5,7 +5,7 @@ use app_services::{job_service, processing_phase_service};
 
 use crate::{
     commands::import::background_job::{
-        continue_ceph_rbd_processing, BackgroundDerivedSourceProcessingJob,
+        continue_derived_source_processing, BackgroundDerivedSourceProcessingJob,
     },
     state::{AppState, TaskScope},
 };
@@ -78,7 +78,8 @@ fn schedule_derived_source_recovery(
         TaskScope::data_source(case_id.0.clone(), data_source_id.0, "case-open-recovery"),
         cancel_token,
         move || {
-            continue_ceph_rbd_processing(&job, &worker_cancel_token).map_err(|error| error.message)
+            continue_derived_source_processing(&job, &worker_cancel_token)
+                .map_err(|error| error.message)
         },
     );
     match registration {

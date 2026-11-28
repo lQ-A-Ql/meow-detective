@@ -8,6 +8,7 @@
 mod mapping;
 mod observations;
 mod open;
+mod physical_content;
 mod read;
 mod write;
 
@@ -19,6 +20,9 @@ pub(crate) use open::require_owner;
 pub use open::{
     bind_generation, bind_generation_if_current, configure_source_fjall, configure_source_identity,
     generation_name, open_store, open_store_for_write, require_source_store, source_id,
+};
+pub use physical_content::{
+    read_physical_content, read_physical_content_binding, write_physical_content,
 };
 pub use read::partition_index;
 pub use write::{

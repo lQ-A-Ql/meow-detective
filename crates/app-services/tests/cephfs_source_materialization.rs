@@ -90,11 +90,24 @@ fn fixture() -> Fixture {
 
     for (index, source_id) in ["osd-0", "osd-1", "osd-2"].into_iter().enumerate() {
         let id = DataSourceId(source_id.to_string());
+        let image_path = root.path().join(format!("{source_id}.E01"));
+        std::fs::copy(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../testdata/fixtures/public-small/e01/tiny.E01"),
+            &image_path,
+        )
+        .unwrap();
+        let content = evidence_access::source_runtime::content::capture(
+            &image_path,
+            &DataSourceKind::E01,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap();
         let source = DataSource {
             id: id.clone(),
             name: source_id.to_string(),
             kind: DataSourceKind::E01,
-            source_path: PathBuf::from(format!("{source_id}.E01")),
+            source_path: image_path,
             imported_at: Utc::now(),
             provenance: DataSourceProvenance::unknown(),
         };
@@ -115,19 +128,52 @@ fn fixture() -> Fixture {
             })
             .expect("bind Ceph member");
         drop(app_services::source_db::open_source_db(root.path(), &id).expect("create source db"));
-        SourceRevisionRepo::new(&case_conn)
+        let reference = SourceRevisionRepo::new(&case_conn)
             .bind(
                 &case_id.0,
                 source_id,
                 &SourceRevisionContent::captured(
                     AcquisitionId(format!("fixture:{source_id}")),
-                    1,
+                    content.logical_size,
                     None,
-                    format!("{:x}", index + 1).repeat(64),
+                    content.logical_sha256.clone(),
                 ),
                 true,
             )
             .expect("bind Ceph member revision");
+        let control = app_services::source_db::open_source_db(root.path(), &id).unwrap();
+        evidence_access::source_runtime::content::persist_registered_content(
+            &control, &reference, &content,
+        )
+        .unwrap();
+        let store = persistence_source::detail::require_source_store(&control).unwrap();
+        persistence_source::fjall::replace_source_generation(
+            &store,
+            source_id,
+            "physical-parent",
+            &content.logical_sha256,
+        )
+        .unwrap();
+        let key = persistence_source::fjall::encode_key(
+            "projection",
+            &[persistence_source::fjall::KeyPart::Text(source_id.into())],
+        )
+        .unwrap();
+        store
+            .write_envelope(
+                persistence_source::fjall::KeyspaceName::Meta,
+                key,
+                &persistence_source::fjall::VersionedEnvelope::new(
+                    "source_projection_complete",
+                    1,
+                    format!("projection:{source_id}"),
+                    source_id,
+                    reference.revision,
+                    source_id.as_bytes().to_vec(),
+                ),
+                persistence_source::fjall::PersistMode::SyncAll,
+            )
+            .unwrap();
     }
 
     Fixture {

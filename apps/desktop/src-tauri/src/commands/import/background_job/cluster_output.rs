@@ -1,19 +1,16 @@
-use app_services::derived_source_service::MaterializedRbdSource;
-
 use super::types::{BackgroundDerivedSourceProcessingJob, BackgroundLinuxEvidenceSetImportJob};
 
 pub(super) fn build_derived_processing_job(
     job: &BackgroundLinuxEvidenceSetImportJob,
-    derived_sources: Vec<MaterializedRbdSource>,
+    mut source_ids: Vec<domain::DataSourceId>,
 ) -> BackgroundDerivedSourceProcessingJob {
+    source_ids.sort_by(|left, right| left.0.cmp(&right.0));
+    source_ids.dedup();
     BackgroundDerivedSourceProcessingJob {
         db_path: job.db_path.clone(),
         case_id: job.case_id.clone(),
         case_root: job.case_root.clone(),
         import_set_id: job.plan.import_set_id.clone(),
-        source_ids: derived_sources
-            .into_iter()
-            .map(|source| source.data_source.id)
-            .collect(),
+        source_ids,
     }
 }

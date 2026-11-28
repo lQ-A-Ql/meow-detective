@@ -25,6 +25,26 @@ fn content() -> SourceRevisionContent {
 }
 
 #[test]
+fn parent_acquisitions_use_registered_identity_deduplicate_and_reject_stale_revisions() {
+    let conn = setup();
+    let repo = SourceRevisionRepo::new(&conn);
+    let first = repo.bind("case-a", "source-a", &content(), true).unwrap();
+    let second = repo.bind("case-b", "source-b", &content(), true).unwrap();
+    assert_eq!(
+        repo.acquisition_ids(&[first.clone(), second]).unwrap(),
+        vec![AcquisitionId("acquisition-a".into())]
+    );
+    let mut replacement = content();
+    replacement.acquisition_id = AcquisitionId("acquisition-replacement".into());
+    let current = repo.bind("case-a", "source-a", &replacement, true).unwrap();
+    assert!(repo.acquisition_ids(&[first]).is_err());
+    assert_eq!(
+        repo.acquisition_ids(&[current]).unwrap(),
+        vec![AcquisitionId("acquisition-replacement".into())]
+    );
+}
+
+#[test]
 fn immutable_revision_reuses_identical_facts_and_rejects_stale_reference() {
     let conn = setup();
     let repo = SourceRevisionRepo::new(&conn);

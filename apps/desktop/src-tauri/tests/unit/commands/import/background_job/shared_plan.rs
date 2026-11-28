@@ -8,6 +8,61 @@ use crate::commands::import::background_job::{
 };
 
 #[test]
+fn native_lvm_collection_queues_and_finishes_its_independent_source() {
+    let root = tempfile::tempdir().unwrap();
+    let images = root.path().join("images");
+    std::fs::create_dir(&images).unwrap();
+    let fixture = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../testdata/fixtures/public-small/lvm-native/shared-ext4");
+    for index in 0..2 {
+        std::io::copy(
+            &mut flate2::read::GzDecoder::new(
+                std::fs::File::open(fixture.join(format!("pv-{index}.raw.gz"))).unwrap(),
+            ),
+            &mut std::fs::File::create(images.join(format!("pv-{index}.raw"))).unwrap(),
+        )
+        .unwrap();
+    }
+    let plan = cluster_service::plan_linux_evidence_set_import(&images, None).unwrap();
+    let case = case_service::create_case(root.path(), "Native LV collection", None).unwrap();
+    let connection = case.connection().unwrap();
+    let job_id = JobRepo::new(&connection)
+        .create(&case.meta.id.0, "Native LV collection")
+        .unwrap();
+    let cancel = Arc::new(AtomicBool::new(false));
+    let result = super::run_background_linux_evidence_set_import_until_browseable(
+        BackgroundLinuxEvidenceSetImportJob {
+            db_path: case.db_path(),
+            case_id: case.meta.id.clone(),
+            case_root: case.case_root.clone(),
+            plan,
+            job_id,
+            max_import_workers: Some(1),
+            max_analysis_workers: Some(1),
+            analysis_mode: ImportAnalysisMode::MetadataOnly,
+        },
+        None,
+        cancel.clone(),
+    )
+    .unwrap()
+    .unwrap();
+    assert_eq!(result.processing.source_ids.len(), 1);
+    let logical = &result.processing.source_ids[0];
+    assert_eq!(
+        persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&connection)
+            .source_kind(logical)
+            .unwrap(),
+        domain::DataSourceKind::LvmLogicalVolume
+    );
+    super::continue_derived_source_processing(&result.processing, &cancel).unwrap();
+    let phases = persistence_sqlite::repositories::processing_phase_repo::DataSourceProcessingPhaseRepo::new(&connection)
+        .list_for_data_source(logical).unwrap();
+    assert_eq!(phases.len(), 6);
+    assert!(phases.iter().all(|phase| phase.state
+        == persistence_sqlite::repositories::processing_phase_repo::ProcessingPhaseState::Ready));
+}
+
+#[test]
 fn shared_plan_failure_and_cancellation_close_collection_jobs() {
     for cancelled in [false, true] {
         let root = tempfile::tempdir().unwrap();

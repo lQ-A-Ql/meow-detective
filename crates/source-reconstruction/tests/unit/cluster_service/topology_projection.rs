@@ -163,9 +163,7 @@ fn projection_separates_pve_ceph_os_and_kubernetes_scopes() {
         .prepare(
             "SELECT object_kind, status
              FROM environment_objects
-             WHERE id IN ('env:host:evidence-set:pve-node',
-                          'env:os:evidence-set:pve-node',
-                          'env:pve:evidence-set')
+             WHERE json_extract(provenance_json, '$.projection') = 'source_revision_index'
              ORDER BY id",
         )
         .unwrap()
@@ -173,20 +171,20 @@ fn projection_separates_pve_ceph_os_and_kubernetes_scopes() {
         .unwrap()
         .collect::<Result<Vec<_>, _>>()
         .unwrap();
-    assert_eq!(environment_states.len(), 3);
+    assert_eq!(environment_states.len(), 2);
     assert!(environment_states
         .iter()
-        .all(|(_, status)| status == "partial"));
+        .all(|(kind, status)| kind == "os_instance" && status == "ready"));
     let managed: i64 = conn.query_row(
         "SELECT COUNT(*) FROM environment_relations WHERE source_object_id='env:pve:evidence-set'",
         [], |row| row.get(0),
     ).unwrap();
-    assert_eq!(managed, 1);
+    assert_eq!(managed, 0);
     let orchestration: i64 = conn.query_row(
         "SELECT COUNT(*) FROM environment_relations WHERE target_object_id='env:kubernetes:evidence-set'",
         [], |row| row.get(0),
     ).unwrap();
-    assert_eq!(orchestration, 1);
+    assert_eq!(orchestration, 0);
 
     let summary =
         get_linux_evidence_set_summary(&conn, root.path(), &case_id, import_set_id).unwrap();
@@ -457,6 +455,18 @@ fn register_source(
     storage.import_state = "ready".to_string();
     DataSourceRepo::new(conn)
         .insert_with_storage(case_id, &source, &storage)
+        .unwrap();
+    persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
+        .bind(
+            &case_id.0,
+            source_id,
+            &domain::structure::SourceRevisionContent::observed(
+                domain::structure::AcquisitionId(import_set_id.into()),
+                0,
+                None,
+            ),
+            true,
+        )
         .unwrap();
     LinuxImportSetRepo::new(conn)
         .insert_member(&LinuxImportSetMemberRecord {

@@ -122,6 +122,16 @@ impl Fixture {
                 true,
             )
             .unwrap();
+        let content = evidence_access::source_runtime::content::capture(
+            &source.source_path,
+            &source.kind,
+            &std::sync::atomic::AtomicBool::new(false),
+        )
+        .unwrap();
+        evidence_access::source_runtime::content::persist_registered_content(
+            &control, &reference, &content,
+        )
+        .unwrap();
         seal(&control, id, "initial", &hex::encode(Sha256::digest(bytes)));
         reference
     }

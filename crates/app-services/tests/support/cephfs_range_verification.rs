@@ -47,13 +47,15 @@ fn cephfs_structure_execution_verifies_actual_file_bytes_and_records_complete_co
     );
     let mut deep = request;
     deep.intent = ReadIntent::ContentRead;
-    assert!(run_structure_analysis(
+    let deep_run = run_structure_analysis(
         &fixture.case_conn,
         fixture.root.path(),
         &deep,
-        &std::sync::atomic::AtomicBool::new(false)
+        &std::sync::atomic::AtomicBool::new(false),
     )
-    .is_err());
+    .unwrap();
+    assert_eq!(deep_run.work_results.len(), 1);
+    assert!(deep_run.work_results[0].coverage.complete);
 }
 
 #[test]

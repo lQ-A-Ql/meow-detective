@@ -1,6 +1,5 @@
 use domain::structure::{
-    NativeObjectId, NativeVersion, SourceRevisionContent, SourceRevisionRef, StorageObjectVersion,
-    StorageObjectVersionKind,
+    NativeObjectId, NativeVersion, StorageObjectVersion, StorageObjectVersionKind,
 };
 use persistence_sqlite::{
     repositories::{
@@ -57,7 +56,7 @@ pub fn bind_ceph_object_version(
     let revisions = SourceRevisionRepo::new(conn);
     let (_, output) = revisions.current(case_id, source_id)?;
     let parents = revisions.inputs(case_id, source_id)?;
-    let acquisitions = parent_acquisitions(&revisions, &parents)?;
+    let acquisitions = revisions.acquisition_ids(&parents)?;
     let version = StorageObjectVersion::new(
         native_id,
         acquisitions,
@@ -91,22 +90,4 @@ pub fn bind_ceph_object_version(
         transaction.commit()?;
     }
     Ok(())
-}
-
-fn parent_acquisitions(
-    revisions: &SourceRevisionRepo<'_>,
-    parents: &[SourceRevisionRef],
-) -> DbResult<Vec<domain::structure::AcquisitionId>> {
-    let mut acquisitions = parents
-        .iter()
-        .map(|parent| {
-            revisions.require_current(parent)?;
-            let (_, content): (_, SourceRevisionContent) =
-                revisions.current(&parent.case_id, &parent.source_id)?;
-            Ok(content.acquisition_id)
-        })
-        .collect::<DbResult<Vec<_>>>()?;
-    acquisitions.sort_by(|left, right| left.0.cmp(&right.0));
-    acquisitions.dedup();
-    Ok(acquisitions)
 }

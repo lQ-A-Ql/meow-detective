@@ -9,6 +9,7 @@ pub mod cluster_service;
 pub mod deleted_recovery;
 pub mod derived_source_service;
 pub mod mount_service;
+pub mod source_processing;
 pub mod structure_analysis;
 pub mod structure_facts;
 

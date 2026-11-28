@@ -73,6 +73,7 @@ pub mod report;
 pub mod rule_pack;
 mod search_metadata_projection;
 pub mod search_service;
+pub mod source_processing;
 pub mod source_runtime;
 pub mod staging;
 pub mod step_recorder;

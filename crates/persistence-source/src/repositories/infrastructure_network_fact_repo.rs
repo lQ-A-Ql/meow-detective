@@ -58,8 +58,9 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
         for fact in facts {
             let host_in_case: bool = transaction.query_row(
                 "SELECT COUNT(*) = 1 FROM environment_objects
-                 WHERE id = ?1 AND case_id = ?2 AND object_kind = 'physical_host'",
-                params![fact.environment_object_id, case_id],
+                 WHERE id = ?1 AND case_id = ?2 AND object_kind = 'os_instance'
+                   AND json_extract(provenance_json, '$.dataSourceId') = ?3",
+                params![fact.environment_object_id, case_id, data_source_id],
                 |row| row.get(0),
             )?;
             if fact.case_id != case_id || fact.data_source_id != data_source_id || !host_in_case {
@@ -111,6 +112,13 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
                     source_path, line_number, fact_kind, subject, value, assertion_kind,
                     confidence, parser, source_artifact_id
              FROM infrastructure_network_facts WHERE case_id = ?1
+               AND environment_object_id IN (
+                   SELECT id FROM environment_objects
+                   WHERE case_id = ?1 AND object_kind = 'os_instance'
+                     AND json_extract(provenance_json, '$.sourceRevision.revision') =
+                       (SELECT MAX(revision) FROM source_revisions
+                        WHERE source_id = json_extract(provenance_json, '$.dataSourceId'))
+               )
              ORDER BY environment_object_id, source_path, line_number, fact_kind, id",
         )?;
         let rows = statement.query_map([case_id], |row| {
@@ -139,9 +147,12 @@ impl<'a> InfrastructureNetworkFactRepo<'a> {
         let mut statement = self.conn.prepare(
             "SELECT id, json_extract(provenance_json, '$.dataSourceId')
              FROM environment_objects
-             WHERE case_id = ?1 AND object_kind = 'physical_host'
+             WHERE case_id = ?1 AND object_kind = 'os_instance'
                AND json_valid(provenance_json)
                AND json_type(provenance_json, '$.dataSourceId') = 'text'
+               AND json_extract(provenance_json, '$.sourceRevision.revision') =
+                   (SELECT MAX(revision) FROM source_revisions
+                    WHERE source_id = json_extract(provenance_json, '$.dataSourceId'))
              ORDER BY id",
         )?;
         let rows = statement.query_map([case_id], |row| Ok((row.get(0)?, row.get(1)?)))?;

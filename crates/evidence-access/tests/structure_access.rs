@@ -13,8 +13,8 @@ use evidence_access::{
     datasource_service::{CollectionPlanError, ImageCollectionPlan, LvmDiscoverySource},
     mdraid::discover_mdraid_from_collection,
     structure_access::{
-        open_verified_view, plan_target_access, verify_derived_view, AccessTarget,
-        TargetAccessError, TargetAccessRequest,
+        open_verified_view, plan_target_access, AccessTarget, TargetAccessError,
+        TargetAccessRequest,
     },
 };
 use evidence_core::EvidenceReader;
@@ -144,24 +144,11 @@ fn native_md_ranges_match_oracle_have_independent_cursors_and_verify_digest() {
         &cancel,
     )
     .unwrap();
-    assert_eq!(
-        verify_derived_view(verification, &expected_digest, &cancel).unwrap(),
-        expected_digest
-    );
-    let mismatch = plan_target_access(
-        request(
-            AccessTarget::MdRaid(&native[0]),
-            "md-access",
-            Some(vec![range]),
-            ReadIntent::ContentRead,
-        ),
-        &cancel,
-    )
-    .unwrap();
-    assert!(matches!(
-        verify_derived_view(mismatch, &"0".repeat(64), &cancel),
-        Err(TargetAccessError::DigestMismatch { .. })
-    ));
+    let mut verified = open_verified_view(verification, &cancel).unwrap();
+    let mut actual = Vec::new();
+    verified.read_to_end(&mut actual).unwrap();
+    assert_eq!(hex::encode(Sha256::digest(&actual)), expected_digest);
+    drop(verified);
     drop(collection);
     workspace.close().unwrap();
 }

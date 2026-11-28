@@ -82,6 +82,15 @@ pub(super) fn bind(
     let revision = SourceRevisionRepo::new(ctx.conn)
         .bind(&ctx.case_id.0, &source.id.0, &content, initialize)
         .map_err(command_error_from_db)?;
+    if let Some(plan) = plan {
+        evidence_access::source_runtime::content::persist_registered_content(
+            ctx.source_connection()?,
+            &revision,
+            plan.source_content(&source.source_path, &source.kind)
+                .map_err(CommandError::from_typed_service_error)?,
+        )
+        .map_err(command_error_from_db)?;
+    }
     if plan.is_some() {
         verify_collection_access(ctx, factory, &revision)?;
     }

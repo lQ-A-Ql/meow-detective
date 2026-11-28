@@ -37,4 +37,13 @@ pub struct LvmPool {
     pub(crate) warnings: Vec<String>,
 }
 
+#[derive(Clone)]
+pub struct LvmPoolPlan {
+    volume_group: VolumeGroup,
+    pv_start_offsets: Vec<(String, u64)>,
+    pv_data_offsets: Vec<(String, u64)>,
+    logical_volumes: Vec<LvMeta>,
+    warnings: Vec<String>,
+}
+
 pub(crate) use info::lv_info_from_meta;

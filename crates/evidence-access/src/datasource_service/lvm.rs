@@ -10,6 +10,7 @@ mod discovery;
 mod expansion;
 mod mdraid;
 mod model;
+mod pool_access;
 pub(super) mod source_identity;
 mod unsupported;
 

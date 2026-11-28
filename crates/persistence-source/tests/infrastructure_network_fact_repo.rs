@@ -12,7 +12,7 @@ fn fact(id: &str, kind: &str) -> InfrastructureNetworkFactRecord {
         id: id.to_string(),
         case_id: "case-network".to_string(),
         data_source_id: "source-network".to_string(),
-        environment_object_id: "host-network".to_string(),
+        environment_object_id: "source:source-network@1".to_string(),
         file_id: "file-network".to_string(),
         source_path: "/etc/pve/.version".to_string(),
         line_number: 1,
@@ -42,14 +42,25 @@ fn replacement_deduplicates_exact_facts_and_accepts_platform_kinds() {
     .unwrap();
     EnvironmentObjectRepo::new(&conn)
         .insert_if_absent(&EnvironmentObjectRecord {
-            id: "host-network".to_string(),
+            id: "source:source-network@1".to_string(),
             case_id: "case-network".to_string(),
-            object_kind: "physical_host".to_string(),
+            object_kind: "os_instance".to_string(),
             name: "host".to_string(),
             identity_state: "candidate".to_string(),
             status: "ready".to_string(),
-            provenance_json: r#"{"dataSourceId":"source-network"}"#.to_string(),
+            provenance_json: r#"{"dataSourceId":"source-network","sourceRevision":{"revision":1}}"#
+                .to_string(),
         })
+        .unwrap();
+    let revisions =
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&conn);
+    let content = domain::structure::SourceRevisionContent::observed(
+        domain::structure::AcquisitionId("network-acquisition".into()),
+        0,
+        None,
+    );
+    revisions
+        .bind("case-network", "source-network", &content, true)
         .unwrap();
     let repo = InfrastructureNetworkFactRepo::new(&conn);
     let first = fact("fact-1", "platform_version");
@@ -59,4 +70,11 @@ fn replacement_deduplicates_exact_facts_and_accepts_platform_kinds() {
     let facts = repo.list_for_case("case-network").unwrap();
     assert_eq!(facts.len(), 1);
     assert_eq!(facts[0].id, "fact-1");
+    let mut changed = content;
+    changed.metadata_identity = Some("changed-network-source".into());
+    changed.metadata_identity_status = domain::structure::DigestVerification::Recorded;
+    revisions
+        .bind("case-network", "source-network", &changed, true)
+        .unwrap();
+    assert!(repo.list_for_case("case-network").unwrap().is_empty());
 }

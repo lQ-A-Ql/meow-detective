@@ -21,6 +21,67 @@ use source_kernel::source_runtime::{
 };
 use support::{attempt, bytes, demand, Fixture};
 
+fn replace_raw_bytes(path: &std::path::Path) {
+    use std::io::Write;
+    let modified = path.metadata().unwrap().modified().unwrap();
+    let mut file = std::fs::OpenOptions::new().write(true).open(path).unwrap();
+    file.write_all(&[0xff; 64]).unwrap();
+    file.sync_all().unwrap();
+    file.set_times(std::fs::FileTimes::new().set_modified(modified))
+        .unwrap();
+}
+
+#[test]
+fn registered_raw_view_rejects_content_changes_with_unchanged_length_and_mtime() {
+    let fixture = Fixture::new();
+    let original = bytes();
+    let source = fixture.source("view-integrity", &original, &[]);
+    let cancel = AtomicBool::new(false);
+    let plan = plan_registered_access(
+        &fixture.conn,
+        fixture.root.path(),
+        RegisteredAccessRequest {
+            demand: demand(&source, original.len() as u64, &[(0, 64)], "preview"),
+            file_id: None,
+        },
+        &cancel,
+    )
+    .unwrap();
+    let mut view = open_verified_view(plan, &cancel).unwrap();
+    replace_raw_bytes(&fixture.path("view-integrity"));
+    assert!(view.read_exact(&mut [0; 64]).is_err());
+}
+
+#[test]
+fn registered_raw_receipt_rejects_changed_physical_bytes_in_the_same_owner_window() {
+    let fixture = Fixture::new();
+    let original = bytes();
+    let source = fixture.source("receipt-integrity", &original, &[]);
+    let batch = VerificationBatch::new(Some(attempt())).unwrap();
+    let cancel = AtomicBool::new(false);
+    let requested = demand(&source, original.len() as u64, &[(0, 64)], "preview");
+    let expected = hex::encode(Sha256::digest(&original[..64]));
+    let verify = || {
+        verify_registered_access(
+            &fixture.conn,
+            fixture.root.path(),
+            RegisteredAccessRequest {
+                demand: requested.clone(),
+                file_id: None,
+            },
+            &batch,
+            "registered-source/1",
+            Some(&expected),
+            false,
+            &cancel,
+        )
+    };
+    let proof = verify().unwrap();
+    replace_raw_bytes(&fixture.path("receipt-integrity"));
+    assert!(verify().is_err());
+    assert!(proof.validate().is_err());
+}
+
 #[test]
 fn registered_ranges_match_source_bytes_and_receipt_covers_every_declared_byte() {
     let fixture = Fixture::new();

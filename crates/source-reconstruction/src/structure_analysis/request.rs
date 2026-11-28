@@ -35,6 +35,7 @@ pub struct StructureWorkResult {
     pub bytes_read: u64,
     pub status: StructureWorkStatus,
     pub receipt: domain::structure::VerificationReceipt,
+    pub coverage: domain::structure::CoverageReport,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

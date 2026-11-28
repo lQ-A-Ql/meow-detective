@@ -32,6 +32,15 @@ pub struct ValidatedReceipt {
     failed: Arc<AtomicBool>,
 }
 
+impl std::fmt::Debug for ValidatedReceipt {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ValidatedReceipt")
+            .field("receipt", &self.receipt)
+            .finish_non_exhaustive()
+    }
+}
+
 impl ValidatedReceipt {
     pub fn receipt(&self) -> &VerificationReceipt {
         &self.receipt

@@ -336,6 +336,12 @@ fn native_collection_publishes_independent_lvm_source_with_preview_and_lifecycle
         .version_for_source(&case.meta.id.0, &logical.id.0)
         .unwrap()
         .unwrap();
+    assert_eq!(
+        version.acquisition_ids,
+        SourceRevisionRepo::new(&connection)
+            .acquisition_ids(&version.parent_source_revisions)
+            .unwrap()
+    );
     let graph = app_services::structure_analysis::get_structure_graph(
         &connection,
         &case.case_root,
@@ -368,7 +374,15 @@ fn native_collection_publishes_independent_lvm_source_with_preview_and_lifecycle
         .any(|item| item.adapter_id == app_services::structure_analysis::LVM_ADAPTER_ID));
     assert!(run.work_results.iter().all(|result| result.bytes_read
         == result.receipt.ranges.covered_bytes()
-        && result.receipt.output_sha256.len() == 64));
+        && result.receipt.output_sha256.len() == 64
+        && result.coverage.covered.covered_bytes()
+            + result
+                .coverage
+                .missing
+                .iter()
+                .map(|range| range.length())
+                .sum::<u64>()
+            == result.receipt.ranges.target_size()));
     assert!(graph
         .mappings
         .iter()
@@ -381,6 +395,19 @@ fn native_collection_publishes_independent_lvm_source_with_preview_and_lifecycle
                 .any(|parent| edge.to.0.contains(&parent.source_id))
     }));
 
+    app_services::source_processing::finalize_source_processing_with_cancel(
+        &connection,
+        &case.case_root,
+        &case.meta.id,
+        &logical.id,
+        Arc::new(AtomicBool::new(false)),
+    )
+    .unwrap();
+    let processing = persistence_sqlite::repositories::processing_phase_repo::DataSourceProcessingPhaseRepo::new(&connection)
+        .list_for_data_source(&logical.id).unwrap();
+    assert_eq!(processing.len(), 6);
+    assert!(processing.iter().all(|phase| phase.state
+        == persistence_sqlite::repositories::processing_phase_repo::ProcessingPhaseState::Ready));
     let index_summary = content_index_service::build(
         &connection,
         &case.case_root,
@@ -477,11 +504,27 @@ fn native_collection_publishes_independent_lvm_source_with_preview_and_lifecycle
             .unwrap();
         revision_content.logical_size = content.logical_size;
         revision_content.logical_sha256 = Some(content.logical_sha256.clone());
-        replacement_inputs.push(
-            revisions
-                .bind(&case.meta.id.0, &input.source_id, &revision_content, true)
-                .unwrap(),
-        );
+        let replacement_reference = revisions
+            .bind(&case.meta.id.0, &input.source_id, &revision_content, true)
+            .unwrap();
+        let control = source_db::open_source_db(&case.case_root, &parent.id).unwrap();
+        let mut generation = analysis_core::analysis_service::stage_source_generation(
+            &control,
+            &parent.id.0,
+            &cancel,
+        )
+        .unwrap();
+        let transaction = control.unchecked_transaction().unwrap();
+        generation.bind(&transaction).unwrap();
+        evidence_access::source_runtime::content::persist_registered_content(
+            &transaction,
+            &replacement_reference,
+            content,
+        )
+        .unwrap();
+        transaction.commit().unwrap();
+        generation.commit();
+        replacement_inputs.push(replacement_reference);
     }
     assert!(revisions
         .require_current_inputs(&case.meta.id.0, &logical.id.0)
@@ -588,6 +631,10 @@ fn native_collection_publishes_independent_lvm_source_with_preview_and_lifecycle
     assert!(revisions.inputs(&case.meta.id.0, &logical.id.0).is_err());
     case_service::delete_data_source_in(&connection, &case.case_root, &replacement.id.0).unwrap();
     assert!(!source_db::source_dir(&case.case_root, &replacement.id).exists());
+    assert!(run
+        .work_results
+        .iter()
+        .all(|result| result.receipt.bytes_verified > 0));
     assert_eq!(
         DataSourceRepo::new(&connection)
             .find_by_case(&case.meta.id)

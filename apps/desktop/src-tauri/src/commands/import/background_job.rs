@@ -14,7 +14,7 @@ mod types;
 pub(crate) use cluster::run_background_linux_evidence_set_import_with_scheduler;
 pub(crate) use cluster_status::{
     cancel_browseable_evidence_set_job, complete_browseable_evidence_set_job,
-    continue_ceph_rbd_processing, fail_browseable_evidence_set_job,
+    continue_derived_source_processing, fail_browseable_evidence_set_job,
 };
 pub(crate) use linux_artifacts::schedule_linux_artifact_analysis;
 pub(crate) use single::run_background_import_job;

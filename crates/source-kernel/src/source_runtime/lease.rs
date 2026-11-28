@@ -54,7 +54,8 @@ pub struct SourcePublicationLease {
     scope: Arc<ScopeEpoch>,
     owner: u64,
     revocation: u64,
-    factory: SharedReaderFactory,
+    factory: Option<SharedReaderFactory>,
+    read_scope: Option<super::read_scope::SourceReadScope>,
     pool: Arc<Mutex<Option<crate::resource_budget::ResourcePool>>>,
     receipts: Vec<Arc<super::verification::ValidatedReceipt>>,
     revision: domain::structure::RevisionReadLease,
@@ -70,6 +71,26 @@ impl std::fmt::Debug for SourcePublicationLease {
 
 impl SourcePublicationLease {
     pub fn acquire(case_id: &str, source_id: &str, factory: SharedReaderFactory) -> Self {
+        Self::acquire_basis(case_id, source_id, Some(factory), None)
+    }
+
+    pub fn acquire_verified_scope(scope: super::read_scope::SourceReadScope) -> io::Result<Self> {
+        scope.validate()?;
+        let reference = scope.source().clone();
+        Ok(Self::acquire_basis(
+            &reference.case_id,
+            &reference.source_id,
+            None,
+            Some(scope),
+        ))
+    }
+
+    fn acquire_basis(
+        case_id: &str,
+        source_id: &str,
+        factory: Option<SharedReaderFactory>,
+        read_scope: Option<super::read_scope::SourceReadScope>,
+    ) -> Self {
         let mut epochs = EPOCHS.lock().unwrap_or_else(|p| p.into_inner());
         epochs.retain(|_, value| value.strong_count() > 0);
         let key = (case_id.into(), source_id.into());
@@ -84,6 +105,7 @@ impl SourcePublicationLease {
             owner,
             revocation,
             factory,
+            read_scope,
             pool: Arc::new(Mutex::new(None)),
             receipts: Vec::new(),
             revision: domain::structure::RevisionReadLease::acquire(case_id, source_id),
@@ -91,8 +113,9 @@ impl SourcePublicationLease {
     }
 
     pub fn bind_pool(&self, pool: crate::resource_budget::ResourcePool) {
-        self.factory
-            .bind_reader_scope(Arc::new(super::resources::WorkspaceAdmission(pool.clone())));
+        if let Some(factory) = &self.factory {
+            factory.bind_reader_scope(Arc::new(super::resources::WorkspaceAdmission(pool.clone())));
+        }
         *self.pool.lock().unwrap_or_else(|p| p.into_inner()) = Some(pool);
     }
     pub fn resource_pool(&self) -> crate::resource_budget::ResourcePool {
@@ -103,11 +126,21 @@ impl SourcePublicationLease {
             .unwrap_or_else(|| crate::resource_budget::global_pool().clone())
     }
     pub fn reader_memory_bound(&self) -> u64 {
-        self.factory.reader_memory_bound()
+        self.factory
+            .as_ref()
+            .map_or(0, |factory| factory.reader_memory_bound())
     }
     pub fn validate(&self) -> io::Result<()> {
         self.validate_epoch()?;
-        self.factory.validate_snapshot()?;
+        if let Some(factory) = &self.factory {
+            factory.validate_snapshot()?;
+        }
+        if let Some(scope) = &self.read_scope {
+            scope.validate()?;
+        }
+        for receipt in &self.receipts {
+            receipt.validate()?;
+        }
         self.validate_epoch()
     }
 
@@ -129,6 +162,9 @@ impl SourcePublicationLease {
     }
 
     pub fn validate_epoch(&self) -> io::Result<()> {
+        if let Some(scope) = &self.read_scope {
+            scope.validate_epoch()?;
+        }
         for receipt in &self.receipts {
             receipt.validate_epoch()?;
         }
@@ -164,7 +200,13 @@ impl SourcePublicationLease {
         &self,
         connection: &'a rusqlite::Connection,
     ) -> SourcePublicationFence<'a> {
-        SourcePublicationFence::install(connection, self.clone(), |lease| lease.validate().is_err())
+        SourcePublicationFence::install(connection, self.clone(), |lease| {
+            lease.validate_epoch().is_err()
+                || lease
+                    .factory
+                    .as_ref()
+                    .is_some_and(|factory| factory.validate_snapshot().is_err())
+        })
     }
 }
 

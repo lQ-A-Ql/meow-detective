@@ -6,6 +6,62 @@ use crate::{label, metadata, segment};
 use evidence_core::EvidenceReader;
 use std::sync::{Arc, Mutex, MutexGuard};
 
+impl super::LvmPoolPlan {
+    pub fn reopen(
+        &self,
+        readers: Vec<Box<dyn EvidenceReader>>,
+        pv_offsets: Vec<u64>,
+    ) -> Result<LvmPool> {
+        if readers.is_empty() || readers.len() != pv_offsets.len() {
+            return Err(LvmError::MetadataParseError {
+                line: 0,
+                message: "LVM reopen requires one reader per physical coordinate".into(),
+            });
+        }
+        let entries = discover_physical_volumes(readers, pv_offsets)?;
+        let mut device_readers = Vec::new();
+        for pv in &self.volume_group.physical_volumes {
+            let mut matching = entries
+                .iter()
+                .filter(|entry| lvm_uuid_matches(&entry.label.pv_uuid, &pv.uuid));
+            let entry = matching
+                .next()
+                .ok_or_else(|| LvmError::MissingPhysicalVolumeReader {
+                    pv_name: pv.name.clone(),
+                    pv_uuid: pv.uuid.clone(),
+                })?;
+            if matching.next().is_some() {
+                return Err(LvmError::MetadataParseError {
+                    line: 0,
+                    message: "LVM reopen found duplicate physical identities".into(),
+                });
+            }
+            let mapping = resolve_pv_mapping(pv, entry)?;
+            if !self
+                .pv_start_offsets
+                .contains(&(mapping.name.clone(), mapping.start_offset))
+                || !self
+                    .pv_data_offsets
+                    .contains(&(mapping.name.clone(), mapping.data_offset))
+            {
+                return Err(LvmError::MetadataParseError {
+                    line: 0,
+                    message: "LVM reopen physical mapping changed".into(),
+                });
+            }
+            device_readers.push(entry.reader.clone());
+        }
+        Ok(LvmPool {
+            volume_group: self.volume_group.clone(),
+            device_readers,
+            pv_start_offsets: self.pv_start_offsets.clone(),
+            pv_data_offsets: self.pv_data_offsets.clone(),
+            logical_volumes: self.logical_volumes.clone(),
+            warnings: self.warnings.clone(),
+        })
+    }
+}
+
 impl LvmPool {
     pub fn discover(readers: Vec<Box<dyn EvidenceReader>>, pv_offsets: Vec<u64>) -> Result<Self> {
         if readers.is_empty() || readers.len() != pv_offsets.len() {

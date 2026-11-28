@@ -43,7 +43,12 @@ pub fn delete_data_source_in(
     crate::search_service::clear_source_file_search_cache(case_root, data_source_id)
         .map_err(|error| CaseServiceError::Io(std::io::Error::other(error)))?;
     let _source_store_guard = crate::storage_runtime::close_source_store(case_root, data_source_id)
-        .map_err(|error| CaseServiceError::InvalidCaseDir(error.to_string()))?
+        .map_err(|error| match error {
+            crate::storage_runtime::StorageRuntimeError::Control(error) => {
+                CaseServiceError::Db(error)
+            }
+            error => CaseServiceError::InvalidCaseDir(error.to_string()),
+        })?
         .ok_or_else(|| CaseServiceError::StorageHandlesInUse(data_source_id.to_owned()))?;
     let existing =
         collect_existing_managed_paths(&ds_repo, case_root, &canonical_root, &storage, &ds_id)?;

@@ -75,21 +75,25 @@ fn exercise(name: &str, filesystem: &str) {
                 },
             )
             .unwrap();
-        inputs.push(
-            SourceRevisionRepo::new(&connection)
-                .bind(
-                    &case.meta.id.0,
-                    &id.0,
-                    &SourceRevisionContent::captured(
-                        AcquisitionId(format!("capture-{index}")),
-                        content.logical_size,
-                        None,
-                        content.logical_sha256.clone(),
-                    ),
-                    true,
-                )
-                .unwrap(),
-        );
+        let reference = SourceRevisionRepo::new(&connection)
+            .bind(
+                &case.meta.id.0,
+                &id.0,
+                &SourceRevisionContent::captured(
+                    AcquisitionId(format!("capture-{index}")),
+                    content.logical_size,
+                    None,
+                    content.logical_sha256.clone(),
+                ),
+                true,
+            )
+            .unwrap();
+        let control = source_db::open_source_db(&case.case_root, &id).unwrap();
+        evidence_access::source_runtime::content::persist_registered_content(
+            &control, &reference, content,
+        )
+        .unwrap();
+        inputs.push(reference);
     }
     let mut foreign = inputs.clone();
     foreign[0].case_id = uuid::Uuid::new_v4().to_string();

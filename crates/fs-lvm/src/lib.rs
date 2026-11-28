@@ -16,7 +16,7 @@ pub use error::LvmError;
 pub use label::LvmLabel;
 pub use lv_reader::LvReader;
 pub use metadata::{LvMeta, PvMeta, SegmentArea, SegmentMeta, SegmentType, VolumeGroup};
-pub use pool::{LvInfo, LvmPool};
+pub use pool::{LvInfo, LvmPool, LvmPoolPlan};
 pub use segment::LvExtent;
 pub use thin_reader::ThinLvReader;
 

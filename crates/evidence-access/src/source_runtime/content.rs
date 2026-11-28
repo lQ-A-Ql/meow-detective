@@ -7,10 +7,13 @@ use domain::DataSourceKind;
 
 mod factory;
 mod reader;
+mod registered;
 mod scan;
 mod telemetry;
 pub use factory::VerifiedFactory;
 pub(crate) use reader::ContentVerifiedReader;
+pub use registered::persist_registered_content;
+pub(crate) use registered::{load_registered_content, physical_backing_paths};
 
 pub const CONTENT_CHUNK_BYTES: usize = 1024 * 1024;
 

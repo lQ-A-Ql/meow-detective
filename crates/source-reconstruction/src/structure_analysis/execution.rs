@@ -23,7 +23,16 @@ pub fn run_structure_analysis(
     request: &StructureAnalysisRequest,
     cancel: &AtomicBool,
 ) -> Result<StructureAnalysisRun, StructureAnalysisError> {
-    let plan = plan_structure_analysis(conn, case_root, request)?;
+    Ok(execute_structure_analysis(conn, case_root, request, cancel)?.report)
+}
+
+pub(crate) fn execute_structure_analysis(
+    conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    request: &StructureAnalysisRequest,
+    cancel: &AtomicBool,
+) -> Result<super::execution_permit::VerifiedStructureAnalysis, StructureAnalysisError> {
+    let mut plan = plan_structure_analysis(conn, case_root, request)?;
     let batch = if request.intent == domain::structure::ReadIntent::ContentRead {
         VerificationBatch::new_deep(request.attempt.clone())?
     } else {
@@ -40,17 +49,58 @@ pub fn run_structure_analysis(
             bytes_read: proof.receipt().bytes_verified,
             status: StructureWorkStatus::Verified,
             receipt: proof.receipt().clone(),
+            coverage: domain::structure::CoverageReport {
+                target_node: domain::structure::StructureNodeId(item.target_fingerprint.clone()),
+                covered: proof.receipt().ranges.clone(),
+                complete: proof.receipt().ranges.is_full(),
+                missing: uncovered(&proof.receipt().ranges)?,
+                notes: Vec::new(),
+            },
         });
         proofs.push(proof);
     }
-    for proof in proofs {
+    plan.graph = super::query::get_structure_graph(
+        conn,
+        case_root,
+        &super::request::StructureGraphRequest {
+            case_id: request.case_id.clone(),
+            source_ids: request.source_ids.clone(),
+        },
+    )?;
+    for proof in &proofs {
         proof.validate()?;
     }
-    Ok(StructureAnalysisRun {
-        plan,
-        work_results,
-        verification_stats: batch.stats()?,
+    Ok(super::execution_permit::VerifiedStructureAnalysis {
+        report: StructureAnalysisRun {
+            plan,
+            work_results,
+            verification_stats: batch.stats()?,
+        },
+        permit: super::execution_permit::StructureVerificationPermit { proofs },
     })
+}
+
+fn uncovered(
+    ranges: &domain::structure::ByteRangeSet,
+) -> Result<Vec<domain::structure::ByteRange>, StructureAnalysisError> {
+    let mut cursor = 0;
+    let mut missing = Vec::new();
+    for range in ranges.ranges() {
+        if range.start() > cursor {
+            missing.push(
+                domain::structure::ByteRange::new(cursor, range.start() - cursor)
+                    .map_err(|error| StructureAnalysisError::Plan(error.to_string()))?,
+            );
+        }
+        cursor = range.end();
+    }
+    if cursor < ranges.target_size() {
+        missing.push(
+            domain::structure::ByteRange::new(cursor, ranges.target_size() - cursor)
+                .map_err(|error| StructureAnalysisError::Plan(error.to_string()))?,
+        );
+    }
+    Ok(missing)
 }
 
 fn execute_work_item(

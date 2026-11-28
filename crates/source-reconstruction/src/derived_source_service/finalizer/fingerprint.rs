@@ -85,6 +85,22 @@ pub(super) fn load_catalog_identity(
             record.state
         )));
     }
+    let kind = persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(case_conn)
+        .source_kind(data_source_id)?;
+    if kind != domain::DataSourceKind::CephRbd {
+        if record.input_fingerprint != lineage_fingerprint {
+            return Err(DbError::System(
+                "derived-source catalog identity is stale".into(),
+            ));
+        }
+        let publication = persistence_sqlite::repositories::catalog_publication_repo::CatalogPublicationRepo::new(case_conn)
+            .find(data_source_id)?
+            .ok_or_else(|| DbError::System("derived-source publication is missing".into()))?;
+        let mut hasher = Sha256::new();
+        update_field(&mut hasher, publication.seal.as_bytes());
+        update_field(&mut hasher, record.input_fingerprint.as_bytes());
+        return Ok(hex::encode(hasher.finalize()));
+    }
     if record.version != PROCESSING_PHASE_VERSION
         || record.input_fingerprint != expected_fingerprint
     {
