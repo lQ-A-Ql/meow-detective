@@ -96,6 +96,7 @@ hmac = "~0.12"
 sha1 = "~0.10"
 uuid = { version = "~1", features = ["v4"] }
 rayon = "~1.12"
+petgraph = { version = "=0.8.3", default-features = false, features = ["std", "stable_graph"] }
 tracing = "~0.1"
 tracing-subscriber = { version = "~0.3", features = ["env-filter", "fmt", "json"] }
 flexi_logger = { version = "=0.31.10", default-features = false }

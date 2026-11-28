@@ -76,7 +76,7 @@ fn read_demand_binds_revision_priority_consumers_and_attempt() {
         owner: "worker".into(),
     })
     .unwrap();
-    assert!(demand.id.starts_with("read-demand-v2-"));
+    assert!(demand.id.starts_with("read-demand-v3-"));
     assert_eq!(demand.source_revision.revision, 3);
     assert_eq!(demand.priority, ReadPriority::Interactive);
     assert_eq!(demand.consumers.len(), 2);

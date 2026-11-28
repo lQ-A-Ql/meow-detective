@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::{
-    identity::identity_digest, AcquisitionId, NativeObjectId, NativeVersion, RevisionConsistency,
+    canonical_identity, AcquisitionId, NativeObjectId, NativeVersion, RevisionConsistency,
     SourceRevisionRef, StructureIdentityError,
 };
 
@@ -157,7 +157,7 @@ fn object_version_id(
         .map(AcquisitionId::as_str)
         .collect::<Vec<_>>();
     acquisitions.sort_unstable();
-    let acquisitions = acquisitions.join("\n");
+    acquisitions.dedup();
     let mut parent_source_revisions = parent_source_revisions.iter().collect::<Vec<_>>();
     parent_source_revisions.sort_by(|left, right| {
         (&left.case_id, &left.source_id, left.revision).cmp(&(
@@ -166,33 +166,36 @@ fn object_version_id(
             right.revision,
         ))
     });
-    let parents = parent_source_revisions
-        .iter()
-        .map(|parent| {
-            format!(
-                "{}\n{}\n{}",
-                parent.case_id, parent.source_id, parent.revision
-            )
-        })
-        .collect::<Vec<_>>()
-        .join("\n");
-    let versions = serde_json::to_string(native_versions)
-        .map_err(|_| StructureIdentityError::InvalidDigest)?;
-    Ok(identity_digest(
-        b"object-version-v1",
-        [
-            object_id.as_str(),
-            acquisitions.as_str(),
+    parent_source_revisions.dedup();
+    #[derive(Serialize)]
+    struct Identity<'a> {
+        object_id: String,
+        acquisitions: Vec<&'a str>,
+        owner_source_id: &'a str,
+        derived_source_id: &'a str,
+        adapter_version: &'a str,
+        policy_version: &'a str,
+        mapping_sha256: &'a str,
+        parents: Vec<&'a SourceRevisionRef>,
+        native_versions: &'a [NativeVersion],
+        version_kind: StorageObjectVersionKind,
+    }
+    canonical_identity(
+        "object-version-v2",
+        &Identity {
+            object_id,
+            acquisitions,
             owner_source_id,
             derived_source_id,
             adapter_version,
             policy_version,
             mapping_sha256,
-            parents.as_str(),
-            versions.as_str(),
-            version_kind.as_str(),
-        ],
-    ))
+            parents: parent_source_revisions,
+            native_versions,
+            version_kind,
+        },
+    )
+    .map_err(|_| StructureIdentityError::InvalidDigest)
 }
 
 fn valid_sha256(value: &str) -> bool {

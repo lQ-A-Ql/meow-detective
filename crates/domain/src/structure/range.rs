@@ -1,9 +1,22 @@
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize)]
 pub struct ByteRange {
     start: u64,
     length: u64,
+}
+
+impl<'de> Deserialize<'de> for ByteRange {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Record {
+            start: u64,
+            length: u64,
+        }
+        let record = Record::deserialize(deserializer)?;
+        Self::new(record.start, record.length).map_err(serde::de::Error::custom)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
@@ -44,7 +57,7 @@ impl ByteRange {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ByteRangeSet {
     target_size: u64,
@@ -121,5 +134,18 @@ impl ByteRangeSet {
 
     pub fn validate(&self) -> Result<(), ByteRangeSetError> {
         Self::new(self.target_size, self.ranges.clone()).map(|_| ())
+    }
+}
+
+impl<'de> Deserialize<'de> for ByteRangeSet {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase", deny_unknown_fields)]
+        struct Record {
+            target_size: u64,
+            ranges: Vec<ByteRange>,
+        }
+        let record = Record::deserialize(deserializer)?;
+        Self::new(record.target_size, record.ranges).map_err(serde::de::Error::custom)
     }
 }

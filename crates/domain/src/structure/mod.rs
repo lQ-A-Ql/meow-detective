@@ -1,19 +1,59 @@
+mod canonical_identity;
+mod capability;
+mod coverage;
 mod identity;
+mod identity_validation;
 mod native_version;
 mod object_version;
 mod observation;
+mod operation;
+mod operation_validation;
+mod outcome;
 mod physical_content;
 mod plan;
 mod range;
 mod read_demand;
 mod relation;
+mod request;
 mod revocation;
+mod target;
+mod target_query;
 mod verification;
+mod version_selection;
+mod view;
+pub use canonical_identity::{canonical_identity, CanonicalIdentityError};
+pub use capability::{CapabilityError, CapabilityIntegrity, CapabilityKind, CapabilityRef};
+pub use coverage::{
+    ByteCoverage, CoverageContext, CoverageError, EventClock, EventClockBasis, EventCoverage,
+    EventOrdering, KeyBoundary, KeyCoverage, KeyOrdering, NamespaceCoverage, NamespacePage,
+    NamespacePageEnd, NativeKeyRange, NativeSequenceRange, RuntimeComponent, RuntimeCoverage,
+    TargetCoverage,
+};
+pub use operation::{
+    NativeAlgorithmRef, NativeMappingRef, OperationInput, OperationModelError, OrderingRequirement,
+    ReadOperation, ReadOperationNode, ReadOperationPlan, WorkIdentity,
+};
+pub use outcome::{
+    ActivityState, CancellationScope, ConflictReason, EvidenceRequirement, MetadataFailure,
+    OutcomeError, ResourceKind, TargetFailure, TargetResult, TargetStatus,
+};
 pub use physical_content::PhysicalContentBinding;
+pub use request::{
+    StructureGoal, StructureRequest, StructureRequestError, StructureResourcePolicy,
+};
 pub use revocation::{
     revoke_case_revisions, revoke_source_generation, revoke_source_revision, RevisionReadLease,
 };
+pub use target::{
+    NamespaceFilter, NamespaceOrdering, NamespaceQuery, RuntimeScope, TargetEventClock,
+    TargetEventOrdering, TargetEventTimeRange, TargetKeyBound, TargetKeyOrdering, TargetKeyRange,
+    TargetSelector, TargetSelectorError, TargetSequenceRange,
+};
 pub use verification::VerificationReceipt;
+pub use version_selection::{VersionBoundary, VersionSelection, VersionSelectionError};
+pub use view::{
+    BackingVersionRef, LayerLocator, NativeViewVersionRef, SourceCaptureRef, ViewModelError,
+};
 
 pub use identity::{
     AcquisitionId, CollectionMemberVerification, DigestVerification, NativeObjectId,

@@ -1,7 +1,5 @@
+use super::{canonical_identity, ByteRangeSet, ByteRangeSetError, SourceRevisionRef};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
-use super::{ByteRangeSet, ByteRangeSetError, SourceRevisionRef};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -84,7 +82,7 @@ impl ReadDemand {
             verification,
             attempt: None,
         };
-        demand.id = demand_id(&demand);
+        demand.id = demand_id(&demand)?;
         Ok(demand)
     }
 
@@ -93,7 +91,7 @@ impl ReadDemand {
             return Err(ReadDemandError::InvalidIdentity);
         }
         self.attempt = Some(attempt);
-        self.id = demand_id(&self);
+        self.id = demand_id(&self)?;
         Ok(self)
     }
 }
@@ -106,7 +104,7 @@ pub enum ReadDemandError {
     InvalidIdentity,
 }
 
-fn demand_id(demand: &ReadDemand) -> String {
+fn demand_id(demand: &ReadDemand) -> Result<String, ReadDemandError> {
     let mut consumers = demand.consumers.clone();
     consumers.sort();
     consumers.dedup();
@@ -116,8 +114,5 @@ fn demand_id(demand: &ReadDemand) -> String {
         "deadline": demand.deadline_unix_ms, "reorderable": demand.reorderable,
         "consumers": consumers, "verification": demand.verification, "attempt": demand.attempt,
     });
-    format!(
-        "read-demand-v2-{}",
-        hex::encode(Sha256::digest(identity.to_string().as_bytes()))
-    )
+    canonical_identity("read-demand-v3", &identity).map_err(|_| ReadDemandError::InvalidIdentity)
 }

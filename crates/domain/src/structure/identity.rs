@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StructureIdentityError {
@@ -248,15 +247,8 @@ impl NativeObjectId {
     }
 
     pub fn storage_object_id(&self) -> String {
-        identity_digest(
-            b"native-object-v1",
-            [
-                self.adapter.as_str(),
-                self.identity_space.as_str(),
-                self.native_id.as_str(),
-                self.scope.as_str(),
-            ],
-        )
+        super::canonical_identity("native-object-v2", self)
+            .expect("native object identity contains only four string values")
     }
 }
 
@@ -291,21 +283,4 @@ fn valid_sha256(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-}
-
-pub(crate) fn identity_digest<'a>(
-    domain: &[u8],
-    values: impl IntoIterator<Item = &'a str>,
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(domain);
-    for value in values {
-        digest.update((value.len() as u64).to_le_bytes());
-        digest.update(value.as_bytes());
-    }
-    format!(
-        "{}-{}",
-        String::from_utf8_lossy(domain),
-        hex::encode(digest.finalize())
-    )
 }

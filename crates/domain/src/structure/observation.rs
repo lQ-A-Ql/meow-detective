@@ -1,7 +1,5 @@
+use super::{canonical_identity, NativeVersion, SourceRevisionRef};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-
-use super::{NativeVersion, SourceRevisionRef};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -103,28 +101,26 @@ fn observation_id(
     source: &SourceRevisionRef,
     observation: &NativeObservation,
 ) -> Result<ObservationId, ObservationIndexError> {
-    let version = serde_json::to_vec(&observation.version)
-        .map_err(|error| ObservationIndexError::Serialization(error.to_string()))?;
-    let location = serde_json::to_vec(&observation.location)
-        .map_err(|error| ObservationIndexError::Serialization(error.to_string()))?;
-    let mut digest = Sha256::new();
-    digest.update(b"observation-v1");
-    for value in [
-        source.case_id.as_bytes(),
-        source.source_id.as_bytes(),
-        observation.native_identity.as_bytes(),
-        observation.parser_version.as_bytes(),
-        version.as_slice(),
-        location.as_slice(),
-    ] {
-        digest.update((value.len() as u64).to_le_bytes());
-        digest.update(value);
+    #[derive(Serialize)]
+    struct Identity<'a> {
+        source: &'a SourceRevisionRef,
+        native_identity: &'a str,
+        parser_version: &'a str,
+        version: &'a NativeVersion,
+        location: &'a ObservationLocation,
     }
-    digest.update(source.revision.to_le_bytes());
-    Ok(ObservationId(format!(
-        "observation-v1-{}",
-        hex::encode(digest.finalize())
-    )))
+    canonical_identity(
+        "observation-v2",
+        &Identity {
+            source,
+            native_identity: &observation.native_identity,
+            parser_version: &observation.parser_version,
+            version: &observation.version,
+            location: &observation.location,
+        },
+    )
+    .map(ObservationId)
+    .map_err(|error| ObservationIndexError::Serialization(error.to_string()))
 }
 
 fn valid_digest(value: &str) -> bool {
