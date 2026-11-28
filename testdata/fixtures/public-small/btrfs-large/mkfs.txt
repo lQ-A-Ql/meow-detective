@@ -1,0 +1,27 @@
+btrfs-progs v7.1
+See https://btrfs.readthedocs.io for more information.
+
+NOTE: default settings have changed in version 6.19 (supported since linux 6.1):
+      - enable block-group-tree (-O bgt)
+
+Rootdir from:       /mnt/d/process/forensic/.codex-tmp/g04-btrfs-large/tree
+  Compress:         no
+  Shrink:           no
+Label:              (null)
+UUID:               c6165b45-e6b6-418c-bf94-67f5c75fbc57
+Node size:          16384
+Sector size:        4096	(CPU page size: 4096)
+Filesystem size:    256.00MiB
+Block group profiles:
+  Data:             single            8.00MiB
+  Metadata:         single            8.00MiB
+  System:           single            4.00MiB
+SSD detected:       no
+Zoned device:       no
+Features:           extref, skinny-metadata, no-holes, free-space-tree, block-group-tree
+Checksum:           crc32c
+Number of devices:  1
+Devices:
+   ID        SIZE  PATH                                                         
+    1   256.00MiB  /mnt/d/process/forensic/.codex-tmp/g04-btrfs-large/single.raw
+

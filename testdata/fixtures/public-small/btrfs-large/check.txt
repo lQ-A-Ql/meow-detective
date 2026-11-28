@@ -1,0 +1,19 @@
+[1/8] checking log skipped (none written)
+[2/8] checking root items
+[3/8] checking extents
+[4/8] checking free space tree
+[5/8] checking fs roots
+[6/8] checking only csums items (without verifying data)
+[7/8] checking root refs
+[8/8] checking quota groups skipped (not enabled on this FS)
+Opening filesystem to check...
+Checking filesystem on /mnt/d/process/forensic/.codex-tmp/g04-btrfs-large/single.raw
+UUID: c6165b45-e6b6-418c-bf94-67f5c75fbc57
+found 2211840 bytes used, no error found
+total csum bytes: 0
+total tree bytes: 2211840
+total fs tree bytes: 2080768
+total extent tree bytes: 16384
+btree space waste bytes: 328430
+file data blocks allocated: 0
+ referenced 0
