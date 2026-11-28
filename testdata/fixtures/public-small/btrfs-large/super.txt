@@ -9,7 +9,7 @@ flags			0x1
 magic			_BHRfS_M [match]
 fsid			c6165b45-e6b6-418c-bf94-67f5c75fbc57
 metadata_uuid		00000000-0000-0000-0000-000000000000
-label			
+label
 generation		9
 root			5292032
 sys_array_size		97
@@ -105,5 +105,3 @@ backup_roots[4]:
 		backup_total_bytes:	268435456
 		backup_bytes_used:	2211840
 		backup_num_devices:	1
-
-

@@ -23,14 +23,16 @@ done
 truncate -s 256M "$image"
 mkfs.btrfs --version > "$fixture/tool-versions.txt"
 uname -r >> "$fixture/tool-versions.txt"
-mkfs.btrfs -f -d single -m single --rootdir "$tree" "$image" > "$fixture/mkfs.txt"
+mkfs.btrfs -f -d single -m single --rootdir "$tree" "$image" |
+    awk 'NF {sub(/[[:blank:]]+$/, ""); print}' > "$fixture/mkfs.txt"
 btrfs check --readonly "$image" > "$fixture/check.txt" 2>&1
 btrfs restore "$image" "$restored"
 (
     cd "$restored"
     sha256sum --check "$fixture/files.sha256"
 ) > "$fixture/restored-oracle.txt"
-btrfs inspect-internal dump-super -f "$image" > "$fixture/super.txt"
+btrfs inspect-internal dump-super -f "$image" |
+    awk 'NF {sub(/[[:blank:]]+$/, ""); print}' > "$fixture/super.txt"
 (
     cd "$workspace"
     sha256sum single.raw

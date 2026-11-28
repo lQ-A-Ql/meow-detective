@@ -1,0 +1,3 @@
+mkfs.btrfs, part of btrfs-progs v7.1
+-EXPERIMENTAL -INJECT -STATIC +LZO +ZSTD +UDEV +FSVERITY +ZONED CRYPTO=builtin
+6.6.114.1-microsoft-standard-WSL2
