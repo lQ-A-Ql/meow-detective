@@ -12,6 +12,7 @@ use domain::structure::{
 };
 use serde::{de::DeserializeOwned, Serialize};
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 fn roundtrip<T: Debug + PartialEq + Serialize + DeserializeOwned>(value: &T) {
     let encoded = serde_json::to_string(value).unwrap();
@@ -24,8 +25,8 @@ fn range(start: u64, length: u64) -> ByteRange {
 
 fn content_verified() -> CapabilityIntegrity {
     CapabilityIntegrity::ContentVerified {
-        manifest_sha256: "a".repeat(64),
-        receipt_id: "receipt-content-7".into(),
+        manifest_sha256: hex::encode(Sha256::digest(b"target-content-manifest-v1")),
+        content_sha256: hex::encode(Sha256::digest([0x5a; 16])),
     }
 }
 

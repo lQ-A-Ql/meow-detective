@@ -12,6 +12,7 @@ pub mod mount_service;
 pub mod source_processing;
 pub mod structure_analysis;
 pub mod structure_facts;
+pub mod structure_runtime;
 
 #[cfg(test)]
 #[path = "../tests/unit/mod.rs"]

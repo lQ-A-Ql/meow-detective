@@ -128,7 +128,7 @@ impl SourceReadScope {
                 .map_err(io::Error::other)?;
             let current = snapshot::capture(&transaction, &self.0.source, &self.0.dependencies)?;
             if current != database.snapshot {
-                return Err(io::Error::other("source dependency or publication changed"));
+                return Err(io::Error::other(super::lease::SourceInvalidated));
             }
             transaction.commit().map_err(io::Error::other)?;
             database.data_version = Some(data_version);
@@ -144,7 +144,7 @@ impl SourceReadScope {
                 || snapshot::manifest_identity(&generation.native, &self.0.source.source_id)?
                     != self.0.manifest_identity
             {
-                return Err(io::Error::other("source generation changed"));
+                return Err(io::Error::other(super::lease::SourceInvalidated));
             }
         }
         self.validate_epoch()

@@ -6844,6 +6844,7 @@ dependencies = [
  "moka",
  "persistence-source",
  "persistence-sqlite",
+ "petgraph",
  "rusqlite",
  "serde",
  "serde_json",

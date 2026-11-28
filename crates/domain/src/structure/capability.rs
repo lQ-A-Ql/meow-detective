@@ -17,7 +17,7 @@ pub enum CapabilityIntegrity {
     },
     ContentVerified {
         manifest_sha256: String,
-        receipt_id: String,
+        content_sha256: String,
     },
 }
 
@@ -35,10 +35,10 @@ impl CapabilityIntegrity {
             }
             Self::ContentVerified {
                 manifest_sha256,
-                receipt_id,
+                content_sha256,
             } => {
                 require_digest(manifest_sha256, "content_manifest_sha256")?;
-                require_text(receipt_id, "receipt_id")?;
+                require_digest(content_sha256, "content_sha256")?;
                 Ok(())
             }
         }
@@ -62,7 +62,7 @@ impl<'de> Deserialize<'de> for CapabilityIntegrity {
             },
             ContentVerified {
                 manifest_sha256: String,
-                receipt_id: String,
+                content_sha256: String,
             },
         }
         let value = match Record::deserialize(deserializer)? {
@@ -76,10 +76,10 @@ impl<'de> Deserialize<'de> for CapabilityIntegrity {
             },
             Record::ContentVerified {
                 manifest_sha256,
-                receipt_id,
+                content_sha256,
             } => Self::ContentVerified {
                 manifest_sha256,
-                receipt_id,
+                content_sha256,
             },
         };
         value.validate().map_err(serde::de::Error::custom)?;

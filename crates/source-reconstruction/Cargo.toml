@@ -12,6 +12,7 @@ flate2.workspace = true
 hex.workspace = true
 lz4_flex.workspace = true
 moka.workspace = true
+petgraph.workspace = true
 lru.workspace = true
 md-5.workspace = true
 serde.workspace = true

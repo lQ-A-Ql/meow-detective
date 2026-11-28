@@ -4,6 +4,11 @@ use domain::structure::{
     TargetCoverage, VersionBoundary,
 };
 use serde_json::json;
+use sha2::{Digest, Sha256};
+
+fn digest(bytes: &[u8]) -> String {
+    hex::encode(Sha256::digest(bytes))
+}
 
 fn metadata_coverage() -> TargetCoverage {
     let header = ByteRange::new(4096, 512).unwrap();
@@ -26,8 +31,8 @@ fn native_integrity() -> CapabilityIntegrity {
 
 fn content_integrity() -> CapabilityIntegrity {
     CapabilityIntegrity::ContentVerified {
-        manifest_sha256: "c".repeat(64),
-        receipt_id: "content-receipt-7".into(),
+        manifest_sha256: digest(b"metadata-range-manifest-v1"),
+        content_sha256: digest(&[0x5a; 512]),
     }
 }
 
@@ -76,8 +81,8 @@ fn integrity_levels_roundtrip_with_explicit_and_distinct_proof_fields() {
         serde_json::to_value(content_integrity()).unwrap(),
         json!({
             "kind": "content_verified",
-            "manifestSha256": "c".repeat(64),
-            "receiptId": "content-receipt-7"
+            "manifestSha256": digest(b"metadata-range-manifest-v1"),
+            "contentSha256": digest(&[0x5a; 512])
         })
     );
 }
@@ -95,7 +100,7 @@ fn metadata_native_verification_requires_no_whole_image_content_manifest() {
     let encoded = serde_json::to_value(&value).unwrap();
     assert_eq!(encoded["integrity"]["kind"], "native_verified");
     assert!(encoded["integrity"].get("manifestSha256").is_none());
-    assert!(encoded["integrity"].get("receiptId").is_none());
+    assert!(encoded["integrity"].get("contentSha256").is_none());
     assert_eq!(
         serde_json::from_value::<CapabilityRef>(encoded).unwrap(),
         value
@@ -236,11 +241,11 @@ fn native_proofs_require_a_named_verifier_and_a_lowercase_sha256_witness() {
 }
 
 #[test]
-fn content_proofs_require_a_manifest_digest_and_a_receipt_reference() {
+fn content_proofs_require_lowercase_sha256_manifest_and_content_digests() {
     for manifest_sha256 in ["".into(), "a".repeat(63), "A".repeat(64), "g".repeat(64)] {
         let integrity = CapabilityIntegrity::ContentVerified {
             manifest_sha256,
-            receipt_id: "content-receipt-7".into(),
+            content_sha256: digest(&[0x5a; 512]),
         };
         assert!(matches!(
             integrity.validate(),
@@ -254,15 +259,15 @@ fn content_proofs_require_a_manifest_digest_and_a_receipt_reference() {
         )
         .is_err());
     }
-    for receipt_id in ["", " \t\n"] {
+    for content_sha256 in ["".into(), "a".repeat(63), "A".repeat(64), "g".repeat(64)] {
         let integrity = CapabilityIntegrity::ContentVerified {
-            manifest_sha256: "a".repeat(64),
-            receipt_id: receipt_id.into(),
+            manifest_sha256: digest(b"metadata-range-manifest-v1"),
+            content_sha256,
         };
         assert!(matches!(
             integrity.validate(),
-            Err(CapabilityError::Coverage(CoverageError::EmptyField {
-                field: "receipt_id"
+            Err(CapabilityError::Coverage(CoverageError::InvalidDigest {
+                field: "content_sha256"
             }))
         ));
         assert!(capability(integrity.clone()).is_err());
@@ -305,12 +310,12 @@ fn capability_identity_binds_each_native_and_content_proof_field() {
     let original = capability(content_integrity()).unwrap();
     for integrity in [
         CapabilityIntegrity::ContentVerified {
-            manifest_sha256: "d".repeat(64),
-            receipt_id: "content-receipt-7".into(),
+            manifest_sha256: digest(b"metadata-range-manifest-v2"),
+            content_sha256: digest(&[0x5a; 512]),
         },
         CapabilityIntegrity::ContentVerified {
-            manifest_sha256: "c".repeat(64),
-            receipt_id: "content-receipt-8".into(),
+            manifest_sha256: digest(b"metadata-range-manifest-v1"),
+            content_sha256: digest(&[0x5b; 512]),
         },
     ] {
         assert_ne!(original.id, capability(integrity).unwrap().id);
@@ -329,15 +334,65 @@ fn integrity_deserialization_requires_all_proof_fields_and_rejects_unknown_field
             "witnessSha256": "a".repeat(64),
             "manifestSha256": "b".repeat(64)
         }),
-        json!({"kind": "content_verified", "manifestSha256": "a".repeat(64)}),
-        json!({"kind": "content_verified", "receiptId": "content-receipt-7"}),
         json!({
             "kind": "content_verified",
-            "manifestSha256": "a".repeat(64),
-            "receiptId": "content-receipt-7",
+            "manifestSha256": digest(b"metadata-range-manifest-v1")
+        }),
+        json!({
+            "kind": "content_verified",
+            "contentSha256": digest(&[0x5a; 512])
+        }),
+        json!({
+            "kind": "content_verified",
+            "manifestSha256": digest(b"metadata-range-manifest-v1"),
+            "contentSha256": digest(&[0x5a; 512]),
             "verifierId": "native-checksum-v1"
         }),
     ] {
         assert!(serde_json::from_value::<CapabilityIntegrity>(value).is_err());
     }
+}
+
+#[test]
+fn content_capability_identity_uses_only_immutable_digest_fields() {
+    let first = capability(content_integrity()).unwrap();
+    let encoded = serde_json::to_value(&first).unwrap();
+    let integrity = encoded["integrity"].as_object().unwrap();
+    assert_eq!(integrity.len(), 3);
+    assert!(integrity.contains_key("kind"));
+    assert!(integrity.contains_key("manifestSha256"));
+    assert!(integrity.contains_key("contentSha256"));
+    let decoded_integrity =
+        serde_json::from_value::<CapabilityIntegrity>(encoded["integrity"].clone()).unwrap();
+    let independent = capability(decoded_integrity).unwrap();
+    assert_eq!(first.id, independent.id);
+    assert_eq!(first, independent);
+    assert_eq!(
+        serde_json::from_value::<CapabilityRef>(encoded).unwrap(),
+        first
+    );
+}
+
+#[test]
+fn content_capability_rejects_receipt_and_execution_identity_fields() {
+    let original = capability(content_integrity()).unwrap();
+    for (field, value) in [
+        ("receiptId", "receipt-for-attempt-1"),
+        ("attemptId", "attempt-1"),
+        ("owner", "owner-1"),
+        ("runId", "run-1"),
+    ] {
+        let mut encoded = serde_json::to_value(&original).unwrap();
+        encoded["integrity"][field] = json!(value);
+        assert!(
+            serde_json::from_value::<CapabilityIntegrity>(encoded["integrity"].clone()).is_err()
+        );
+        assert!(serde_json::from_value::<CapabilityRef>(encoded).is_err());
+    }
+    assert!(serde_json::from_value::<CapabilityIntegrity>(json!({
+        "kind": "content_verified",
+        "manifestSha256": digest(b"metadata-range-manifest-v1"),
+        "receiptId": "receipt-for-attempt-1"
+    }))
+    .is_err());
 }

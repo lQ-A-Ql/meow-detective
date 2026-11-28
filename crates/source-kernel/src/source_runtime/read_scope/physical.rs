@@ -56,7 +56,7 @@ impl PhysicalScope {
                 self.failed.store(true, Ordering::Release);
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
-                    "physical source changed during verification",
+                    super::super::lease::SourceInvalidated,
                 ));
             }
         }
@@ -67,7 +67,7 @@ impl PhysicalScope {
         if self.failed.load(Ordering::Acquire) {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidData,
-                "physical source verification was revoked",
+                super::super::lease::SourceInvalidated,
             ));
         }
         Ok(())
