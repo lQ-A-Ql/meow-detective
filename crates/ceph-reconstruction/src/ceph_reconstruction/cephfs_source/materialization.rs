@@ -131,7 +131,7 @@ fn register_cephfs_storage_object(
         object_kind: "ceph_fs".to_string(),
         name: request.descriptor.name.clone(),
         identity_state: "candidate".to_string(),
-        status: "ready".to_string(),
+        status: "discovered".to_string(),
         provenance_json: serde_json::json!({"cephScopeId": request.ceph_scope_id.0}).to_string(),
     })?;
     Ok(())
@@ -313,7 +313,7 @@ fn preserve_incomplete(
     Ok(summary.clone())
 }
 
-pub(super) fn load_ready_summary(
+pub fn load_ready_summary(
     case_conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     source: &domain::DataSource,

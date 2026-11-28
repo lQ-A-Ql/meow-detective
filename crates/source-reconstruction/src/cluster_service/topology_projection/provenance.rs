@@ -177,8 +177,8 @@ pub(super) fn persist_analysis_links(
           storage_object_id, evidence_source_id, relation_kind, provenance_assertion_id)
          VALUES (?1, 'timeline_event', ?2, NULL, ?3, 'observed_on', NULL)",
     )?;
-    for (member_index, source_id, _) in member_sources {
-        let environment_object_id = format!("env:os:{import_set_id}:{member_index}");
+    for (_, source_id, _) in member_sources {
+        let environment_object_id = format!("env:os:{import_set_id}:{source_id}");
         let fjall = source_kernel::source_db::open_registered_fjall_source_read_only(
             case_root,
             &domain::DataSourceId(source_id.clone()),

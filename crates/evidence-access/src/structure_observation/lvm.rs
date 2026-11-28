@@ -68,7 +68,9 @@ pub(super) fn bind_observation_objects(
                 &observation.details,
             )
         }
-        NativeVersion::Md { .. } => Ok(()),
+        NativeVersion::Md { .. } | NativeVersion::CephRbd { .. } | NativeVersion::CephFs { .. } => {
+            Ok(())
+        }
     }
 }
 

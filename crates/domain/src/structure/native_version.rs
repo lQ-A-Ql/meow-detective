@@ -21,4 +21,17 @@ pub enum NativeVersion {
         metadata_version: MdMetadataVersion,
         events: u64,
     },
+    CephRbd {
+        image_id: String,
+        pool_id: i64,
+        snapshot_id: Option<u64>,
+        lineage_sha256: String,
+    },
+    CephFs {
+        filesystem_id: i64,
+        fsmap_epoch: u32,
+        mdsmap_epoch: u32,
+        namespace_input_sha256: String,
+        journal_boundary_sha256: Option<String>,
+    },
 }

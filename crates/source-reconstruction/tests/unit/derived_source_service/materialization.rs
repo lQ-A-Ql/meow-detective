@@ -184,11 +184,17 @@ fn setup_recoverable_catalog(
     DataSourceRepo::new(&connection)
         .insert_with_storage(&CaseId("case-1".to_string()), &source, &storage)
         .expect("insert derived source");
-    connection.execute(
-        "INSERT INTO storage_objects (id, case_id, object_kind, name, identity_state, status)
-         VALUES ('storage:rbd:rbd-atomic-publish', 'case-1', 'ceph_rbd', 'VM disk', 'candidate', 'ready')",
-        [],
-    ).expect("insert derived storage object");
+    let native_object = ceph_reconstruction::ceph_reconstruction::rbd_native_object_id(
+        CEPH_SCOPE_ID,
+        &descriptor(),
+    );
+    connection
+        .execute(
+            "INSERT INTO storage_objects (id, case_id, object_kind, name, identity_state, status)
+         VALUES (?1, 'case-1', 'ceph_rbd', 'VM disk', 'candidate', 'discovered')",
+            [&native_object.storage_object_id()],
+        )
+        .expect("insert derived storage object");
     let replicas = PARENT_SOURCE_IDS
         .iter()
         .enumerate()
@@ -361,6 +367,98 @@ fn setup_recoverable_catalog(
     )
     .expect("bind fixture view attempt");
     (connection, source, fingerprint, persisted_summary)
+}
+
+#[test]
+fn rbd_registration_binds_public_native_version_and_all_parent_acquisitions() {
+    let root = tempfile::tempdir().unwrap();
+    let (conn, _, _, _) = setup_recoverable_catalog(root.path());
+    let descriptor = descriptor();
+    let source = registration::build_data_source(
+        CEPH_SCOPE_ID,
+        &DataSourceId("rbd-public-version".into()),
+        &descriptor,
+    );
+    let replicas = PARENT_SOURCE_IDS
+        .iter()
+        .enumerate()
+        .map(|(index, source_id)| CephRbdReplicaRecord {
+            ordinal: index as u32,
+            source_data_source_id: (*source_id).into(),
+            inventory_id: format!("inventory-osd-{index}"),
+            osd_id: index as u32,
+        })
+        .collect::<Vec<_>>();
+    let fingerprint = registration::register_derived_source(
+        &conn,
+        &domain::CaseId("case-1".into()),
+        CEPH_SCOPE_ID,
+        &source,
+        &descriptor,
+        &replicas,
+        &ceph_reconstruction::ceph_reconstruction::RbdReplicaPolicy::strict_legacy(),
+    )
+    .unwrap();
+    let version =
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&conn)
+            .version_for_source("case-1", &source.id.0)
+            .unwrap()
+            .unwrap();
+    assert_eq!(version.parent_source_revisions.len(), 3);
+    assert_eq!(version.acquisition_ids.len(), 3);
+    assert_eq!(version.mapping_sha256, fingerprint);
+    assert_eq!(
+        version.native_versions,
+        vec![domain::structure::NativeVersion::CephRbd {
+            image_id: descriptor.metadata.id,
+            pool_id: 2,
+            snapshot_id: None,
+            lineage_sha256: fingerprint,
+        }]
+    );
+    let lineage = CephRbdLineageRepo::new(&conn)
+        .find_by_data_source(&source.id.0)
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        lineage.lineage.parent_storage_object_id,
+        version.storage_object_id
+    );
+    let mut same_object = self::descriptor();
+    same_object.metadata.image_size *= 2;
+    assert_eq!(
+        ceph_reconstruction::ceph_reconstruction::rbd_native_object_id(CEPH_SCOPE_ID, &same_object)
+            .storage_object_id(),
+        version.storage_object_id,
+    );
+    same_object.metadata.data_pool_id += 1;
+    assert_ne!(
+        ceph_reconstruction::ceph_reconstruction::rbd_native_object_id(CEPH_SCOPE_ID, &same_object)
+            .storage_object_id(),
+        version.storage_object_id,
+    );
+    DataSourceRepo::new(&conn)
+        .delete_cascade_with_audit(&source.id, "{}")
+        .unwrap();
+    assert!(CephRbdLineageRepo::new(&conn)
+        .find_by_data_source(SOURCE_ID)
+        .unwrap()
+        .is_some());
+    assert!(
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&conn)
+            .find(&version.storage_object_id)
+            .unwrap()
+            .is_some()
+    );
+    DataSourceRepo::new(&conn)
+        .delete_cascade_with_audit(&DataSourceId(SOURCE_ID.into()), "{}")
+        .unwrap();
+    assert!(
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(&conn)
+            .find(&version.storage_object_id)
+            .unwrap()
+            .is_none()
+    );
 }
 
 #[test]

@@ -29,3 +29,19 @@ fn unknown_md_metadata_version_cannot_become_a_native_fact() {
     let value = serde_json::json!({"kind": "md", "metadata_version": "v2_0", "events": 47});
     assert!(serde_json::from_value::<NativeVersion>(value).is_err());
 }
+
+#[test]
+fn ceph_versions_preserve_native_evidence_without_inventing_an_rbd_epoch() {
+    let rbd = serde_json::json!({
+        "kind": "ceph_rbd", "image_id": "image-native-id", "pool_id": 7,
+        "snapshot_id": null, "lineage_sha256": "a".repeat(64)
+    });
+    let cephfs = serde_json::json!({
+        "kind": "ceph_fs", "filesystem_id": 1, "fsmap_epoch": 17, "mdsmap_epoch": 19,
+        "namespace_input_sha256": "b".repeat(64), "journal_boundary_sha256": null
+    });
+    for value in [rbd, cephfs] {
+        let version: NativeVersion = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(serde_json::to_value(version).unwrap(), value);
+    }
+}

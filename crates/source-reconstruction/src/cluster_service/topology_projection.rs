@@ -173,13 +173,13 @@ fn register_host_and_os_scope(
     edge_repo: &LinuxTopologyEdgeRepo<'_>,
     projection: &mut ImportSetTopologyProjection,
 ) -> Result<()> {
-    let host_id = format!("scope:physical-host:{import_set_id}:{member_index}");
+    let host_id = format!("scope:physical-host:{import_set_id}:{source_id}");
     replace_scope(scope_repo, &host_id)?;
     scope_repo.insert(&scope_record(
         &host_id,
         case_id,
         TopologyScopeKind::PhysicalHost,
-        format!("Physical host {member_index}"),
+        format!("Host evidence {source_id}"),
         "partial",
     ))?;
     membership_repo.insert(&membership_record(
@@ -189,13 +189,13 @@ fn register_host_and_os_scope(
         member_index,
         "catalog",
     ))?;
-    let os_id = format!("scope:os:{import_set_id}:{member_index}");
+    let os_id = format!("scope:os:{import_set_id}:{source_id}");
     replace_scope(scope_repo, &os_id)?;
     scope_repo.insert(&scope_record(
         &os_id,
         case_id,
         TopologyScopeKind::OsInstance,
-        format!("Linux host system {member_index}"),
+        format!("Linux system evidence {source_id}"),
         "partial",
     ))?;
     edge_repo.insert(&edge_record(
@@ -319,7 +319,7 @@ fn register_detected_scopes(
                 *member_index,
                 "Kubernetes artifact paths",
             ))?;
-            let os_scope_id = format!("scope:os:{import_set_id}:{member_index}");
+            let os_scope_id = format!("scope:os:{import_set_id}:{data_source_id}");
             edge_repo.insert(&edge_record(
                 &os_scope_id,
                 &scope_id,
@@ -341,16 +341,6 @@ fn register_detected_scopes(
             })?;
         }
         projection.kubernetes_scope_id = Some(scope_id);
-    }
-    if let (Some(ceph_scope_id), Some(pve_scope_id)) =
-        (&projection.ceph_scope_id, &projection.pve_scope_id)
-    {
-        edge_repo.insert(&edge_record(
-            ceph_scope_id,
-            pve_scope_id,
-            TopologyEdgeKind::ProvidesStorage,
-            "co-located PVE and Ceph evidence in one import set",
-        ))?;
     }
     Ok(())
 }
@@ -388,7 +378,7 @@ fn register_ceph_scope(
         object_kind: "ceph_cluster".to_string(),
         name: "Ceph storage cluster".to_string(),
         identity_state: "candidate".to_string(),
-        status: "ready".to_string(),
+        status: "discovered".to_string(),
         provenance_json: serde_json::json!({"scopeId": scope_id}).to_string(),
     })?;
     projection.ceph_scope_id = Some(scope_id);

@@ -39,9 +39,13 @@ use sha2::Digest;
 
 const CASE_ID: &str = "case-cephfs-materialization";
 const CEPH_SCOPE_ID: &str = "scope:ceph:materialization";
-const FILESYSTEM_ID: &str = "ceph-fs:cluster-a:1:17:7";
+const CLUSTER_ID: &str = "03f45eaa-efaa-4819-84c6-0cf2f0719020";
+const FILESYSTEM_ID: &str = "ceph-fs:03f45eaa-efaa-4819-84c6-0cf2f0719020:1:17:7";
 const FILE_ENTRY_ID: &str = "cephfs:0000000000000001:00000000:0000000000000002:hello.txt";
 const FILE_CONTENT: &[u8] = b"CephFS bounded preview\n";
+
+#[path = "support/cephfs_structure_facts.rs"]
+mod structure_fact_acceptance;
 
 struct Fixture {
     root: tempfile::TempDir,
@@ -147,7 +151,7 @@ fn descriptor() -> CephFsDescriptor {
     };
     CephFsDescriptor {
         identity: FILESYSTEM_ID.to_string(),
-        cluster_identity: "cluster-a".to_string(),
+        cluster_identity: CLUSTER_ID.to_string(),
         filesystem_id: 1,
         name: "cephfs-a".to_string(),
         fsmap_epoch: 17,
@@ -267,7 +271,7 @@ fn present_assessment() -> CephFsPresenceAssessment {
             "osd-1".to_string(),
             "osd-2".to_string(),
         ],
-        cluster_identity: Some("cluster-a".to_string()),
+        cluster_identity: Some(CLUSTER_ID.to_string()),
         filesystem_count: 1,
         filesystems: vec![CephFsFilesystemPresenceRecord {
             filesystem_id: 1,
@@ -747,7 +751,7 @@ fn ready_materialization_rejects_capability_downgrade() {
             "UPDATE ceph_fs_source_capabilities
              SET capability = 'metadata-browseable'
              WHERE data_source_id = ?1",
-            [result.data_source.id.0],
+            [&result.data_source.id.0],
         )
         .expect("downgrade capability");
     drop(source_conn);
@@ -757,6 +761,15 @@ fn ready_materialization_rejects_capability_downgrade() {
     assert!(
         matches!(error, CephFsSourceError::StalePublication),
         "unexpected capability downgrade error: {error:?}"
+    );
+    assert!(
+        source_reconstruction::structure_facts::get_structure_fact_graph(
+            &fixture.case_conn,
+            fixture.root.path(),
+            &fixture.case_id,
+            &[result.data_source.id.0],
+        )
+        .is_err()
     );
 }
 
@@ -1304,7 +1317,7 @@ fn presence_identity_and_pool_mismatch_cannot_create_a_cephfs_source() {
         CephFsSourceError::PresenceNotProven(_)
     ));
 
-    presence.cluster_identity = Some("cluster-a".to_string());
+    presence.cluster_identity = Some(CLUSTER_ID.to_string());
     presence.filesystems[0].metadata_pool_id = 99;
     let pool_error = materialize_result_with_presence(&fixture, &namespace(true), &presence)
         .expect_err("pool binding mismatch must fail");

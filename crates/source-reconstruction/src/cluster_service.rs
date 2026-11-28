@@ -23,6 +23,7 @@ mod mdraid_materialization;
 mod member_binding;
 mod network_parser;
 mod phase_ledger;
+mod resource_projection;
 mod summary;
 mod topology_projection;
 

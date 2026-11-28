@@ -7,6 +7,7 @@ mod cephfs_source;
 mod cluster_evidence;
 mod derived_reader;
 mod derived_runtime;
+mod object_version;
 mod osdmap_evidence;
 mod pool_evidence;
 mod rados_provider;
@@ -19,6 +20,7 @@ mod rbd_service;
 mod source_bound_lvm;
 
 pub const STRICT_RBD_REPLICA_COUNT: usize = 3;
+pub use object_version::{bind_ceph_object_version, cephfs_native_object_id, rbd_native_object_id};
 
 pub use cephfs::{
     bind_cephfs_descriptors, discover_cephfs_journal_ranks, inventory_cephfs_metadata_pool,
@@ -45,8 +47,9 @@ pub use cephfs_presence::{
     MDSMAP_PRESENCE_KEY,
 };
 pub use cephfs_source::{
-    materialize_cephfs_source, CephFsSourceCapability, CephFsSourceError,
-    CephFsSourceMaterializationRequest, CephFsSourceResult, MaterializedCephFsSource,
+    materialize_cephfs_source, verify_cephfs_published_source, CephFsSourceCapability,
+    CephFsSourceError, CephFsSourceMaterializationRequest, CephFsSourceResult,
+    MaterializedCephFsSource,
 };
 pub use cephfs_source::{open_cephfs_file_reader, CephFsFileReadRequest, PreparedCephFsFileReader};
 pub use cluster_evidence::{

@@ -238,6 +238,7 @@ fn finalize(
             .conn
             .unchecked_transaction()
             .map_err(CommandError::from_service_error)?;
+        super::source_revision::bind_catalog_source(ctx, source, stats.total_size, &transaction)?;
         super::source_revision::publish_observations(ctx, source, &digest, &transaction)?;
         mark_projection_committed(&transaction, &ctx.job_id.0, &digest)?;
         transaction

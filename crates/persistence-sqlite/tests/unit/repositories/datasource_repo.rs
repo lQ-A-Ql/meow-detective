@@ -348,36 +348,11 @@ fn rename_changes_the_name() {
 
 #[test]
 fn delete_cascade_with_audit_uses_the_outer_transaction() {
-    let conn = setup_db();
-    conn.execute_batch(
-        "CREATE TABLE audit_log (
-            id TEXT PRIMARY KEY,
-            case_id TEXT,
-            user_id TEXT,
-            action TEXT,
-            resource_type TEXT,
-            resource_id TEXT,
-            details TEXT,
-            ip_address TEXT,
-            created_at TEXT DEFAULT (datetime('now'))
-        );
-        CREATE TABLE forensic_ledger (
-            id TEXT PRIMARY KEY NOT NULL,
-            scope_key TEXT NOT NULL,
-            case_id TEXT,
-            audit_id TEXT NOT NULL,
-            sequence INTEGER NOT NULL CHECK (sequence > 0),
-            actor_id TEXT NOT NULL,
-            action TEXT NOT NULL,
-            resource_type TEXT NOT NULL,
-            resource_id TEXT,
-            details TEXT NOT NULL,
-            previous_hash TEXT NOT NULL,
-            entry_hash TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            UNIQUE(scope_key, sequence),
-            UNIQUE(scope_key, entry_hash)
-        );",
+    let conn = crate::connection::open_in_memory().unwrap();
+    crate::runner::run_all(&conn).unwrap();
+    conn.execute(
+        "INSERT INTO cases(id, name) VALUES('case-1', 'Deletion')",
+        [],
     )
     .unwrap();
 

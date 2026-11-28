@@ -2,6 +2,7 @@ use domain::CaseId;
 use persistence_sqlite::repositories::environment_object_repo::{
     EnvironmentObjectRecord, EnvironmentObjectRepo,
 };
+use persistence_sqlite::repositories::linux_topology_membership_repo::LinuxTopologyMembershipRepo;
 
 use super::ImportSetTopologyProjection;
 use crate::cluster_service::Result;
@@ -29,10 +30,10 @@ pub(super) fn project_environment_objects(
                 status: "partial",
             },
         )?;
-        for (member_index, _, _) in member_sources {
+        for source_id in LinuxTopologyMembershipRepo::new(conn).find_source_ids(pve_scope_id)? {
             repo.insert_relation(
                 &pve_id,
-                &format!("env:host:{import_set_id}:{member_index}"),
+                &format!("env:host:{import_set_id}:{source_id}"),
                 "manages",
                 "candidate",
                 "{\"basis\":\"pve_scope\"}",
@@ -40,10 +41,7 @@ pub(super) fn project_environment_objects(
         }
     }
     for vm_scope_id in &projection.virtual_machine_scope_ids {
-        let vm_id = format!(
-            "env:vm:{import_set_id}:{}",
-            vm_scope_id.rsplit(':').next().unwrap_or("unknown")
-        );
+        let vm_id = vm_scope_id.replacen("scope:vm:", "env:vm:", 1);
         insert_object(
             &repo,
             EnvironmentObjectSpec {
@@ -71,9 +69,11 @@ pub(super) fn project_environment_objects(
                 status: "partial",
             },
         )?;
-        for (member_index, _, _) in member_sources {
+        for source_id in
+            LinuxTopologyMembershipRepo::new(conn).find_source_ids(kubernetes_scope_id)?
+        {
             repo.insert_relation(
-                &format!("env:os:{import_set_id}:{member_index}"),
+                &format!("env:os:{import_set_id}:{source_id}"),
                 &kubernetes_id,
                 "runs",
                 "candidate",
@@ -99,10 +99,10 @@ fn project_host_objects(
         } else {
             source_name.clone()
         };
-        let host_id = format!("env:host:{import_set_id}:{member_index}");
-        let os_id = format!("env:os:{import_set_id}:{member_index}");
+        let host_id = format!("env:host:{import_set_id}:{data_source_id}");
+        let os_id = format!("env:os:{import_set_id}:{data_source_id}");
         let host_name = format!("Host evidence: {source_name}");
-        let host_scope_id = format!("scope:physical-host:{import_set_id}:{member_index}");
+        let host_scope_id = format!("scope:physical-host:{import_set_id}:{data_source_id}");
         insert_object(
             repo,
             EnvironmentObjectSpec {

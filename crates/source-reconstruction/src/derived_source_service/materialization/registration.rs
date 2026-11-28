@@ -14,7 +14,9 @@ use persistence_sqlite::repositories::{
     storage_object_repo::{StorageObjectRecord, StorageObjectRepo},
 };
 
-use ceph_reconstruction::ceph_reconstruction::{RbdImageDescriptor, RbdReplicaPolicy};
+use ceph_reconstruction::ceph_reconstruction::{
+    bind_ceph_object_version, rbd_native_object_id, RbdImageDescriptor, RbdReplicaPolicy,
+};
 
 use super::{DerivedSourceError, DerivedSourceResult};
 
@@ -125,7 +127,7 @@ pub(super) fn register_derived_source(
         object_kind: "ceph_rbd".to_string(),
         name: descriptor.metadata.name.clone(),
         identity_state: "candidate".to_string(),
-        status: "ready".to_string(),
+        status: "discovered".to_string(),
         provenance_json: serde_json::json!({"cephScopeId": ceph_scope_id}).to_string(),
     })?;
     persistence_sqlite::repositories::ceph_rbd_lineage_repo::insert_aggregate_in_transaction(
@@ -137,6 +139,20 @@ pub(super) fn register_derived_source(
         &data_source.id,
         descriptor.metadata.image_size,
         replica_records,
+    )?;
+    bind_ceph_object_version(
+        &transaction,
+        &case_id.0,
+        &data_source.id.0,
+        rbd_native_object_id(ceph_scope_id, descriptor),
+        &descriptor.metadata.name,
+        &fingerprint,
+        domain::structure::NativeVersion::CephRbd {
+            image_id: descriptor.metadata.id.clone(),
+            pool_id: descriptor.metadata.data_pool_id,
+            snapshot_id: descriptor.context.snapshot_id,
+            lineage_sha256: fingerprint.clone(),
+        },
     )?;
     transaction
         .commit()
@@ -197,7 +213,8 @@ pub(super) fn lineage_aggregate(
         lineage: CephRbdLineageRecord {
             derived_data_source_id: data_source_id.0.clone(),
             parent_ceph_scope_id: ceph_scope_id.to_string(),
-            parent_storage_object_id: format!("storage:rbd:{}", data_source_id.0),
+            parent_storage_object_id: rbd_native_object_id(ceph_scope_id, descriptor)
+                .storage_object_id(),
             image_name: metadata.name.clone(),
             image_id: metadata.id.clone(),
             object_prefix: metadata.object_prefix.clone(),

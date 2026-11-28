@@ -161,6 +161,21 @@ fn parsers_reject_unsafe_yaml_and_corrupt_bolt_input() {
 static BOLT_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 #[test]
+fn audit_parser_retains_only_structural_response_fields() {
+    let input = concat!(
+        r#"{"responseObject":{"kind":"Secret","data":{"password":"sensitive-password"}}}"#,
+        "\n",
+        r#"{"responseObject":{"kind":"Pod","metadata":{"uid":"pod-1","name":"worker"},"spec":{"nodeName":"node-a","containers":[{"env":[{"name":"PASSWORD","value":"sensitive-password"}]}]}}}"#,
+    );
+    let parsed = parse_kubernetes_audit_log(input).unwrap();
+    assert!(parsed.events[0].resource_object.is_none());
+    let pod = parsed.events[1].resource_object.as_ref().unwrap();
+    assert_eq!(pod["spec"]["nodeName"], "node-a");
+    assert!(!pod.to_string().contains("sensitive-password"));
+    assert!(pod["spec"]["containers"].is_null());
+}
+
+#[test]
 fn audit_parser_reports_bounded_invalid_lines_and_wal_tail() {
     let result = parse_kubernetes_audit_log("not-json\n{}\n").expect("audit diagnostics");
     assert_eq!(result.invalid_lines, 1);

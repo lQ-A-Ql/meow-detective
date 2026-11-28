@@ -161,6 +161,11 @@ pub(super) fn bind_derived_revision(
     logical_size: u64,
     metadata_identity: String,
 ) -> CephFsSourceResult<()> {
+    let transaction = conn
+        .is_autocommit()
+        .then(|| conn.unchecked_transaction())
+        .transpose()
+        .map_err(persistence_sqlite::DbError::from)?;
     let revisions = SourceRevisionRepo::new(conn);
     let inputs = revisions.inputs(&case_id.0, &source_id.0)?;
     let acquisition = AcquisitionId(format!(
@@ -177,5 +182,33 @@ pub(super) fn bind_derived_revision(
         &SourceRevisionContent::derived(acquisition, logical_size, metadata_identity),
         true,
     )?;
+    let aggregate = CephFsDerivedLineageRepo::new(conn)
+        .find_by_data_source(&source_id.0)?
+        .ok_or_else(|| CephFsSourceError::InconsistentState("CephFS lineage is missing".into()))?;
+    let lineage = aggregate.lineage;
+    super::super::bind_ceph_object_version(
+        conn,
+        &case_id.0,
+        &source_id.0,
+        super::super::cephfs_native_object_id(
+            &lineage.parent_ceph_scope_id,
+            &lineage.cluster_identity,
+            lineage.filesystem_id,
+        ),
+        &lineage.filesystem_name,
+        &lineage.lineage_fingerprint,
+        domain::structure::NativeVersion::CephFs {
+            filesystem_id: lineage.filesystem_id,
+            fsmap_epoch: lineage.fsmap_epoch,
+            mdsmap_epoch: lineage.mdsmap_epoch,
+            namespace_input_sha256: lineage.namespace_input_sha256,
+            journal_boundary_sha256: lineage.journal_boundary_sha256,
+        },
+    )?;
+    if let Some(transaction) = transaction {
+        transaction
+            .commit()
+            .map_err(persistence_sqlite::DbError::from)?;
+    }
     Ok(())
 }

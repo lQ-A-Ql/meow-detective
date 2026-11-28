@@ -9,6 +9,7 @@ use transport::dto::{
 mod kubernetes_network_facts;
 mod network_facts;
 mod platform_facts;
+mod structure_facts;
 
 #[derive(Debug, thiserror::Error)]
 pub enum InfrastructureProjectionError {
@@ -53,7 +54,7 @@ pub fn get_infrastructure_graph(
 ) -> Result<InfrastructureGraphDto, persistence_sqlite::DbError> {
     let network_diagnostics = network_facts::refresh_network_facts(connection, case_root, case_id)?;
     let repo = InfrastructureGraphRepo::new(connection);
-    let nodes = repo
+    let mut nodes = repo
         .list_nodes(&case_id.0)?
         .into_iter()
         .map(|node| InfrastructureGraphNodeDto {
@@ -67,7 +68,7 @@ pub fn get_infrastructure_graph(
             version: node.version,
         })
         .collect();
-    let edges = repo
+    let mut edges = repo
         .list_edges(&case_id.0)?
         .into_iter()
         .map(|edge| InfrastructureGraphEdgeDto {
@@ -96,6 +97,7 @@ pub fn get_infrastructure_graph(
             parser: fact.parser,
         })
         .collect();
+    structure_facts::append(connection, case_root, case_id, &mut nodes, &mut edges)?;
     Ok(InfrastructureGraphDto {
         nodes,
         edges,
@@ -112,7 +114,7 @@ pub fn get_infrastructure_graph_read_only(
     let (computed_facts, network_diagnostics) =
         network_facts::collect_network_facts(connection, case_root, case_id)?;
     let repo = InfrastructureGraphRepo::new(connection);
-    let nodes = repo
+    let mut nodes = repo
         .list_nodes(&case_id.0)?
         .into_iter()
         .map(|node| InfrastructureGraphNodeDto {
@@ -126,7 +128,7 @@ pub fn get_infrastructure_graph_read_only(
             version: node.version,
         })
         .collect();
-    let edges = repo
+    let mut edges = repo
         .list_edges(&case_id.0)?
         .into_iter()
         .map(|edge| InfrastructureGraphEdgeDto {
@@ -154,6 +156,7 @@ pub fn get_infrastructure_graph_read_only(
             parser: fact.parser,
         })
         .collect();
+    structure_facts::append(connection, case_root, case_id, &mut nodes, &mut edges)?;
     Ok(InfrastructureGraphDto {
         nodes,
         edges,

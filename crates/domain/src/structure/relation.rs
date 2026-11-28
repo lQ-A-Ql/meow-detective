@@ -23,6 +23,9 @@ pub enum StructureNodeKind {
     FileSystem,
     Workload,
     Namespace,
+    PhysicalHost,
+    Environment,
+    EvidenceFact,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

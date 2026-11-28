@@ -27,6 +27,10 @@ pub struct KubernetesAuditEvent {
     pub response_code: Option<u64>,
     pub source_ip: Option<String>,
     pub indicators: Vec<KubernetesAuditIndicator>,
+    pub audit_id: Option<String>,
+    pub stage_timestamp: Option<String>,
+    pub resource_object: Option<Value>,
+    pub object_uid: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -141,6 +145,12 @@ fn parse_event(line_number: u64, value: &Value) -> KubernetesAuditEvent {
             .and_then(Value::as_str)
             .map(str::to_string),
         indicators,
+        audit_id: string(value, "auditID"),
+        stage_timestamp: string(value, "stageTimestamp"),
+        resource_object: value
+            .get("responseObject")
+            .and_then(super::resource_projection::structural_response),
+        object_uid: string(object_ref, "uid"),
     }
 }
 

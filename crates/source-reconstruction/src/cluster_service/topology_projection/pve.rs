@@ -42,26 +42,28 @@ pub(super) fn register_pve_scope(
         &pve_sources,
         TopologyMemberRole::Host,
     )?;
-    for (member_index, _) in &pve_sources {
+    for (_, source_id) in &pve_sources {
         edge_repo.insert(&edge_record(
             &scope_id,
-            &format!("scope:physical-host:{import_set_id}:{member_index}"),
+            &format!("scope:physical-host:{import_set_id}:{source_id}"),
             TopologyEdgeKind::Manages,
             "PVE configuration evidence",
         ))?;
     }
     for (vm_id, evidence) in virtual_machines {
-        register_virtual_machine(
-            case_id,
-            import_set_id,
-            scope_repo,
-            membership_repo,
-            edge_repo,
-            projection,
-            &scope_id,
-            vm_id,
-            evidence,
-        )?;
+        for entry in evidence {
+            register_virtual_machine(
+                case_id,
+                import_set_id,
+                scope_repo,
+                membership_repo,
+                edge_repo,
+                projection,
+                &scope_id,
+                vm_id.clone(),
+                entry,
+            )?;
+        }
     }
     projection.pve_scope_id = Some(scope_id);
     Ok(())
@@ -77,9 +79,10 @@ fn register_virtual_machine(
     projection: &mut ImportSetTopologyProjection,
     pve_scope_id: &str,
     vm_id: String,
-    evidence: Vec<(u32, String, String)>,
+    evidence: (u32, String, String),
 ) -> Result<()> {
-    let vm_scope_id = format!("scope:vm:{import_set_id}:{vm_id}");
+    let (member_index, source_id, path) = evidence;
+    let vm_scope_id = format!("scope:vm:{import_set_id}:{source_id}:{vm_id}");
     replace_scope(scope_repo, &vm_scope_id)?;
     scope_repo.insert(&scope_record(
         &vm_scope_id,
@@ -88,15 +91,13 @@ fn register_virtual_machine(
         format!("PVE virtual machine {vm_id}"),
         "partial",
     ))?;
-    for (member_index, source_id, path) in evidence {
-        membership_repo.insert(&membership_record(
-            &vm_scope_id,
-            &source_id,
-            TopologyMemberRole::VirtualMachine,
-            member_index,
-            &format!("PVE VM configuration: {path}"),
-        ))?;
-    }
+    membership_repo.insert(&membership_record(
+        &vm_scope_id,
+        &source_id,
+        TopologyMemberRole::VirtualMachine,
+        member_index,
+        &format!("PVE VM configuration: {path}"),
+    ))?;
     edge_repo.insert(&edge_record(
         pve_scope_id,
         &vm_scope_id,

@@ -10,6 +10,43 @@ use persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo;
 use source_kernel::connection::command_error_from_db;
 use transport::CommandError;
 
+pub(super) fn bind_catalog_source(
+    ctx: &ImportJobContext<'_>,
+    source: &domain::DataSource,
+    logical_size: u64,
+    conn: &rusqlite::Connection,
+) -> Result<(), CommandError> {
+    if !matches!(
+        source.kind,
+        domain::DataSourceKind::LogicalDirectory | domain::DataSourceKind::LogicalArchive
+    ) {
+        return Ok(());
+    }
+    let store = persistence_source::detail::require_source_store(ctx.source_connection()?)
+        .map_err(command_error_from_db)?;
+    let manifest = persistence_source::fjall::read_source_generation_manifest(&store, &source.id.0)
+        .map_err(|error| CommandError::internal(error.to_string()))?;
+    let acquisition = ctx
+        .import_config
+        .import_set
+        .as_ref()
+        .map(|set| set.import_set_id.clone())
+        .unwrap_or_else(|| source.id.0.clone());
+    SourceRevisionRepo::new(conn)
+        .bind(
+            &ctx.case_id.0,
+            &source.id.0,
+            &SourceRevisionContent::observed(
+                AcquisitionId(acquisition),
+                logical_size,
+                Some(format!("source-catalog:{}", manifest.immutable_data_digest)),
+            ),
+            true,
+        )
+        .map_err(command_error_from_db)?;
+    Ok(())
+}
+
 pub(super) fn bind(
     ctx: &ImportJobContext<'_>,
     source: &domain::DataSource,
