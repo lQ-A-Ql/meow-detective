@@ -6,7 +6,7 @@
       "category": "Linux MD",
       "item": "全部阵列状态、layout 与文件系统组合",
       "status": "partial",
-      "summary": "公开原生镜像验证 linear、RAID0/1/5/6/10 的指定布局以及 RAID0/EXT4 目录和预览；RAID4、更多 layout、分区后的 MD、MD 后 LVM、XFS/Btrfs 仍需独立公开验收。reshape、重建状态、未知 feature、events 不一致或可读取副本内容冲突均拒绝。完整逻辑磁盘 SHA-256 与区块摘要绑定输入身份，目录复用及发布前重新校验，范围读取验证涉及区块；原始容器哈希属于独立来源哈希流程",
+      "summary": "公开原生镜像验证linear、RAID0/1/5/6/10指定布局；文件系统组合准入RAID0→EXT4、GPT→EXT4、LVM linear→EXT4、指定feature直接XFS及单设备Btrfs。RAID4、更多layout及其它组合继续独立准入。reshape、重建状态、未知feature、events不一致或可读取副本内容冲突均拒绝。完整逻辑磁盘SHA-256与区块摘要绑定输入身份，范围读取验证涉及区块；原始容器摘要属于独立来源哈希流程",
       "affectedChains": [
         "MD",
         "LVM",
@@ -394,9 +394,9 @@
     },
     {
       "category": "Linux 文件系统",
-      "item": "Btrfs raw disk 完整支持",
-      "status": "notGuaranteed",
-      "summary": "reader 能力与探测链路需以公开 fixture / expected JSON 补齐；检材3 baseline 不覆盖 Btrfs",
+      "item": "Btrfs 全部设备profile、feature与组合",
+      "status": "partial",
+      "summary": "公开RAW池准入完整SINGLE/RAID0/RAID1/RAID10集合；MD→Btrfs覆盖SINGLE data及DUP metadata。具备独立目录来源、FileEntryId预览、范围与完整内容oracle。RAID1C3/1C4、RAID5/6、缺失设备、降级池及其它组合保持未准入",
       "affectedChains": [
         "Btrfs"
       ],

@@ -57,6 +57,7 @@ pub fn pre_import_check(source_path: &Path, kind: &DataSourceKind) -> PreCheckRe
         | DataSourceKind::CephFs
         | DataSourceKind::MdRaid
         | DataSourceKind::LvmLogicalVolume
+        | DataSourceKind::BtrfsPool
         | DataSourceKind::NestedRange => {
             unreachable!("derived sources are rejected before filesystem access")
         }

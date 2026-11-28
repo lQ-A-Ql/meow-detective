@@ -12,6 +12,12 @@ pub enum MdMetadataVersion {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum NativeVersion {
+    Btrfs {
+        fsid: String,
+        generation: u64,
+        device_count: u64,
+        mapping_sha256: String,
+    },
     LvmLabel,
     LvmCommitted {
         vg_uuid: String,

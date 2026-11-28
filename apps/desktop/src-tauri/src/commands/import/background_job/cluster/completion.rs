@@ -67,6 +67,11 @@ pub(super) fn complete_evidence_set_import(
             return fail_job(job_repo, &job.job_id, app, error).map(|()| None);
         }
     };
+    let Some(btrfs_sources) =
+        super::btrfs::materialize_pools(connection, job_repo, job, app, &summary, &cancel_token)?
+    else {
+        return Ok(None);
+    };
     finish_ready_import(
         connection,
         job_repo,
@@ -76,6 +81,7 @@ pub(super) fn complete_evidence_set_import(
         ReadyImportState {
             mdraid_sources,
             lvm_sources,
+            btrfs_sources,
             ceph_scope_id: topology.ceph_scope_id,
         },
         cancel_token,

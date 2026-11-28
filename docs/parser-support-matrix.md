@@ -178,9 +178,12 @@ VMDK 是会话 COW overlay 的宿主材料，与“把用户选择的 VMDK 作�
 | MD -> EXT4 目录与预览 | Experimental | `evidence-access --test mdraid_access`；`app-services --test mdraid_materialization_native` | 原生 RAID0/EXT4 文件树、分区身份、范围读取、`FileEntryId` 预览、重复导入、来源变化后的独立身份、发布中断恢复与取消准入 |
 | 跨 PV 来源绑定及 LVM -> MD -> EXT4 | Experimental | `evidence-access --test lvm_collection_native --test mdraid_access`；`app-services --test mdraid_materialization_native`；`public-small/lvm-native` | 原生镜像验证相同坐标上的不同 PV UUID、重复 PV 来源拒绝、没有 metadata 副本的 PV、两 LV 组成的 RAID0、文件字节、目录与预览 |
 | 集合摘要与事件分页 | Experimental | `app-services --test cluster_import_queries --test linux_evidence_events` | 集合归属、完整成员包含关系、清单摘要验证、稳定时间顺序、超过两千条事件的分页、不可读取成员的明确错误 |
+| MD -> GPT -> EXT4 / MD -> LVM -> EXT4 | Experimental | `app-services --test storage_combinations_native`；`public-small/storage-combinations` | 原生GPT分区与LVM linear LV、完整MD逻辑摘要、文件目录、FileEntryId预览、完整文件及跨stripe范围 |
+| MD -> XFS / MD -> Btrfs | Experimental | `app-services --test storage_combinations_native`；`public-small/storage-combinations` | 指定原生XFS feature集合与Btrfs SINGLE data / DUP metadata；完整MD逻辑摘要和原生文件字节oracle |
 
-MD 目录与预览共用文件系统探测及打开入口。EXT4 已有公开端到端证明；
-分区后的 MD、MD 后 LVM、XFS、Btrfs 组合仍需要各自的原生公开验收。
+MD目录与预览共用文件系统探测及打开入口。公开准入包含直接EXT4、
+GPT→EXT4、LVM linear→EXT4、指定feature的直接XFS及单设备Btrfs。
+其余分区、LV类型、文件系统feature与嵌套组合分别需要对应原生oracle。
 来源身份包含全部 RAW backing file/E01 segment 的路径、长度、修改时间、创建时间，
 以及原生 MD 元数据和成员关系。每个独立输入还保存完整逻辑磁盘 SHA-256、
 固定 1 MiB 区块摘要和区块长度，使用现有 RustCrypto SHA-256 实现。
@@ -202,6 +205,7 @@ E01 摘要覆盖解压后的逻辑字节；原始 E01 容器摘要由独立来�
 输入输出长度验证保持有效。阶段记录区分读取、解压、摘要、准入和通道等待。
 派生源按内容身份保存独立 descriptor，通过处理阶段、generation 和发布凭据验证目录复用。
 旧 descriptor 格式需要重新导入。
+
 同一来源的分区探测结果供直接 MD 与 PV 发现共同使用。LVM committed metadata
 的版本选择由 `fs-lvm::metadata::select_committed_metadata` 统一处理，
 相同 VG UUID 和 seqno 的冲突内容返回类型化错误。
@@ -214,12 +218,12 @@ Kubernetes 清单保留固定数量且顺序稳定的候选，同时统计全部
 
 集合普通镜像导入共用一个 `Arc<ImageCollectionPlan>`：每个镜像执行一次直接探测，
 按 PV UUID 汇集完整 VG，每个 VG 只展开一次可读取逻辑卷。
-规范路径排序确定稳定目录所属成员，全部物理成员分别保存来源数据库与 PV 分区记录；
-逻辑分区保存 VG/LV UUID 和全部 PV 来源，其他 PV 不重复枚举同一逻辑目录。
+全部物理成员分别保存来源数据库与PV分区记录；跨PV逻辑卷登记为独立LV来源。
+逻辑来源保存VG/LV UUID、原生映射及全部父PV版本，物理成员不重复枚举该逻辑目录。
 集合计划绑定全部输入的完整逻辑磁盘 SHA-256 和固定 1 MiB 区块摘要，
 并保存全部 RAW backing file/E01 segment 的 metadata snapshot。
 来源发现、跨 PV 展开和成员目录读取验证涉及区块；成员发布验证自身及实际 PV 父源，
-集合协调器在成员完成后执行一次完整集合内容复核。
+集合协调器核对成员验证凭据、固定revision与集合fingerprint，不重新扫描完整镜像。
 集合内容 fingerprint 写入来源恢复记录，中断恢复拒绝不同内容或缺失绑定的计划。
 内容绑定和完整复核共用并行扫描器，默认worker为可用逻辑处理器数量且至少四个；
 `FORENSICS_CONTENT_WORKERS`允许显式指定四个及以上数量，没有固定线程数上限。
@@ -241,7 +245,7 @@ RAW、E01、LocalDisk、AndroidSparse 预览统一使用已发布分区记录，
 借用的读取器继续持有摘要许可，最后一个借用释放后归还资源。
 来源 snapshot、PV 检查和 VG 打开使用预算读取工厂。
 内存、metadata、物理读取器、句柄与工作区由 `source-kernel::resource_budget` 管理，
-调度器只负责 CPU 权重。1536 MiB 总估计预算与 1020 MiB 重型工作区决定当前重型成员并发为 1。
+内容扫描与范围验证的CPU执行额度使用同一公共池。1536 MiB总估计预算与1020 MiB重型工作区决定当前重型成员并发为1。
 这些数值属于分配估计；大型实际样本 RSS 性能仍需要单独测量。
 
 ### 4c. dm-thin 一致性边界
@@ -268,6 +272,19 @@ CRC32C 使用 `crc32c 0.6.8` 的 MIT 授权实现，格式约束参考 Linux
 超过上限返回类型化错误。运行期间保持进程内读取，原生工具仅用于生成和核验测试样本。
 当前 thin 能力保持 Experimental；独立恢复持有 snapshot、全部 thin snapshot 变体
 及大型生产 metadata 的性能验证仍未覆盖。
+
+### 4d. Btrfs 完整多设备池
+
+| 能力 | 当前等级 | 公开验证入口 | 范围 |
+|---|---|---|---|
+| 原生完整设备集合 | Experimental | `fs-btrfs --test pool_native`；`public-small/btrfs-pool` | SINGLE、RAID0、RAID1和RAID10，metadata profile与data profile匹配；DUP metadata由MD→Btrfs组合覆盖。核对FSID、devid、设备UUID、generation、geometry及原生映射 |
+| 集合导入与独立来源 | Experimental | `app-services --test btrfs_collection_import_native` | Linux证据集合中的公开RAW整设备成员；每个池发布一个`btrfs_pool`目录来源，物理成员保持独立来源存储并记录原生观察 |
+| 文件目标访问与生命周期 | Experimental | 同上及`evidence-access --test registered_verification` | FileEntryId预览、完整文件和范围读取、公共目标计划与图查询、固定父revision、共享输入深度核验、重复导入、准备态恢复、取消、receipt及父版本变化拒绝、删除派生来源 |
+
+多设备池以文件namespace提供内容，不提供合成的整盘块设备。
+只有完整设备集合通过准入；缺失设备、重复devid、不同FSID、混合generation及
+未复核日志均拒绝。RAID1C3/1C4、RAID5/6、降级读取和其它组合保持未准入。
+新范围执行沿用现有MIT `rust-fs-btrfs 0.10.2`原生解码与校验，不增加独立Btrfs parser。
 
 ## 5. 容器邮件解析器 (V3 计划)
 

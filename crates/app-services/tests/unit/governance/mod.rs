@@ -16,6 +16,41 @@ use transport::dto::{
 use crate::governance::get_v2_governance_snapshot;
 
 #[test]
+fn native_storage_support_facts_preserve_profile_and_composition_limits() {
+    let limits = crate::governance::fact_loader::known_limitations();
+    let btrfs = limits
+        .iter()
+        .find(|item| item.item == "Btrfs 全部设备profile、feature与组合")
+        .unwrap();
+    assert_eq!(
+        btrfs.status,
+        transport::dto::KnownLimitationStatusDto::Partial
+    );
+    for profile in [
+        "SINGLE",
+        "RAID0",
+        "RAID1",
+        "RAID10",
+        "RAID1C3/1C4",
+        "RAID5/6",
+    ] {
+        assert!(btrfs.summary.contains(profile));
+    }
+    assert!(btrfs
+        .summary
+        .contains("缺失设备、降级池及其它组合保持未准入"));
+    let md = limits
+        .iter()
+        .find(|item| item.category == "Linux MD")
+        .unwrap();
+    assert_eq!(md.status, transport::dto::KnownLimitationStatusDto::Partial);
+    for composition in ["GPT→EXT4", "LVM linear→EXT4", "直接XFS", "单设备Btrfs"] {
+        assert!(md.summary.contains(composition));
+    }
+    assert!(md.summary.contains("其它组合继续独立准入"));
+}
+
+#[test]
 fn governance_snapshot_aggregates_runtime_signals() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
     persistence_sqlite::runner::run_all(&conn).unwrap();

@@ -37,6 +37,7 @@ pub fn verify_registered_catalog(
             | DataSourceKind::CephRbd
             | DataSourceKind::MdRaid
             | DataSourceKind::LvmLogicalVolume
+            | DataSourceKind::BtrfsPool
     ) {
         return Ok(());
     }
@@ -46,7 +47,7 @@ pub fn verify_registered_catalog(
         .find(|source| source.id == *source_id)
         .ok_or(StructurePublicationError::InvalidPublication)?;
     let projection = match source.kind {
-        DataSourceKind::CephFs => CatalogProjection::SourceOnly,
+        DataSourceKind::CephFs | DataSourceKind::BtrfsPool => CatalogProjection::SourceOnly,
         DataSourceKind::CephRbd | DataSourceKind::MdRaid | DataSourceKind::LvmLogicalVolume => {
             CatalogProjection::Partition
         }

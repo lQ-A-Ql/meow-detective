@@ -26,6 +26,7 @@ impl BtrfsReader {
             reader: Mutex::new(reader),
             offset,
             size: device_bytes,
+            _reservation: None,
         };
         let filesystem = btrfs_driver::Filesystem::mount_committed_with_cache(
             Arc::new(device),
@@ -46,6 +47,7 @@ pub(crate) struct EvidenceBlockDevice {
     pub(crate) reader: Mutex<Box<dyn EvidenceReader>>,
     pub(crate) offset: u64,
     pub(crate) size: u64,
+    pub(crate) _reservation: Option<Arc<dyn evidence_core::reader::ReaderResourceHold>>,
 }
 
 impl BlockRead for EvidenceBlockDevice {

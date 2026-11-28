@@ -137,6 +137,7 @@ fn probe_image(
         | domain::DataSourceKind::CephFs
         | domain::DataSourceKind::MdRaid
         | domain::DataSourceKind::LvmLogicalVolume
+        | domain::DataSourceKind::BtrfsPool
         | domain::DataSourceKind::NestedRange => {
             return Err(CommandError::unsupported(
                 "Ceph RBD derived sources do not use the host image probe pipeline",

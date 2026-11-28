@@ -30,6 +30,8 @@ pub enum CollectionPlanError {
     MemberMismatch,
     #[error("collection content verification failed: {0}")]
     Content(crate::source_runtime::content::ContentError),
+    #[error("collection Btrfs pool discovery failed: {0}")]
+    Btrfs(#[from] crate::btrfs_pool::BtrfsSourceError),
     #[error("collection MD discovery failed: {0}")]
     MdRaid(#[from] fs_lvm::mdraid::MdRaidError),
 }
@@ -75,6 +77,7 @@ pub struct ImageCollectionPlan {
     md_members: Vec<crate::mdraid::MdRaidMemberPlan>,
     observations: Vec<Vec<domain::structure::NativeObservation>>,
     logical_volumes: Vec<ImageFilesystemCandidate>,
+    btrfs_pools: Vec<crate::btrfs_pool::BtrfsPoolPlan>,
     _memory: std::sync::Arc<super::collection_memory::PlanMemory>,
 }
 
@@ -111,6 +114,20 @@ impl ImageCollectionPlan {
         let snapshot = SourceSnapshot::merged(&source_snapshots);
         let content = super::collection_content::CollectionContent::capture(&canonical, cancel)?;
         let (mut probes, pv_infos, mut md_members) = inspect_sources(&canonical, &content, cancel)?;
+        let btrfs_pools = crate::btrfs_pool::discover(
+            &canonical,
+            &mut probes,
+            |source| {
+                Ok(content
+                    .get(&source.source_path, &source.source_kind)
+                    .map_err(|error| {
+                        crate::btrfs_pool::BtrfsSourceError::Io(std::io::Error::other(error))
+                    })?
+                    .as_ref()
+                    .clone())
+            },
+            cancel,
+        )?;
         let mut warnings = Vec::new();
         let complete = super::collection_groups::complete_groups(&pv_infos, &mut warnings)?;
         for group in complete {
@@ -120,8 +137,9 @@ impl ImageCollectionPlan {
         for probe in &mut probes {
             probe.warnings.extend(warnings.iter().cloned());
         }
-        let observations =
+        let mut observations =
             super::collection_observations::collect(&canonical, &pv_infos, &md_members)?;
+        crate::btrfs_pool::append_observations(&canonical, &btrfs_pools, &mut observations);
         let logical_volumes = take_logical_volumes(&mut probes);
         snapshot.validate()?;
         let memory = super::collection_memory::retain(
@@ -132,6 +150,7 @@ impl ImageCollectionPlan {
             &md_members,
             &observations,
             &logical_volumes,
+            &btrfs_pools,
         )?;
         Ok(Self {
             sources: canonical,
@@ -142,6 +161,7 @@ impl ImageCollectionPlan {
             md_members,
             observations,
             logical_volumes,
+            btrfs_pools,
             _memory: memory,
         })
     }
@@ -288,6 +308,10 @@ impl ImageCollectionPlan {
 
     pub fn logical_volume_candidates(&self) -> &[ImageFilesystemCandidate] {
         &self.logical_volumes
+    }
+
+    pub fn btrfs_pools(&self) -> &[crate::btrfs_pool::BtrfsPoolPlan] {
+        &self.btrfs_pools
     }
 }
 

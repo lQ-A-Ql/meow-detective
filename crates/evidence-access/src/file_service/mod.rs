@@ -4,6 +4,7 @@ mod block_filesystem;
 mod bound_header;
 pub use bound_header::BoundEvidenceReaderResolver;
 mod browse;
+pub(crate) mod btrfs_adapter;
 mod catalog_browse;
 pub(crate) mod cephfs_adapter;
 mod checkpointed_enumeration;

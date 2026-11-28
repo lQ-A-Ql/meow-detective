@@ -3,6 +3,7 @@ use thiserror::Error;
 use evidence_access::datasource_service;
 
 mod audit_parser;
+mod btrfs_materialization;
 mod capability;
 mod collection_publication;
 pub use collection_publication::validate_collection_publication;
@@ -48,6 +49,7 @@ pub use audit_parser::{
     parse_kubernetes_audit_log, KubernetesAuditEvent, KubernetesAuditIndicator,
     KubernetesAuditParseResult,
 };
+pub use btrfs_materialization::{materialize_btrfs_pool, materialize_linux_evidence_set_btrfs};
 pub use capability::{require_ceph_scope, require_kubernetes_scope, require_os_scope};
 pub use etcd_bolt::{parse_etcd_bolt_metadata, EtcdBoltEntry, EtcdBoltSummary};
 pub use etcd_wal::{parse_etcd_wal, EtcdWalRecord, EtcdWalSummary};

@@ -25,6 +25,9 @@ impl SourceReadContext<'_> {
         descriptor: &PreviewDescriptor,
         maximum: usize,
     ) -> Result<Option<Vec<u8>>, FileServiceError> {
+        if descriptor.source_kind == "btrfs_pool" {
+            return self.read_btrfs_header(descriptor, maximum).map(Some);
+        }
         if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
             return Ok(None);
         }
@@ -73,5 +76,48 @@ impl SourceReadContext<'_> {
             "Native file path could not be resolved: {}",
             attempts.join("; ")
         )))
+    }
+
+    fn read_btrfs_header(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+        maximum: usize,
+    ) -> Result<Vec<u8>, FileServiceError> {
+        if descriptor.data_source_id != self.data_source_id.0 {
+            return Err(FileServiceError::security(
+                "Btrfs descriptor belongs to another source",
+            ));
+        }
+        let key = format!("btrfs:{}", self.data_source_id.0);
+        if !self.native_filesystems.contains_key(&key) {
+            let (reference, _) =
+                persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(
+                    self.case_conn,
+                )
+                .current(&self.case_id.0, &self.data_source_id.0)?;
+            let (filesystem, _) = crate::btrfs_pool::open_registered_filesystem(
+                self.case_conn,
+                self.case_root,
+                &reference,
+            )
+            .map_err(|error| FileServiceError::Io(std::io::Error::other(error)))?;
+            self.native_filesystems
+                .insert(key.clone(), Box::new(filesystem));
+        }
+        let filesystem = self
+            .native_filesystems
+            .get(&key)
+            .ok_or_else(|| FileServiceError::other("Btrfs filesystem is missing"))?;
+        let path = descriptor
+            .path
+            .strip_prefix("[P0]/")
+            .unwrap_or(&descriptor.path);
+        filesystem
+            .read_file_range(
+                path,
+                0,
+                maximum.min(usize::try_from(descriptor.size).unwrap_or(usize::MAX)),
+            )
+            .map_err(Into::into)
     }
 }

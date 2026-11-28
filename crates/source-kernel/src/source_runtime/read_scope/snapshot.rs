@@ -69,6 +69,7 @@ pub(super) fn capture(
         sources.source_kind(&source_id).map_err(io::Error::other)?,
         domain::DataSourceKind::MdRaid
             | domain::DataSourceKind::LvmLogicalVolume
+            | domain::DataSourceKind::BtrfsPool
             | domain::DataSourceKind::CephRbd
             | domain::DataSourceKind::CephFs
     ) && versions.is_empty()

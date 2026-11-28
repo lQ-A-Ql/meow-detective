@@ -19,6 +19,7 @@ use transport::CommandError;
 pub(super) struct ReadyImportState {
     pub(super) mdraid_sources: Vec<domain::DataSource>,
     pub(super) lvm_sources: Vec<domain::DataSource>,
+    pub(super) btrfs_sources: Vec<domain::DataSource>,
     pub(super) ceph_scope_id: Option<String>,
 }
 
@@ -111,6 +112,12 @@ pub(super) fn finish_ready_import(
 
 fn materialization_note(state: &ReadyImportState) -> String {
     let mut notes = Vec::new();
+    if !state.btrfs_sources.is_empty() {
+        notes.push(format!(
+            "{} Btrfs filesystem source(s)",
+            state.btrfs_sources.len()
+        ));
+    }
     if !state.mdraid_sources.is_empty() {
         notes.push(format!(
             "{} nested MD RAID catalog(s)",

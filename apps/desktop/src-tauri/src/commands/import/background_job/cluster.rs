@@ -1,3 +1,4 @@
+mod btrfs;
 mod completion;
 mod completion_finish;
 mod execution;

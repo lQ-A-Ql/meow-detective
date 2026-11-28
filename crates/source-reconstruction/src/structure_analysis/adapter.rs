@@ -14,6 +14,7 @@ pub const COLLECTION_ADAPTER_VERSION: &str = "collection-source-v2";
 pub const LVM_ADAPTER_ID: &str = "lvm-volume";
 pub const RBD_ADAPTER_ID: &str = "ceph-rbd-head";
 pub const CEPHFS_ADAPTER_ID: &str = "cephfs-file";
+pub const BTRFS_ADAPTER_ID: &str = "btrfs-file";
 pub const REGISTERED_SOURCE_ADAPTER_ID: &str = "registered-source";
 
 pub struct AdapterRegistry {
@@ -29,6 +30,12 @@ impl AdapterRegistry {
         registry.register(filesystem_adapter())?;
         registry.register(collection_descriptor())?;
         for (id, version, formats, space) in [
+            (
+                BTRFS_ADAPTER_ID,
+                evidence_access::btrfs_pool::ADAPTER_VERSION,
+                vec!["btrfs-pool"],
+                AddressSpace::File,
+            ),
             (
                 LVM_ADAPTER_ID,
                 evidence_access::lvm::LVM_ADAPTER_VERSION,
@@ -54,14 +61,29 @@ impl AdapterRegistry {
                 AddressSpace::PhysicalByte,
             ),
         ] {
+            let mut features = ["metadata", "range-read"]
+                .into_iter()
+                .map(str::to_owned)
+                .collect::<BTreeSet<_>>();
+            if id == BTRFS_ADAPTER_ID {
+                features.extend(
+                    [
+                        "complete-device-set",
+                        "single",
+                        "dup",
+                        "raid0",
+                        "raid1",
+                        "raid10",
+                    ]
+                    .into_iter()
+                    .map(str::to_owned),
+                );
+            }
             registry.register(StructureAdapterDescriptor {
                 id: id.into(),
                 version: version.into(),
                 formats: formats.into_iter().map(str::to_owned).collect(),
-                features: ["metadata", "range-read"]
-                    .into_iter()
-                    .map(str::to_owned)
-                    .collect(),
+                features,
                 input_spaces: vec![space],
                 output_spaces: vec![space],
                 operations: operations(),

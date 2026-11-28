@@ -116,7 +116,9 @@ pub fn materialize_lvm_source_catalog_with_cancel(
             return Ok(());
         }
         ProcessingPhaseClaim::Busy(_) => return Err(LvmPlanError::Busy),
-        ProcessingPhaseClaim::Acquired(record) => phase::LvmAttempt::new(record)?,
+        ProcessingPhaseClaim::Acquired(record) => {
+            phase::LvmAttempt::new(record, phase::VERSION).map_err(map_publication_error)?
+        }
     };
     let validator = validator::LvmValidator { case_root };
     let result = build::build_and_publish(build::CatalogBuild {

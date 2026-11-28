@@ -17,7 +17,7 @@ use super::{
     scheduler::schedule_work_items,
 };
 
-mod cephfs;
+mod file_targets;
 
 pub fn plan_structure_analysis(
     conn: &rusqlite::Connection,
@@ -43,8 +43,11 @@ pub fn plan_structure_analysis(
     let registry = AdapterRegistry::default_registry()?;
     let mut work_items = Vec::new();
     for source in &build.sources {
-        if source.data_source.kind == DataSourceKind::CephFs {
-            cephfs::append(conn, case_root, source, request, &registry, &mut work_items)?;
+        if matches!(
+            source.data_source.kind,
+            DataSourceKind::CephFs | DataSourceKind::BtrfsPool
+        ) {
+            file_targets::append(conn, case_root, source, request, &registry, &mut work_items)?;
             continue;
         }
         let md_item = add_source_work_item(source, request, &registry, &mut work_items)?;

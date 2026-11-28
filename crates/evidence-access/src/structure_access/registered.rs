@@ -17,6 +17,7 @@ use source_kernel::source_runtime::{
 use super::{TargetAccessError, TargetAccessPlan};
 
 pub const CEPHFS_FILE_TARGET_PREFIX: &str = "cephfs-file-v1:";
+pub const BTRFS_FILE_TARGET_PREFIX: &str = "btrfs-file-v1:";
 pub const REGISTERED_READ_POLICY: &str = "registered-range-v1";
 
 pub struct RegisteredAccessRequest {
@@ -88,7 +89,13 @@ fn validate_target(
     revisions.require_current(source)?;
     request.demand.ranges.validate()?;
     if let Some(file) = &request.file_id {
-        if request.demand.target_fingerprint != format!("{CEPHFS_FILE_TARGET_PREFIX}{}", file.0) {
+        let prefix =
+            match DataSourceRepo::new(conn).source_kind(&DataSourceId(source.source_id.clone()))? {
+                DataSourceKind::CephFs => CEPHFS_FILE_TARGET_PREFIX,
+                DataSourceKind::BtrfsPool => BTRFS_FILE_TARGET_PREFIX,
+                _ => return Err(TargetAccessError::UnsupportedTarget),
+            };
+        if request.demand.target_fingerprint != format!("{prefix}{}", file.0) {
             return Err(TargetAccessError::UnsupportedTarget);
         }
         return Ok(());
@@ -165,6 +172,16 @@ fn open_reader(
             )
             .map_err(|error| error.into_db_error())?,
         );
+    }
+    if kind == DataSourceKind::BtrfsPool {
+        let file_id = request
+            .file_id
+            .as_ref()
+            .ok_or(TargetAccessError::UnsupportedTarget)?;
+        return crate::file_service::btrfs_adapter::open_evidence_file(
+            conn, root, reference, file_id,
+        )
+        .map_err(|error| TargetAccessError::Io(std::io::Error::other(error)));
     }
     if kind == DataSourceKind::CephFs {
         let file_id = request

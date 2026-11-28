@@ -225,3 +225,27 @@ The review used the tagged `RustCrypto/SSH` `ssh-key/v0.6.7` Cargo manifest and
 key/configuration APIs, the published `compcol 0.8.0` Cargo manifest and LZNT1
 decoder implementation, and the Microsoft `RtlDecompressBuffer`,
 `RtlDecompressBufferEx` and `RtlGetCompressionWorkSpaceSize` specifications.
+
+## Storage profile admission reviewed on 2026-11-28
+
+`rust-fs-btrfs = 0.10.2` remains the existing MIT native provider.
+The reviewed surface comprises `Filesystem::mount_pool`, checked superblock
+selection, chunk profiles/mappings and checksum-verified file reads.
+`rust-fs-core = 0.3.14` supplies the existing read-only `BlockRead` interface.
+Dependency aliases and versions are centralized in workspace dependencies.
+No new native-format decoder or runtime dependency is introduced.
+
+The application admits complete Btrfs device sets only, with SINGLE, DUP, RAID0,
+RAID1 and RAID10 bounded by their public native-content oracles. Dataset creation
+uses Linux Btrfs and mdadm tooling; the Rust runtime only reads the results.
+Members bind FSID, devid, device UUID, generation, geometry, fixed source revisions
+and native mapping digest. Unsupported profiles and incomplete sets fail closed.
+
+The separate ZFS candidate remains `lamzfs 0.1.4`, inspected at
+`1e0364887921416c2734d9c86fca57cd115fdf17`. Its Cargo manifest declares MIT;
+LICENSE-MIT and NOTICE describe the MIT election for the vendored rzfs decoders.
+The reviewed APIs are read-only pool import, dataset namespace and file reads.
+The README and OpenZFS fixture manifest constrain its native layouts and features.
+It is not added to this workspace: project-level pool lifecycle, source attribution,
+range authorization and complete native-content acceptance remain required before
+ZFS capability admission.

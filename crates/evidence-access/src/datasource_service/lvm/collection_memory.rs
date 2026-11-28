@@ -28,6 +28,7 @@ impl PartialEq for PlanMemory {
 }
 impl Eq for PlanMemory {}
 
+#[allow(clippy::too_many_arguments)]
 pub(super) fn retain(
     permit: ResourcePermit,
     sources: &[LvmDiscoverySource],
@@ -36,8 +37,13 @@ pub(super) fn retain(
     md_members: &[crate::mdraid::MdRaidMemberPlan],
     observations: &[Vec<domain::structure::NativeObservation>],
     logical_volumes: &[super::super::ImageFilesystemCandidate],
+    btrfs_pools: &[crate::btrfs_pool::BtrfsPoolPlan],
 ) -> std::io::Result<Arc<PlanMemory>> {
     let mut bytes = snapshot.metadata_bytes() + 4096;
+    bytes += serde_json::to_vec(btrfs_pools)
+        .map_err(std::io::Error::other)?
+        .len() as u64
+        * 2;
     bytes += serde_json::to_vec(observations)
         .map_err(std::io::Error::other)?
         .len() as u64

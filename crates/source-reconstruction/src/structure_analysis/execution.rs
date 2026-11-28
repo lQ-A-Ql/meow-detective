@@ -2,13 +2,14 @@ use std::sync::atomic::AtomicBool;
 
 use domain::structure::StructureWorkItem;
 use evidence_access::structure_access::{
-    verify_registered_access, RegisteredAccessRequest, CEPHFS_FILE_TARGET_PREFIX,
+    verify_registered_access, RegisteredAccessRequest, BTRFS_FILE_TARGET_PREFIX,
+    CEPHFS_FILE_TARGET_PREFIX,
 };
 use persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo;
 use source_kernel::source_runtime::verification::VerificationBatch;
 
 use super::{
-    adapter::CEPHFS_ADAPTER_ID,
+    adapter::{BTRFS_ADAPTER_ID, CEPHFS_ADAPTER_ID},
     planner::plan_structure_analysis,
     request::{
         StructureAnalysisError, StructureAnalysisRequest, StructureAnalysisRun,
@@ -66,13 +67,18 @@ fn execute_work_item(
         .demand
         .clone()
         .ok_or_else(|| StructureAnalysisError::Plan("work item demand is missing".into()))?;
-    let file_id = if item.adapter_id == CEPHFS_ADAPTER_ID {
+    let file_id = if matches!(
+        item.adapter_id.as_str(),
+        CEPHFS_ADAPTER_ID | BTRFS_ADAPTER_ID
+    ) {
         Some(domain::FileEntryId(
             item.target_fingerprint
                 .strip_prefix(CEPHFS_FILE_TARGET_PREFIX)
-                .ok_or_else(|| {
-                    StructureAnalysisError::Plan("CephFS file target is missing".into())
-                })?
+                .or_else(|| {
+                    item.target_fingerprint
+                        .strip_prefix(BTRFS_FILE_TARGET_PREFIX)
+                })
+                .ok_or_else(|| StructureAnalysisError::Plan("file target is missing".into()))?
                 .into(),
         ))
     } else {

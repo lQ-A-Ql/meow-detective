@@ -188,6 +188,7 @@ impl SourceBoundEvidenceOpener for FilesystemEvidenceOpener {
             | DataSourceKind::CephFs
             | DataSourceKind::MdRaid
             | DataSourceKind::LvmLogicalVolume
+            | DataSourceKind::BtrfsPool
             | DataSourceKind::NestedRange => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),
@@ -253,6 +254,7 @@ impl SourceBoundEvidenceOpener for CaseScopedFilesystemEvidenceOpener<'_> {
             | DataSourceKind::CephFs
             | DataSourceKind::MdRaid
             | DataSourceKind::LvmLogicalVolume
+            | DataSourceKind::BtrfsPool
             | DataSourceKind::NestedRange => Err(BoundEvidenceOpenError {
                 kind: io::ErrorKind::Unsupported,
             }),

@@ -26,6 +26,7 @@ pub(crate) fn open_file_content_for_descriptor(
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
         "md_raid" => open_mdraid_descriptor_file(descriptor),
         "lvm_logical_volume" => open_lvm_volume_descriptor_file(descriptor),
+        "btrfs_pool" => crate::file_service::btrfs_adapter::open_descriptor(descriptor),
         other => unsupported_source(other),
     }?;
     Ok(match reader {
@@ -86,6 +87,7 @@ pub(crate) fn open_range_content_for_descriptor(
         "raw" | "local_disk" | "android_sparse" => open_raw_descriptor_file(descriptor),
         "md_raid" => open_mdraid_descriptor_file(descriptor),
         "lvm_logical_volume" => open_lvm_volume_descriptor_file(descriptor),
+        "btrfs_pool" => crate::file_service::btrfs_adapter::open_descriptor(descriptor),
         other => unsupported_source(other),
     }
 }

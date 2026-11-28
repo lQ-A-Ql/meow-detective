@@ -1,0 +1,12 @@
+  {
+      "report": [
+          {
+              "lv": [
+                  {"lv_uuid":"bO3qYT-lygP-QpvU-nK2I-qWOj-Z7hq-C0XYqp", "lv_name":"evidence", "segtype":"linear", "seg_size":"64.00m", "devices":"/dev/md127(0)"}
+              ]
+          }
+      ]
+      ,
+      "log": [
+      ]
+  }

@@ -1,6 +1,21 @@
 use domain::structure::{MdMetadataVersion, NativeVersion};
 
 #[test]
+fn btrfs_native_version_preserves_pool_generation_and_mapping() {
+    let version = NativeVersion::Btrfs {
+        fsid: "a72d877f5bdc4223b2724973bed9591f".into(),
+        generation: 11,
+        device_count: 4,
+        mapping_sha256: "c".repeat(64),
+    };
+    let serialized = serde_json::to_string(&version).unwrap();
+    assert_eq!(
+        serde_json::from_str::<NativeVersion>(&serialized).unwrap(),
+        version
+    );
+}
+
+#[test]
 fn md_versions_round_trip_with_explicit_native_format_names() {
     for (metadata_version, encoded) in [
         (MdMetadataVersion::V0_90, "v0_90"),

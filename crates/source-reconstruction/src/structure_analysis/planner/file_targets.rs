@@ -2,13 +2,13 @@ use domain::{
     structure::{
         ByteRange, ByteRangeSet, ReadDemand, ReadIntent, ReadVerification, StructureWorkItem,
     },
-    CaseId,
+    CaseId, DataSourceKind,
 };
 use persistence_source::repositories::file_repo::FileRepo;
 use persistence_sqlite::repositories::ceph_fs_lineage_repo::CephFsDerivedLineageRepo;
 
 use crate::structure_analysis::{
-    adapter::{AdapterRegistry, CEPHFS_ADAPTER_ID},
+    adapter::{AdapterRegistry, BTRFS_ADAPTER_ID, CEPHFS_ADAPTER_ID},
     graph_builder::SourceContext,
     request::{StructureAnalysisError, StructureAnalysisRequest},
 };
@@ -21,20 +21,17 @@ pub(super) fn append(
     registry: &AdapterRegistry,
     items: &mut Vec<StructureWorkItem>,
 ) -> Result<(), StructureAnalysisError> {
+    let btrfs = source.data_source.kind == DataSourceKind::BtrfsPool;
+    let adapter_id = if btrfs {
+        BTRFS_ADAPTER_ID
+    } else {
+        CEPHFS_ADAPTER_ID
+    };
     let adapter = registry
-        .get(CEPHFS_ADAPTER_ID)
-        .ok_or_else(|| StructureAnalysisError::UnsupportedAdapter(CEPHFS_ADAPTER_ID.into()))?;
+        .get(adapter_id)
+        .ok_or_else(|| StructureAnalysisError::UnsupportedAdapter(adapter_id.into()))?;
     super::require_features(adapter, &request.required_features)?;
-    let lineage = CephFsDerivedLineageRepo::new(conn)
-        .find_by_data_source(&source.data_source.id.0)?
-        .ok_or_else(|| StructureAnalysisError::Plan("CephFS lineage is missing".into()))?;
-    if lineage.lineage.source_capability != "bounded-preview" {
-        if request.intent == ReadIntent::ContentRead {
-            return Err(StructureAnalysisError::UnsupportedFeature {
-                adapter: CEPHFS_ADAPTER_ID.into(),
-                feature: "bounded-preview".into(),
-            });
-        }
+    if !btrfs && !cephfs_admitted(conn, source, request)? {
         return Ok(());
     }
     let ready = source_kernel::source_db::open_ready_source_read_only_by_id(
@@ -50,7 +47,7 @@ pub(super) fn append(
         }
         if items.len() >= super::super::scheduler::MAX_WORK_ITEMS {
             return Err(persistence_sqlite::DbError::System(
-                "CephFS work-item bound exceeded".into(),
+                "file-target work-item bound exceeded".into(),
             ));
         }
         let size = entry.size.expect("nonempty file size");
@@ -61,7 +58,11 @@ pub(super) fn append(
         };
         let fingerprint = format!(
             "{}{}",
-            evidence_access::structure_access::CEPHFS_FILE_TARGET_PREFIX,
+            if btrfs {
+                evidence_access::structure_access::BTRFS_FILE_TARGET_PREFIX
+            } else {
+                evidence_access::structure_access::CEPHFS_FILE_TARGET_PREFIX
+            },
             entry.id.0
         );
         let ranges =
@@ -86,7 +87,7 @@ pub(super) fn append(
             demand = demand.with_attempt(attempt.clone()).map_err(error)?;
         }
         items.push(StructureWorkItem {
-            id: format!("cephfs-file:{}:{}", source.data_source.id.0, entry.id.0),
+            id: format!("{adapter_id}:{}:{}", source.data_source.id.0, entry.id.0),
             source_revision: source.revision_ref.clone(),
             target_fingerprint: fingerprint,
             adapter_id: adapter.id.clone(),
@@ -101,6 +102,26 @@ pub(super) fn append(
         Ok(())
     })?;
     Ok(())
+}
+
+fn cephfs_admitted(
+    conn: &rusqlite::Connection,
+    source: &SourceContext,
+    request: &StructureAnalysisRequest,
+) -> Result<bool, StructureAnalysisError> {
+    let lineage = CephFsDerivedLineageRepo::new(conn)
+        .find_by_data_source(&source.data_source.id.0)?
+        .ok_or_else(|| StructureAnalysisError::Plan("CephFS lineage is missing".into()))?;
+    if lineage.lineage.source_capability == "bounded-preview" {
+        return Ok(true);
+    }
+    if request.intent == ReadIntent::ContentRead {
+        return Err(StructureAnalysisError::UnsupportedFeature {
+            adapter: CEPHFS_ADAPTER_ID.into(),
+            feature: "bounded-preview".into(),
+        });
+    }
+    Ok(false)
 }
 
 fn error(error: impl std::fmt::Display) -> persistence_sqlite::DbError {

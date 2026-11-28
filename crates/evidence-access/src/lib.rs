@@ -17,6 +17,7 @@ pub use source_kernel::{
 
 pub mod bitlocker_runtime;
 pub mod bolt_reader_service;
+pub mod btrfs_pool;
 pub mod catalog_projection;
 pub mod datasource_service;
 pub mod digest_service;

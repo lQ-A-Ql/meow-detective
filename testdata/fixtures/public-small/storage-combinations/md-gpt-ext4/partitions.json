@@ -1,0 +1,20 @@
+{
+   "partitiontable": {
+      "label": "gpt",
+      "id": "3DDED2F8-567D-41A7-931B-0019BD263FE3",
+      "device": "/dev/md/forensic-s06-431",
+      "unit": "sectors",
+      "firstlba": 2048,
+      "lastlba": 323550,
+      "sectorsize": 512,
+      "partitions": [
+         {
+            "node": "/dev/md/forensic-s06-431p1",
+            "start": 2048,
+            "size": 196608,
+            "type": "0FC63DAF-8483-4772-8E79-3D69D8477DE4",
+            "uuid": "1E67145B-7EBF-47E9-A89C-8DF963134824"
+         }
+      ]
+   }
+}

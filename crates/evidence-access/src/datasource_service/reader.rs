@@ -28,6 +28,7 @@ pub fn open_evidence_reader(
         | DataSourceKind::LogicalArchive
         | DataSourceKind::CephRbd
         | DataSourceKind::CephFs
+        | DataSourceKind::BtrfsPool
         | DataSourceKind::NestedRange => Err(std::io::Error::new(
             std::io::ErrorKind::Unsupported,
             format!("data source kind {source_kind} is not a host image reader"),

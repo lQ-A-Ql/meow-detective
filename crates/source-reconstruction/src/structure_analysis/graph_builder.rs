@@ -1,4 +1,6 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
+mod sources;
+use sources::select_sources;
 
 use domain::{
     structure::{
@@ -113,20 +115,7 @@ fn append_source_graph(
                     "identityState": object.as_ref().map(|object| object.identity_state.clone()),
                 }),
             });
-        let version_node = StructureNodeId(format!("version:{}", version.id.0));
-        nodes
-            .entry(version_node.clone())
-            .or_insert_with(|| StructureNode {
-                id: version_node.clone(),
-                kind: StructureNodeKind::ObjectVersion,
-                label: version.adapter_version.clone(),
-                details: serde_json::json!({
-                    "storageObjectId": version.storage_object_id,
-                    "mappingSha256": version.mapping_sha256,
-                    "consistency": version.consistency,
-                    "versionKind": version.version_kind,
-                }),
-            });
+        let version_node = add_version_node(nodes, version);
         add_edge(
             graph,
             source_node.clone(),
@@ -183,30 +172,24 @@ fn append_source_graph(
     })
 }
 
-fn select_sources<'a>(
-    sources: &'a [DataSource],
-    requested: &[String],
-) -> Result<Vec<&'a DataSource>, StructureAnalysisError> {
-    if requested.is_empty() {
-        return Ok(sources.iter().collect());
-    }
-    let by_id = sources
-        .iter()
-        .map(|source| (source.id.0.as_str(), source))
-        .collect::<BTreeMap<_, _>>();
-    let mut seen = BTreeSet::new();
-    requested
-        .iter()
-        .map(|source_id| {
-            if !seen.insert(source_id.as_str()) {
-                return Err(StructureAnalysisError::MissingSource(source_id.clone()));
-            }
-            by_id
-                .get(source_id.as_str())
-                .copied()
-                .ok_or_else(|| StructureAnalysisError::MissingSource(source_id.clone()))
-        })
-        .collect()
+fn add_version_node(
+    nodes: &mut BTreeMap<StructureNodeId, StructureNode>,
+    version: &StorageObjectVersion,
+) -> StructureNodeId {
+    let id = StructureNodeId(format!("version:{}", version.id.0));
+    nodes.entry(id.clone()).or_insert_with(|| StructureNode {
+        id: id.clone(),
+        kind: StructureNodeKind::ObjectVersion,
+        label: version.adapter_version.clone(),
+        details: serde_json::json!({
+            "storageObjectId": version.storage_object_id,
+            "mappingSha256": version.mapping_sha256,
+            "consistency": version.consistency,
+            "nativeVersions": version.native_versions,
+            "versionKind": version.version_kind,
+        }),
+    });
+    id
 }
 
 fn add_source_node(

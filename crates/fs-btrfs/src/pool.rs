@@ -18,6 +18,7 @@ pub struct BtrfsDeviceIdentity {
     pub generation: u64,
     pub root: u64,
     pub chunk_root: u64,
+    pub geometry_sha256: String,
     pub device_count: u64,
     pub devid: u64,
     pub device_uuid: String,
@@ -57,19 +58,43 @@ fn device(
         .checked_sub(offset)
         .filter(|size| *size >= 0x11000)
         .ok_or(BtrfsPoolError::Incomplete)?;
+    let reservation = reader
+        .reserve_work(btrfs_driver::fs::NODE_CACHE_BLOCKS as u64 * 65536 + 2 * 1024 * 1024)?;
     Ok(Arc::new(EvidenceBlockDevice {
         reader: Mutex::new(reader),
         offset,
         size,
+        _reservation: reservation,
     }))
 }
 
 fn identity(superblock: &Superblock) -> BtrfsDeviceIdentity {
+    let mut geometry = Sha256::new();
+    for value in [
+        superblock.sectorsize,
+        superblock.nodesize,
+        superblock.stripesize,
+    ] {
+        geometry.update(value.to_le_bytes());
+    }
+    for value in [
+        superblock.compat_flags,
+        superblock.compat_ro_flags,
+        superblock.incompat_flags,
+        superblock.chunk_root_generation,
+        superblock.total_bytes,
+    ] {
+        geometry.update(value.to_le_bytes());
+    }
+    geometry.update(superblock.metadata_uuid);
+    geometry.update(&superblock.sys_chunk_array);
+    geometry.update(superblock.csum_type.to_raw().to_le_bytes());
     BtrfsDeviceIdentity {
         fsid: hex::encode(superblock.fsid),
         generation: superblock.generation,
         root: superblock.root,
         chunk_root: superblock.chunk_root,
+        geometry_sha256: hex::encode(geometry.finalize()),
         device_count: superblock.num_devices,
         devid: superblock.dev_item.devid,
         device_uuid: hex::encode(superblock.dev_item.uuid),
@@ -101,6 +126,9 @@ impl BtrfsReader {
         for (reader, offset) in inputs {
             let device = device(reader, offset)?;
             let (superblock, _) = btrfs_driver::superblock::read_superblock(device.as_ref())?;
+            if superblock.has_dirty_log() {
+                return Err(btrfs_driver::Error::DirtyLog.into());
+            }
             if superblock.dev_item.total_bytes > device.size_bytes() {
                 return Err(BtrfsPoolError::Incomplete);
             }
@@ -111,9 +139,7 @@ impl BtrfsReader {
         let filesystem = btrfs_driver::Filesystem::mount_pool(devices)?;
         let profiles = validate_mapping(&filesystem, &identities)?;
         identities.sort_by_key(|identity| identity.devid);
-        let mapping_sha256 = hex::encode(Sha256::digest(
-            format!("{:?}", filesystem.chunk_map().chunks()).as_bytes(),
-        ));
+        let mapping_sha256 = mapping_digest(&filesystem);
         let identity = BtrfsPoolIdentity {
             devices: identities,
             profiles,
@@ -127,6 +153,33 @@ impl BtrfsReader {
             identity,
         ))
     }
+}
+
+fn mapping_digest(filesystem: &btrfs_driver::Filesystem) -> String {
+    let mut digest = Sha256::new();
+    digest.update(b"btrfs-chunk-map-v1");
+    for chunk in filesystem.chunk_map().chunks() {
+        for value in [
+            chunk.logical,
+            chunk.length,
+            chunk.owner,
+            chunk.stripe_len,
+            chunk.chunk_type,
+        ] {
+            digest.update(value.to_le_bytes());
+        }
+        for value in [chunk.io_align, chunk.io_width, chunk.sector_size] {
+            digest.update(value.to_le_bytes());
+        }
+        digest.update(chunk.num_stripes.to_le_bytes());
+        digest.update(chunk.sub_stripes.to_le_bytes());
+        for stripe in &chunk.stripes {
+            digest.update(stripe.devid.to_le_bytes());
+            digest.update(stripe.offset.to_le_bytes());
+            digest.update(stripe.dev_uuid);
+        }
+    }
+    hex::encode(digest.finalize())
 }
 
 fn validate_members(identities: &[BtrfsDeviceIdentity]) -> Result<(), BtrfsPoolError> {
@@ -144,6 +197,7 @@ fn validate_members(identities: &[BtrfsDeviceIdentity]) -> Result<(), BtrfsPoolE
             || member.generation != first.generation
             || member.root != first.root
             || member.chunk_root != first.chunk_root
+            || member.geometry_sha256 != first.geometry_sha256
             || member.device_count != first.device_count
         {
             return Err(BtrfsPoolError::Conflict);
