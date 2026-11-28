@@ -62,6 +62,7 @@ pub mod storage_control_repo;
 pub mod storage_object_repo;
 pub mod storage_recovery_repo;
 pub mod structure_activity_repo;
+pub mod structure_namespace_checkpoint_repo;
 pub mod structure_observation_repo;
 pub mod structure_view_attempt_repo;
 pub mod timeline_facets_repo;
