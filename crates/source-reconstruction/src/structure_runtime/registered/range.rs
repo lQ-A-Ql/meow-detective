@@ -38,6 +38,7 @@ impl StructureOperation for RegisteredRangeOperation {
         match &context.request.version_selection {
             VersionSelection::Current => {}
             VersionSelection::Exact { view_id } if view_id == &entry.capability.view_id => {}
+            VersionSelection::Exact { .. } => return Ok(BindingDecision::NotMatched),
             _ => return Err(RuntimeError::InvalidDefinition),
         }
         let source = context
@@ -211,13 +212,14 @@ fn range_output(
     )
     .map_err(|_| RuntimeError::InvalidOutput)?;
     Ok(ActivityOutput {
-        proof,
+        proof: std::sync::Arc::new(super::super::ActivityProof::Range(proof)),
         capabilities: vec![CapabilityEntry {
             capability,
             scope_id: activity.scope_id.clone(),
             native_roles: BTreeSet::from(["verified-block".into()]),
         }],
         target_results: vec![],
+        analysis: None,
     })
 }
 

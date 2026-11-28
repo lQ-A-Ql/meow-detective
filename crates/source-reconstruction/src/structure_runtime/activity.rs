@@ -104,6 +104,8 @@ pub enum RuntimeError {
     Frontier(#[from] super::frontier::FrontierError),
     #[error(transparent)]
     Database(#[from] persistence_sqlite::DbError),
+    #[error(transparent)]
+    AnalysisStorage(#[from] persistence_source::analysis_results::AnalysisResultError),
     #[error("runtime activity definition is invalid")]
     InvalidDefinition,
     #[error("runtime registration is invalid")]

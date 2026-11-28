@@ -76,13 +76,14 @@ impl StructureOperation for CompleteBlockOperation {
             status: TargetStatus::Verified,
             required_capabilities: activity.required_capabilities.clone(),
             coverage: TargetCoverage::Bytes(coverage),
-            evidence_ids: BTreeSet::from([proof.receipt().id.clone()]),
+            evidence_ids: BTreeSet::from([proof.id().to_owned()]),
             error: None,
         };
         Ok(ActivityOutput {
             proof,
             capabilities: vec![],
             target_results: vec![result],
+            analysis: None,
         })
     }
 }

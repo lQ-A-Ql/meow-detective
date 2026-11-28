@@ -15,12 +15,12 @@ use persistence_sqlite::repositories::structure_activity_repo::{
     ActivityRecord, StructureActivityRepo,
 };
 use rusqlite::Connection;
-use source_kernel::source_runtime::verification::{ValidatedReceipt, VerificationBatch};
+use source_kernel::source_runtime::verification::VerificationBatch;
 
 use super::{
     frontier::{CapabilityEntry, CapabilityIndex, Frontier, PendingBindings},
-    source_scope_id, ActivityDag, ActivityDefinition, ActivityOutput, BindingContext,
-    BindingDecision, ExecutableRegistry, ExecutionContext, RuntimeError,
+    source_scope_id, ActivityDag, ActivityDefinition, ActivityOutput, ActivityProof,
+    BindingContext, BindingDecision, ExecutableRegistry, ExecutionContext, RuntimeError,
 };
 
 pub struct RuntimeReport {
@@ -28,6 +28,7 @@ pub struct RuntimeReport {
     pub activities: Vec<ActivityRecord>,
     pub activity_stages: BTreeMap<String, domain::structure::StructureStage>,
     pub target_results: Vec<TargetResult>,
+    pub analysis_results: BTreeMap<String, super::LayerAnalysisResult>,
     pub pending_bindings: usize,
 }
 
@@ -64,6 +65,15 @@ pub fn run(
     if seeds.iter().any(|entry| entry.scope_id != scope_id) {
         return Err(RuntimeError::InvalidDefinition);
     }
+    if let domain::structure::VersionSelection::Exact { view_id } = &start.request.version_selection
+    {
+        if !seeds
+            .iter()
+            .any(|entry| &entry.capability.view_id == view_id)
+        {
+            return Err(RuntimeError::InvalidDefinition);
+        }
+    }
     let limit = start.request.resource_policy.active_work_items as usize;
     let attempt = Some(StructureAttemptRef {
         attempt_id: start.attempt_id.into(),
@@ -90,6 +100,7 @@ pub fn run(
         states: BTreeMap::new(),
         results: BTreeMap::new(),
         readiness: super::readiness::Readiness::default(),
+        analysis_results: BTreeMap::new(),
     };
     runtime
         .capabilities
@@ -107,10 +118,11 @@ struct Coordinator<'a> {
     frontier: Frontier,
     pending: PendingBindings,
     waiting: BTreeMap<String, (String, String, String)>,
-    proofs: BTreeMap<String, Arc<ValidatedReceipt>>,
+    proofs: BTreeMap<String, Arc<ActivityProof>>,
     states: BTreeMap<String, ActivityState>,
     results: BTreeMap<String, TargetResult>,
     readiness: super::readiness::Readiness,
+    analysis_results: BTreeMap<String, super::LayerAnalysisResult>,
 }
 
 impl Coordinator<'_> {
@@ -355,17 +367,16 @@ impl Coordinator<'_> {
             RuntimeError::Io(error) => super::proof_state::classify(error),
             error => error,
         })?;
-        let receipt = output.proof.receipt().id.clone();
-        let proof_receipt = output.proof.receipt();
-        if proof_receipt.attempt.attempt_id != self.start.attempt_id
-            || proof_receipt.attempt.owner != self.start.owner_id
-            || proof_receipt.source_revision.case_id != self.start.request.case_id
+        let receipt = output.proof.id().to_owned();
+        if output.proof.attempt().attempt_id != self.start.attempt_id
+            || output.proof.attempt().owner != self.start.owner_id
+            || output.proof.source_revision().case_id != self.start.request.case_id
             || !self
                 .start
                 .request
                 .source_scope
                 .iter()
-                .any(|capture| capture.source == proof_receipt.source_revision)
+                .any(|capture| &capture.source == output.proof.source_revision())
         {
             return Err(RuntimeError::InvalidOutput);
         }
@@ -395,6 +406,9 @@ impl Coordinator<'_> {
             self.proofs.insert(id, output.proof.clone());
         }
         self.transition(key, ActivityState::Succeeded, Some(&receipt), None)?;
+        if let Some(analysis) = output.analysis {
+            self.analysis_results.insert(key.into(), analysis);
+        }
         for result in output.target_results {
             self.results.insert(result.target_id.clone(), result);
         }
@@ -449,36 +463,14 @@ impl Coordinator<'_> {
         Ok(())
     }
 
-    fn report(mut self) -> Result<RuntimeReport, RuntimeError> {
-        let repository = StructureActivityRepo::new(self.start.connection);
-        let activities = self
-            .states
-            .keys()
-            .map(|key| {
-                repository
-                    .get(&self.start.request.case_id, self.start.run_id, key)?
-                    .ok_or(RuntimeError::LostOwner)
-            })
-            .collect::<Result<Vec<_>, RuntimeError>>()?;
-        // Validate live evidence while the coordinator still owns the read permissions.
-        for (key, proof) in &self.proofs {
-            if let (Some(definition), Err(error)) = (self.dag.get(key), proof.validate()) {
-                let Some(failure) = super::proof_state::proof_failure(&error) else {
-                    return Err(RuntimeError::Io(error));
-                };
-                let result = definition.failure_result(failure)?;
-                self.results.insert(result.target_id.clone(), result);
-            }
-        }
-        Ok(RuntimeReport {
-            run_id: self.start.run_id.into(),
-            activities,
-            activity_stages: self
-                .dag
-                .definitions()
-                .map(|(key, definition)| (key.clone(), definition.stage))
-                .collect(),
-            target_results: self.results.into_values().collect(),
+    fn report(self) -> Result<RuntimeReport, RuntimeError> {
+        super::report::collect(super::report::ReportContext {
+            start: &self.start,
+            dag: &self.dag,
+            states: &self.states,
+            proofs: &self.proofs,
+            results: self.results,
+            analysis_results: self.analysis_results,
             pending_bindings: self.pending.len(),
         })
     }
