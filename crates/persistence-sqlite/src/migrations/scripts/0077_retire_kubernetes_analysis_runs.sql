@@ -1,0 +1,2 @@
+DROP TABLE kubernetes_analysis_artifacts;
+DROP TABLE kubernetes_analysis_runs;

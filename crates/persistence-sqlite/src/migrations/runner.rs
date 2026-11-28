@@ -190,6 +190,10 @@ pub(super) const MIGRATIONS: &[(&str, &str)] = &[
         "0076_structure_activities",
         include_str!("scripts/0076_structure_activities.sql"),
     ),
+    (
+        "0077_retire_kubernetes_analysis_runs",
+        include_str!("scripts/0077_retire_kubernetes_analysis_runs.sql"),
+    ),
 ];
 
 pub use super::case_graph::{

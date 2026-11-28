@@ -90,7 +90,12 @@ where
 }
 
 fn normalize_path(path: &str) -> String {
-    path.replace('\\', "/").to_ascii_lowercase()
+    let path = path.replace('\\', "/").to_ascii_lowercase();
+    if path.starts_with('/') {
+        path
+    } else {
+        format!("/{path}")
+    }
 }
 
 fn classify_normalized_path(path: &str) -> Option<KubernetesArtifactKind> {

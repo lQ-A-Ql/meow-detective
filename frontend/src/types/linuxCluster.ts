@@ -127,17 +127,3 @@ export interface LinuxEvidenceEvent {
   title: string;
   description: string;
 }
-
-export interface KubernetesAnalysisRun {
-  runId: string;
-  importSetId: string;
-  scopeId: string;
-  state: string;
-  attempt: number;
-  expectedMemberCount: number;
-  parsedArtifactCount: number;
-  failedArtifactCount: number;
-  diagnostics: string[];
-  startedAt: string;
-  finishedAt?: string | null;
-}

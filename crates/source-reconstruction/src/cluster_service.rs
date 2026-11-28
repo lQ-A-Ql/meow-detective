@@ -16,6 +16,7 @@ mod kubernetes_analysis;
 mod kubernetes_dispatch;
 mod kubernetes_inventory;
 mod kubernetes_parser_error;
+mod kubernetes_read;
 mod kubernetes_yaml;
 mod linux_import;
 mod lvm_materialization;
@@ -58,10 +59,7 @@ pub use evidence_access::lvm::LvmPlanError;
 pub use kubeconfig_parser::{
     parse_kubeconfig, KubeconfigCluster, KubeconfigContext, KubeconfigSummary, KubeconfigUser,
 };
-pub use kubernetes_analysis::{
-    get_source_kubernetes_cluster_summary, run_kubernetes_cluster_analysis,
-    run_kubernetes_cluster_analysis_with_cancel,
-};
+pub use kubernetes_analysis::get_source_kubernetes_cluster_summary;
 pub use kubernetes_dispatch::{
     parse_kubernetes_artifact, parse_kubernetes_artifact_in_workspace, KubernetesParsedArtifact,
 };
@@ -71,6 +69,7 @@ pub use kubernetes_inventory::{
     KubernetesMemberArtifactInventory,
 };
 pub use kubernetes_parser_error::KubernetesParserError;
+pub(crate) use kubernetes_read::read_and_parse;
 pub use linux_import::{
     plan_linux_evidence_set_import, register_linux_evidence_set_import,
     update_linux_evidence_set_import_state, update_linux_evidence_set_manifest_hash,
