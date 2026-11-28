@@ -3,6 +3,7 @@ pub mod leased_reader;
 pub mod range_view;
 pub mod read_scope;
 pub mod resources;
+pub mod snapshot_analysis;
 pub mod verification;
 pub mod work_admission;
 

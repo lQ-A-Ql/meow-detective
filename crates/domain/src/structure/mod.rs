@@ -16,6 +16,7 @@ mod read_demand;
 mod relation;
 mod request;
 mod revocation;
+mod snapshot_receipt;
 mod target;
 mod target_query;
 mod verification;
@@ -44,6 +45,7 @@ pub use request::{
 pub use revocation::{
     revoke_case_revisions, revoke_source_generation, revoke_source_revision, RevisionReadLease,
 };
+pub use snapshot_receipt::{SnapshotAnalysisReceipt, SnapshotAnalysisReceiptError};
 pub use target::{
     NamespaceFilter, NamespaceOrdering, NamespaceQuery, RuntimeScope, TargetEventClock,
     TargetEventOrdering, TargetEventTimeRange, TargetKeyBound, TargetKeyOrdering, TargetKeyRange,
