@@ -44,6 +44,8 @@ const FILESYSTEM_ID: &str = "ceph-fs:03f45eaa-efaa-4819-84c6-0cf2f0719020:1:17:7
 const FILE_ENTRY_ID: &str = "cephfs:0000000000000001:00000000:0000000000000002:hello.txt";
 const FILE_CONTENT: &[u8] = b"CephFS bounded preview\n";
 
+#[path = "support/cephfs_range_verification.rs"]
+mod range_verification;
 #[path = "support/cephfs_structure_facts.rs"]
 mod structure_fact_acceptance;
 
@@ -58,7 +60,7 @@ fn fixture() -> Fixture {
     let case_conn = persistence_sqlite::open_or_create(&root.path().join("app.db"))
         .expect("open case database");
     persistence_sqlite::runner::run_all(&case_conn).expect("run case migrations");
-    let case_id = CaseId(CASE_ID.to_string());
+    let case_id = CaseId(format!("{CASE_ID}-{}", uuid::Uuid::new_v4()));
     CaseRepo::new(&case_conn)
         .create(&domain::CaseMeta {
             id: case_id.clone(),
@@ -1001,7 +1003,7 @@ fn cephfs_prepared_build_recovers_before_source_database_rename() {
         .unwrap();
     assert_eq!(publication.state, "prepared");
     let original_view = StructureViewAttemptRepo::new(&fixture.case_conn)
-        .find(CASE_ID, &source_id.0)
+        .find(&fixture.case_id.0, &source_id.0)
         .unwrap()
         .unwrap();
     let layout = persistence_source::fjall::SourceBuildLayout::for_case_source(
@@ -1029,7 +1031,7 @@ fn cephfs_prepared_build_recovers_before_source_database_rename() {
     assert!(recovered.published);
     assert_eq!(recovered.file_count, 2);
     let recovered_view = StructureViewAttemptRepo::new(&fixture.case_conn)
-        .find(CASE_ID, &source_id.0)
+        .find(&fixture.case_id.0, &source_id.0)
         .unwrap()
         .unwrap();
     assert_eq!(original_view, recovered_view);
@@ -1042,7 +1044,7 @@ fn cephfs_publication_rejects_receipt_tampering() {
     let source_id = result.data_source.id;
     let repo = StructureViewAttemptRepo::new(&fixture.case_conn);
     let attempt = repo
-        .find(CASE_ID, &source_id.0)
+        .find(&fixture.case_id.0, &source_id.0)
         .expect("read CephFS view attempt")
         .expect("CephFS view attempt exists");
     fixture
@@ -1060,7 +1062,7 @@ fn cephfs_publication_rejects_receipt_tampering() {
         },
         ..attempt
     };
-    repo.bind(CASE_ID, &tampered)
+    repo.bind(&fixture.case_id.0, &tampered)
         .expect("insert tampered CephFS receipt");
 
     let error = materialize_result(&fixture, true).expect_err("tampered receipt must fail");

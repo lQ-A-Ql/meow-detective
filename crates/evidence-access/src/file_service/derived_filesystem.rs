@@ -1,4 +1,4 @@
-use evidence_core::{EvidenceReader, FileSystemReader};
+use evidence_core::FileSystemReader;
 
 use ::ceph_reconstruction::ceph_reconstruction::DerivedRbdRuntime;
 
@@ -12,11 +12,8 @@ pub(super) fn open_derived_filesystem(
         let base = runtime
             .open_reader()
             .map_err(|error| FileServiceError::other(error.to_string()))?;
-        let pool = fs_lvm::LvmPool::discover(
-            vec![Box::new(base) as Box<dyn EvidenceReader>],
-            identity.pv_offsets.clone(),
-        )
-        .map_err(|error| FileServiceError::other(error.to_string()))?;
+        let pool = fs_lvm::LvmPool::discover(vec![base], identity.pv_offsets.clone())
+            .map_err(|error| FileServiceError::other(error.to_string()))?;
         let volume_index = pool
             .list_volumes()
             .iter()
@@ -37,11 +34,9 @@ pub(super) fn open_derived_filesystem(
         )
     } else {
         (
-            Box::new(
-                runtime
-                    .open_reader()
-                    .map_err(|error| FileServiceError::other(error.to_string()))?,
-            ) as Box<dyn EvidenceReader>,
+            runtime
+                .open_reader()
+                .map_err(|error| FileServiceError::other(error.to_string()))?,
             candidate.offset,
         )
     };

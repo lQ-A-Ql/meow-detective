@@ -8,12 +8,9 @@ use domain::{
         ByteRange, ByteRangeSet, ReadDemand, ReadDemandError, ReadIntent, ReadPriority,
         ReadVerification, SourceRevisionRef, StructureAttemptRef,
     },
-    DataSourceId, DataSourceKind,
+    DataSourceKind,
 };
 use evidence_core::EvidenceReader;
-use persistence_sqlite::repositories::{
-    datasource_repo::DataSourceRepo, source_revision_repo::SourceRevisionRepo,
-};
 use sha2::{Digest, Sha256};
 
 use super::VerifiedView;
@@ -84,8 +81,8 @@ impl From<TargetAccessError> for MdRaidPlanError {
 }
 
 pub struct TargetAccessPlan {
-    demand: ReadDemand,
-    reader: Box<dyn EvidenceReader>,
+    pub(super) demand: ReadDemand,
+    pub(super) reader: Box<dyn EvidenceReader>,
 }
 
 impl TargetAccessPlan {
@@ -99,23 +96,12 @@ pub struct DiscoveryAccessPlan {
     reader: Box<dyn EvidenceReader>,
 }
 
-pub struct RegisteredMdRaidAccessRequest {
-    pub source_id: String,
-    pub ranges: Option<Vec<ByteRange>>,
-    pub intent: ReadIntent,
-    pub priority: ReadPriority,
-    pub deadline_unix_ms: Option<u64>,
-    pub reorderable: bool,
-    pub consumers: Vec<String>,
-    pub verification: ReadVerification,
-    pub attempt: Option<StructureAttemptRef>,
-}
-
 pub fn plan_target_access(
     request: TargetAccessRequest<'_>,
     cancel: &AtomicBool,
 ) -> Result<TargetAccessPlan, TargetAccessError> {
     check_cancel(cancel)?;
+    source_kernel::source_runtime::range_view::check_active(cancel, request.deadline_unix_ms)?;
     let (fingerprint, reader) = open_target(request.target, cancel)?;
     let target_size = reader.info().size;
     let ranges = match request.ranges {
@@ -153,47 +139,17 @@ pub(crate) fn plan_discovery_access(
     })
 }
 
-pub fn plan_registered_mdraid_access(
-    case_conn: &rusqlite::Connection,
-    _case_root: &Path,
-    request: RegisteredMdRaidAccessRequest,
-    cancel: &AtomicBool,
-) -> Result<TargetAccessPlan, TargetAccessError> {
-    check_cancel(cancel)?;
-    let source_id = DataSourceId(request.source_id);
-    let sources = DataSourceRepo::new(case_conn);
-    if sources.source_kind(&source_id)? != DataSourceKind::MdRaid {
-        return Err(TargetAccessError::UnsupportedTarget);
-    }
-    let path = std::path::PathBuf::from(sources.source_path(&source_id)?);
-    let (source_revision, _) = SourceRevisionRepo::new(case_conn)
-        .current(&sources.case_id(&source_id)?.0, &source_id.0)?;
-    super::super::mdraid::persisted_inputs::validate(&source_id, &path)?;
-    let plan = super::super::mdraid::read_mdraid_descriptor(&path)?;
-    let target = AccessTarget::MdRaid(&plan);
-    plan_target_access(
-        TargetAccessRequest {
-            target,
-            source_revision,
-            ranges: request.ranges,
-            intent: request.intent,
-            priority: request.priority,
-            deadline_unix_ms: request.deadline_unix_ms,
-            reorderable: request.reorderable,
-            consumers: request.consumers,
-            verification: request.verification,
-            attempt: request.attempt,
-        },
-        cancel,
-    )
-}
-
 pub fn open_verified_view(
     plan: TargetAccessPlan,
     cancel: &AtomicBool,
 ) -> Result<VerifiedView<'_>, TargetAccessError> {
     check_cancel(cancel)?;
-    Ok(VerifiedView::new(plan.reader, plan.demand.ranges, cancel))
+    Ok(VerifiedView::new(
+        plan.reader,
+        plan.demand.ranges,
+        cancel,
+        plan.demand.deadline_unix_ms,
+    )?)
 }
 
 pub(crate) fn open_discovery_view<'a>(
@@ -201,7 +157,7 @@ pub(crate) fn open_discovery_view<'a>(
     cancel: &'a AtomicBool,
 ) -> Result<VerifiedView<'a>, TargetAccessError> {
     check_cancel(cancel)?;
-    Ok(VerifiedView::new(plan.reader, plan.ranges, cancel))
+    Ok(VerifiedView::new(plan.reader, plan.ranges, cancel, None)?)
 }
 
 pub fn verify_derived_view(

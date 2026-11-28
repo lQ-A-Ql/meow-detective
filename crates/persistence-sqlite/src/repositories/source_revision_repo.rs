@@ -55,6 +55,7 @@ impl<'a> SourceRevisionRepo<'a> {
                      VALUES (?1, ?2, ?3)",
                     params![source_id, revision, content],
                 )?;
+                domain::structure::revoke_source_revision(case_id, source_id);
                 revision
             }
         };
@@ -80,6 +81,22 @@ impl<'a> SourceRevisionRepo<'a> {
             transaction.commit()?;
         }
         Ok(())
+    }
+
+    pub fn dependency_revisions(
+        &self,
+        reference: &SourceRevisionRef,
+    ) -> DbResult<Vec<SourceRevisionRef>> {
+        let transaction = self
+            .conn
+            .is_autocommit()
+            .then(|| self.conn.unchecked_transaction())
+            .transpose()?;
+        let references = ancestors::snapshot(self, reference)?;
+        if let Some(transaction) = transaction {
+            transaction.commit()?;
+        }
+        Ok(references)
     }
 
     fn require_current_revision(&self, reference: &SourceRevisionRef) -> DbResult<()> {

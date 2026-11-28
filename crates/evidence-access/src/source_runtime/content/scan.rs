@@ -253,6 +253,17 @@ fn read_frame(
     telemetry: &ScanTelemetry,
 ) -> Result<Frame, ContentError> {
     check_cancel(cancel)?;
+    let admission_started = std::time::Instant::now();
+    let _work = source_kernel::source_runtime::work_admission::global_admission()
+        .acquire(domain::structure::ReadPriority::Deferred, cancel, None)
+        .map_err(|error| {
+            if cancel.load(Ordering::Acquire) {
+                ContentError::Cancelled
+            } else {
+                ContentError::Io(error)
+            }
+        })?;
+    ScanTelemetry::record(&telemetry.cpu_wait_nanos, admission_started);
     let offset = index * CONTENT_CHUNK_BYTES as u64;
     let read_started = std::time::Instant::now();
     reader.seek(SeekFrom::Start(offset))?;
@@ -301,6 +312,15 @@ fn consume(
             return Err(ContentError::Changed);
         }
         let hash_started = std::time::Instant::now();
+        let _work = source_kernel::source_runtime::work_admission::global_admission()
+            .acquire(domain::structure::ReadPriority::Deferred, cancel, None)
+            .map_err(|error| {
+                if cancel.load(Ordering::Acquire) {
+                    ContentError::Cancelled
+                } else {
+                    ContentError::Io(error)
+                }
+            })?;
         digest.update(&frame.bytes);
         ScanTelemetry::record(&telemetry.ordered_hash_nanos, hash_started);
         telemetry.completed_frames.fetch_add(1, Ordering::Relaxed);

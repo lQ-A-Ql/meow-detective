@@ -362,8 +362,11 @@ fn md_full_view_empty_eof_and_read_cancellation_preserve_boundaries() {
     let error = full.read_to_end(&mut Vec::new()).unwrap_err();
     assert_eq!(error.kind(), std::io::ErrorKind::Other);
     assert!(matches!(
-        error.get_ref().unwrap().downcast_ref::<TargetAccessError>(),
-        Some(TargetAccessError::Cancelled)
+        error
+            .get_ref()
+            .unwrap()
+            .downcast_ref::<source_kernel::source_runtime::range_view::RangeReadError>(),
+        Some(source_kernel::source_runtime::range_view::RangeReadError::Cancelled)
     ));
     assert!(full.seek(SeekFrom::Start(0)).is_err());
     assert!(full.reserve_work(1).is_err());

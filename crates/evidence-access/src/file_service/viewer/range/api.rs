@@ -62,6 +62,7 @@ pub fn open_file_content_by_id<C>(
 where
     C: PreviewReadContext,
 {
+    context.validate_read_scope()?;
     if context.case_id().is_empty() {
         let repo = FileRepo::new(context.conn());
         let entry = repo
@@ -70,10 +71,29 @@ where
         return open_file_content_for_entry(context.conn(), &repo, &entry);
     }
     let descriptor = descriptor_for_file_with_cache(&mut context, file_id)?;
-    open_file_content_for_descriptor_with_context(&mut context, &descriptor)
+    let reader = open_file_content_for_descriptor_with_context(&mut context, &descriptor)?;
+    context.wrap_content_reader(reader)
 }
 
 pub fn read_file_bytes_for_case<C>(
+    mut context: C,
+    file_id: &FileEntryId,
+    offset: u64,
+    length: u32,
+) -> Result<Vec<u8>, FileServiceError>
+where
+    C: PreviewReadContext,
+{
+    context.validate_read_scope()?;
+    let mut bytes = read_file_bytes_inner(&mut context, file_id, offset, length)?;
+    if let Err(error) = context.validate_read_scope() {
+        bytes.fill(0);
+        return Err(error);
+    }
+    Ok(bytes)
+}
+
+fn read_file_bytes_inner<C>(
     mut context: C,
     file_id: &FileEntryId,
     offset: u64,

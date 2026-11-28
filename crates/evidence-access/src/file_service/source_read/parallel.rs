@@ -21,6 +21,7 @@ impl SourceReadContext<'_> {
         &mut self,
         descriptor: &PreviewDescriptor,
     ) -> Result<Option<ParallelSourceReaders>, FileServiceError> {
+        self.validate_scope()?;
         let rss_mb = crate::runtime_resources::current_rss_mb();
         let soft_limit_mb = crate::runtime_resources::default_memory_soft_limit_mb();
         let worker_count = parallel_worker_count(
@@ -53,7 +54,7 @@ impl SourceReadContext<'_> {
             else {
                 return Ok(None);
             };
-            readers.push(Box::new(reader) as Box<dyn evidence_core::ReadSeek + Send>);
+            readers.push(self.wrap_parallel_reader(Box::new(reader))?);
         }
 
         let max_in_flight = worker_count.saturating_mul(2);

@@ -35,10 +35,15 @@ pub struct PreparedCephFsFileReader {
     size: u64,
     projection_sha256: String,
     lineage_fingerprint: String,
+    scope: source_kernel::source_runtime::read_scope::SourceReadScope,
 }
 
 impl PreparedCephFsFileReader {
+    pub fn validate_scope(&self) -> CephFsSourceResult<()> {
+        Ok(self.scope.validate()?)
+    }
     pub fn read_range(&mut self, offset: u64, length: usize) -> CephFsSourceResult<Vec<u8>> {
+        self.scope.validate()?;
         if offset > self.size {
             return Err(CephFsSourceError::InvalidInput(
                 "preview offset exceeds file size",
@@ -46,10 +51,16 @@ impl PreparedCephFsFileReader {
         }
         let length =
             length.min(usize::try_from(self.size.saturating_sub(offset)).unwrap_or(usize::MAX));
-        self.reader
+        let mut bytes = self
+            .reader
             .read_range(offset, length)
             .map(|range| range.bytes)
-            .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))
+            .map_err(|error| CephFsSourceError::InconsistentState(error.to_string()))?;
+        if let Err(error) = self.scope.validate() {
+            bytes.fill(0);
+            return Err(error.into());
+        }
+        Ok(bytes)
     }
 
     pub fn projection_sha256(&self) -> &str {
@@ -68,11 +79,7 @@ pub fn open_cephfs_file_reader(
     data_source_id: &DataSourceId,
     request: &CephFsFileReadRequest,
 ) -> CephFsSourceResult<PreparedCephFsFileReader> {
-    if request.data_source_id != *data_source_id {
-        return Err(CephFsSourceError::InvalidInput(
-            "file-read request is not bound to this CephFS source",
-        ));
-    }
+    let scope = read_scope(case_conn, case_root, case_id, data_source_id, request)?;
     let runtime = load_runtime(
         case_conn,
         case_root,
@@ -158,5 +165,24 @@ pub fn open_cephfs_file_reader(
         size: request.size,
         projection_sha256: request.projection_sha256.clone(),
         lineage_fingerprint: runtime.lineage_fingerprint,
+        scope,
     })
+}
+
+fn read_scope(
+    conn: &rusqlite::Connection,
+    root: &Path,
+    case_id: &CaseId,
+    source_id: &DataSourceId,
+    request: &CephFsFileReadRequest,
+) -> CephFsSourceResult<source_kernel::source_runtime::read_scope::SourceReadScope> {
+    if request.data_source_id != *source_id {
+        return Err(CephFsSourceError::InvalidInput(
+            "file-read request is not bound to this CephFS source",
+        ));
+    }
+    let (reference, _) =
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(conn)
+            .current(&case_id.0, &source_id.0)?;
+    Ok(source_kernel::source_runtime::read_scope::SourceReadScope::acquire(root, &reference)?)
 }

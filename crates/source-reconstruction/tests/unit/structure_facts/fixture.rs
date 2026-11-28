@@ -29,7 +29,7 @@ impl CaseFixture {
         std::fs::create_dir_all(root.path().join("artifacts/objects")).unwrap();
         let connection = persistence_sqlite::open_or_create(&root.path().join("app.db")).unwrap();
         persistence_sqlite::runner::run_all(&connection).unwrap();
-        let case_id = CaseId("s04-acceptance".into());
+        let case_id = CaseId(format!("s04-acceptance-{}", uuid::Uuid::new_v4()));
         CaseRepo::new(&connection)
             .create(&domain::CaseMeta {
                 id: case_id.clone(),

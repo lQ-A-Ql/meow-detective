@@ -19,17 +19,45 @@ struct ScopeEpoch {
     revocation: AtomicU64,
 }
 
+#[derive(Clone)]
+pub struct SourceReadLease {
+    revision: domain::structure::RevisionReadLease,
+    generation: domain::structure::RevisionReadLease,
+}
+
+impl SourceReadLease {
+    pub fn acquire(case_id: &str, source_id: &str) -> Self {
+        Self {
+            revision: domain::structure::RevisionReadLease::acquire(case_id, source_id),
+            generation: domain::structure::RevisionReadLease::acquire_generation(
+                case_id, source_id,
+            ),
+        }
+    }
+
+    pub fn validate(&self) -> io::Result<()> {
+        if !self.revision.is_current() || !self.generation.is_current() {
+            return Err(io::Error::other(SourceInvalidated));
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 #[error("Evidence source scope changed or is no longer available")]
 pub struct SourceInvalidated;
 
 #[derive(Clone)]
 pub struct SourcePublicationLease {
+    case_id: String,
+    source_id: String,
     scope: Arc<ScopeEpoch>,
     owner: u64,
     revocation: u64,
     factory: SharedReaderFactory,
     pool: Arc<Mutex<Option<crate::resource_budget::ResourcePool>>>,
+    receipts: Vec<Arc<super::verification::ValidatedReceipt>>,
+    revision: domain::structure::RevisionReadLease,
 }
 
 impl std::fmt::Debug for SourcePublicationLease {
@@ -50,11 +78,15 @@ impl SourcePublicationLease {
         let revocation = scope.revocation.load(Ordering::Acquire);
         epochs.insert(key, Arc::downgrade(&scope));
         Self {
+            case_id: case_id.into(),
+            source_id: source_id.into(),
             scope,
             owner,
             revocation,
             factory,
             pool: Arc::new(Mutex::new(None)),
+            receipts: Vec::new(),
+            revision: domain::structure::RevisionReadLease::acquire(case_id, source_id),
         }
     }
 
@@ -79,7 +111,30 @@ impl SourcePublicationLease {
         self.validate_epoch()
     }
 
+    pub fn with_receipt(
+        mut self,
+        receipt: Arc<super::verification::ValidatedReceipt>,
+    ) -> io::Result<Self> {
+        self.validate()?;
+        if receipt.receipt().source_revision.case_id != self.case_id
+            || receipt.receipt().source_revision.source_id != self.source_id
+        {
+            return Err(io::Error::other(
+                "verification receipt belongs to another publication source",
+            ));
+        }
+        receipt.validate()?;
+        self.receipts.push(receipt);
+        Ok(self)
+    }
+
     pub fn validate_epoch(&self) -> io::Result<()> {
+        for receipt in &self.receipts {
+            receipt.validate_epoch()?;
+        }
+        if !self.revision.is_current() {
+            return Err(io::Error::other(SourceInvalidated));
+        }
         if !self.owns_failure_state()
             || self.scope.revocation.load(Ordering::Acquire) != self.revocation
         {
@@ -193,10 +248,12 @@ fn invalidate_matching(matches: impl Fn(&Key) -> bool) {
 }
 
 pub fn invalidate_source(case_id: &str, source_id: &str) {
+    domain::structure::revoke_source_revision(case_id, source_id);
     invalidate_matching(|key| key.0 == case_id && key.1 == source_id);
 }
 
 pub fn invalidate_case(case_id: &str) {
+    domain::structure::revoke_case_revisions(case_id);
     invalidate_matching(|key| key.0 == case_id);
 }
 

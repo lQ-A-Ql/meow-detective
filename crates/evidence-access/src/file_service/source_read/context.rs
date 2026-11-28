@@ -22,6 +22,7 @@ impl<'a> SourceReadContext<'a> {
             native_filesystems: HashMap::new(),
             cephfs_readers: HashMap::new(),
             bitlocker_runtime: None,
+            read_scope: None,
         }
     }
 
@@ -34,6 +35,18 @@ impl<'a> SourceReadContext<'a> {
         file_id: &FileEntryId,
         max_bytes: usize,
     ) -> Result<Vec<u8>, FileServiceError> {
+        self.validate_scope()?;
+        let bytes = self.read_file_header_inner(file_id, max_bytes)?;
+        self.validate_scope()?;
+        Ok(bytes)
+    }
+
+    fn read_file_header_inner(
+        &mut self,
+        file_id: &FileEntryId,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, FileServiceError> {
+        self.validate_scope()?;
         let descriptor = descriptor_for_file_with_cache(&mut *self, file_id)?;
         if descriptor.source_kind == "ceph_rbd" {
             let runtime = self.derived_runtime()?.clone();
@@ -62,6 +75,7 @@ impl<'a> SourceReadContext<'a> {
             ));
         }
         metadata::validate_hint_encryption(self.source_conn, &hint)?;
+        self.validate_scope()?;
         let Some(partition_index) = hint.partition_index else {
             return self.read_file_header_by_id(&hint.file_id, max_bytes);
         };
@@ -119,6 +133,10 @@ impl<'a> SourceReadContext<'a> {
             .map_err(|error| FileServiceError::other(error.to_string()))?;
             self.derived_runtime = Some(runtime);
         }
+        self.derived_runtime
+            .as_ref()
+            .expect("prepared RBD runtime")
+            .validate()?;
         self.derived_runtime
             .as_ref()
             .ok_or_else(|| FileServiceError::other("Derived RBD runtime was not initialized"))

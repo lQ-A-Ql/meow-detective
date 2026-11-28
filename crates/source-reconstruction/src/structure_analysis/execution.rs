@@ -1,14 +1,14 @@
-use std::io::Read;
 use std::sync::atomic::AtomicBool;
 
 use domain::structure::StructureWorkItem;
 use evidence_access::structure_access::{
-    open_verified_view, plan_registered_mdraid_access, RegisteredMdRaidAccessRequest,
+    verify_registered_access, RegisteredAccessRequest, CEPHFS_FILE_TARGET_PREFIX,
 };
 use persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo;
+use source_kernel::source_runtime::verification::VerificationBatch;
 
 use super::{
-    adapter::{FILESYSTEM_ADAPTER_ID, MDRAID_ADAPTER_ID},
+    adapter::CEPHFS_ADAPTER_ID,
     planner::plan_structure_analysis,
     request::{
         StructureAnalysisError, StructureAnalysisRequest, StructureAnalysisRun,
@@ -23,66 +23,78 @@ pub fn run_structure_analysis(
     cancel: &AtomicBool,
 ) -> Result<StructureAnalysisRun, StructureAnalysisError> {
     let plan = plan_structure_analysis(conn, case_root, request)?;
-    let revisions = SourceRevisionRepo::new(conn);
+    let batch = if request.intent == domain::structure::ReadIntent::ContentRead {
+        VerificationBatch::new_deep(request.attempt.clone())?
+    } else {
+        VerificationBatch::new(request.attempt.clone())?
+    };
     let mut work_results = Vec::with_capacity(plan.work_items.len());
+    let mut proofs = Vec::new();
     for item in &plan.work_items {
         check_cancel(cancel)?;
-        revisions.require_current(&item.source_revision)?;
-        let result = execute_work_item(conn, case_root, item, cancel)?;
-        revisions.require_current(&item.source_revision)?;
-        work_results.push(result);
+        let proof = execute_work_item(conn, case_root, item, &batch, cancel)?;
+        proof.validate()?;
+        work_results.push(StructureWorkResult {
+            work_item_id: item.id.clone(),
+            bytes_read: proof.receipt().bytes_verified,
+            status: StructureWorkStatus::Verified,
+            receipt: proof.receipt().clone(),
+        });
+        proofs.push(proof);
     }
-    Ok(StructureAnalysisRun { plan, work_results })
+    for proof in proofs {
+        proof.validate()?;
+    }
+    Ok(StructureAnalysisRun {
+        plan,
+        work_results,
+        verification_stats: batch.stats()?,
+    })
 }
 
 fn execute_work_item(
     conn: &rusqlite::Connection,
     case_root: &std::path::Path,
     item: &StructureWorkItem,
+    batch: &VerificationBatch,
     cancel: &AtomicBool,
-) -> Result<StructureWorkResult, StructureAnalysisError> {
-    if item.adapter_id != MDRAID_ADAPTER_ID && item.adapter_id != FILESYSTEM_ADAPTER_ID {
-        return Err(StructureAnalysisError::UnsupportedAdapter(
-            item.adapter_id.clone(),
-        ));
-    }
+) -> Result<
+    std::sync::Arc<source_kernel::source_runtime::verification::ValidatedReceipt>,
+    StructureAnalysisError,
+> {
     let demand = item
         .demand
-        .as_ref()
+        .clone()
         .ok_or_else(|| StructureAnalysisError::Plan("work item demand is missing".into()))?;
-    let access = plan_registered_mdraid_access(
+    let file_id = if item.adapter_id == CEPHFS_ADAPTER_ID {
+        Some(domain::FileEntryId(
+            item.target_fingerprint
+                .strip_prefix(CEPHFS_FILE_TARGET_PREFIX)
+                .ok_or_else(|| {
+                    StructureAnalysisError::Plan("CephFS file target is missing".into())
+                })?
+                .into(),
+        ))
+    } else {
+        None
+    };
+    let (_, revision) = SourceRevisionRepo::new(conn).current(
+        &item.source_revision.case_id,
+        &item.source_revision.source_id,
+    )?;
+    let expected = (item.intent == domain::structure::ReadIntent::ContentRead && file_id.is_none())
+        .then_some(revision.logical_sha256.as_deref())
+        .flatten();
+    Ok(verify_registered_access(
         conn,
         case_root,
-        RegisteredMdRaidAccessRequest {
-            source_id: item.source_revision.source_id.clone(),
-            ranges: Some(item.ranges.ranges().to_vec()),
-            intent: item.intent,
-            priority: item.priority,
-            deadline_unix_ms: demand.deadline_unix_ms,
-            reorderable: demand.reorderable,
-            consumers: item.consumers.clone(),
-            verification: demand.verification,
-            attempt: demand.attempt.clone(),
-        },
+        RegisteredAccessRequest { demand, file_id },
+        batch,
+        &item.adapter_version,
+        expected,
+        false,
         cancel,
-    )?;
-    let mut view = open_verified_view(access, cancel)?;
-    let mut bytes_read = 0u64;
-    let mut buffer = [0u8; 4096];
-    while bytes_read < 4096 {
-        check_cancel(cancel)?;
-        let remaining = usize::try_from(4096 - bytes_read).unwrap_or(4096);
-        let count = view.read(&mut buffer[..remaining])?;
-        if count == 0 {
-            break;
-        }
-        bytes_read += count as u64;
-    }
-    Ok(StructureWorkResult {
-        work_item_id: item.id.clone(),
-        bytes_read,
-        status: StructureWorkStatus::Verified,
-    })
+    )?)
 }
 
 fn check_cancel(cancel: &AtomicBool) -> Result<(), StructureAnalysisError> {

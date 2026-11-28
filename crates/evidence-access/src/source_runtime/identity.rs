@@ -104,7 +104,7 @@ impl EvidenceReaderFactory for LeasedFactory {
         self.lease.validate_epoch()?;
         let reader = self.inner.open_reader()?;
         self.lease.validate_epoch()?;
-        Ok(reader)
+        source_kernel::source_runtime::leased_reader::LeasedReader::wrap(reader, self.lease.clone())
     }
     fn logical_size(&self) -> u64 {
         self.inner.logical_size()

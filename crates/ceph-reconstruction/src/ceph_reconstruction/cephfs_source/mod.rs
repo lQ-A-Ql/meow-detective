@@ -6,6 +6,8 @@ mod materialization;
 mod model;
 mod presence_gate;
 mod preview;
+mod range_reader;
+pub use range_reader::CephFsEvidenceReader;
 mod projection;
 mod projection_validation;
 mod publication;

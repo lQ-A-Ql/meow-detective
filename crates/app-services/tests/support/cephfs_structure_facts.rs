@@ -103,7 +103,7 @@ fn published_cephfs_version_binds_observed_pvc_and_rejects_receipt_changes() {
     );
     let repo = StructureViewAttemptRepo::new(&fixture.case_conn);
     let mut attempt = repo
-        .find(CASE_ID, &result.data_source.id.0)
+        .find(&fixture.case_id.0, &result.data_source.id.0)
         .unwrap()
         .unwrap();
     attempt.receipt = if attempt.receipt == "f".repeat(64) {
@@ -118,7 +118,7 @@ fn published_cephfs_version_binds_observed_pvc_and_rejects_receipt_changes() {
             [&result.data_source.id.0],
         )
         .unwrap();
-    repo.bind(CASE_ID, &attempt).unwrap();
+    repo.bind(&fixture.case_id.0, &attempt).unwrap();
     assert!(
         app_services::infrastructure_graph_service::get_infrastructure_graph_read_only(
             &fixture.case_conn,

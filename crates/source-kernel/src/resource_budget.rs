@@ -70,6 +70,7 @@ pub struct Resources {
     pub readers: u64,
     pub handles: u64,
     pub workers: u64,
+    pub cpu: u64,
     pub metadata: u64,
     pub catalogs: u64,
 }
@@ -79,6 +80,7 @@ impl Resources {
             && self.readers <= limit.readers
             && self.handles <= limit.handles
             && self.workers <= limit.workers
+            && self.cpu <= limit.cpu
             && self.metadata <= limit.metadata
             && self.catalogs <= limit.catalogs
     }
@@ -88,6 +90,7 @@ impl Resources {
             readers: self.readers.saturating_add(rhs.readers),
             handles: self.handles.saturating_add(rhs.handles),
             workers: self.workers.saturating_add(rhs.workers),
+            cpu: self.cpu.saturating_add(rhs.cpu),
             metadata: self.metadata.saturating_add(rhs.metadata),
             catalogs: self.catalogs.saturating_add(rhs.catalogs),
         }
@@ -98,6 +101,7 @@ impl Resources {
             readers: self.readers - rhs.readers,
             handles: self.handles - rhs.handles,
             workers: self.workers - rhs.workers,
+            cpu: self.cpu - rhs.cpu,
             metadata: self.metadata - rhs.metadata,
             catalogs: self.catalogs - rhs.catalogs,
         }
@@ -108,6 +112,7 @@ impl Resources {
             readers: self.readers.max(rhs.readers),
             handles: self.handles.max(rhs.handles),
             workers: self.workers.max(rhs.workers),
+            cpu: self.cpu.max(rhs.cpu),
             metadata: self.metadata.max(rhs.metadata),
             catalogs: self.catalogs.max(rhs.catalogs),
         }
@@ -261,6 +266,7 @@ impl ResourcePool {
                 readers: 32,
                 handles: 512,
                 metadata: 0,
+                cpu: 0,
             },
             state: Mutex::new(State::default()),
             changed: Condvar::new(),
@@ -325,6 +331,7 @@ pub fn global_pool() -> &'static ResourcePool {
             handles: 512,
             workers: STORAGE_WORKERS,
             catalogs: 1,
+            cpu: default_cpu_budget() as u64,
         })
     });
     &POOL

@@ -4,6 +4,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 #[derive(Debug, Default)]
 pub(super) struct ScanTelemetry {
     pub admission_nanos: u64,
+    pub cpu_wait_nanos: AtomicU64,
     pub read_nanos: AtomicU64,
     pub chunk_hash_nanos: AtomicU64,
     pub send_nanos: AtomicU64,
@@ -23,6 +24,7 @@ impl ScanTelemetry {
         let reader = *self.reader.lock().expect("scan reader metrics lock");
         tracing::info!(
             admission_ms = self.admission_nanos / 1_000_000,
+            cpu_wait_ms = self.cpu_wait_nanos.load(Ordering::Relaxed) / 1_000_000,
             read_ms = self.read_nanos.load(Ordering::Relaxed) / 1_000_000,
             chunk_hash_ms = self.chunk_hash_nanos.load(Ordering::Relaxed) / 1_000_000,
             send_wait_ms = self.send_nanos.load(Ordering::Relaxed) / 1_000_000,

@@ -290,14 +290,16 @@ fn logical_directory_hints_read_files_with_and_without_partition_tags() {
         hash_sha256: None,
     }]);
     fixture.seal();
-    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
-    let case_root = TempDir::new().expect("create case root");
+    let case_conn = crate::tests::support::publish_source(&fixture.connection, 14);
+    let case_root = persistence_sqlite::connection::case_root_from_connection(&fixture.connection)
+        .unwrap()
+        .unwrap();
     let case_id = CaseId("case-1".to_string());
     let source_id = DataSourceId("logical-linux".to_string());
     let mut context = SourceReadContext::new(
         &fixture.connection,
         &case_conn,
-        case_root.path(),
+        &case_root,
         &case_id,
         &source_id,
     );
@@ -572,9 +574,22 @@ fn locked_bitlocker_candidate_fails_before_plaintext_filesystem_open() {
     let raw = TempDir::new().expect("create raw evidence root");
     let raw_path = raw.path().join("locked.raw");
     std::fs::write(&raw_path, vec![0u8; 4096]).expect("write bounded raw image");
-    let case_conn = rusqlite::Connection::open_in_memory().expect("open case database");
     let case_id = CaseId("case-1".to_string());
     let source_id = DataSourceId("source-a".to_string());
+    persistence_sqlite::repositories::datasource_repo::DataSourceRepo::new(&source_conn)
+        .upsert_source_local_metadata(
+            &case_id,
+            &domain::DataSource {
+                id: source_id.clone(),
+                name: "Locked volume".into(),
+                kind: domain::DataSourceKind::Raw,
+                source_path: raw_path.clone(),
+                imported_at: chrono::Utc::now(),
+                provenance: domain::DataSourceProvenance::unknown(),
+            },
+        )
+        .unwrap();
+    let case_conn = crate::tests::support::publish_source(&source_conn, 4096);
     let mut context = SourceReadContext::new(
         &source_conn,
         &case_conn,

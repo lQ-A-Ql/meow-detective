@@ -47,9 +47,9 @@ pub use cephfs_presence::{
     MDSMAP_PRESENCE_KEY,
 };
 pub use cephfs_source::{
-    materialize_cephfs_source, verify_cephfs_published_source, CephFsSourceCapability,
-    CephFsSourceError, CephFsSourceMaterializationRequest, CephFsSourceResult,
-    MaterializedCephFsSource,
+    materialize_cephfs_source, verify_cephfs_published_source, CephFsEvidenceReader,
+    CephFsSourceCapability, CephFsSourceError, CephFsSourceMaterializationRequest,
+    CephFsSourceResult, MaterializedCephFsSource,
 };
 pub use cephfs_source::{open_cephfs_file_reader, CephFsFileReadRequest, PreparedCephFsFileReader};
 pub use cluster_evidence::{

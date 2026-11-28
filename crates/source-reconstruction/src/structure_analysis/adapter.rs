@@ -11,6 +11,10 @@ pub const FILESYSTEM_ADAPTER_ID: &str = "filesystem-window";
 pub const FILESYSTEM_ADAPTER_VERSION: &str = "evidence-access/filesystem-window-v1";
 pub const COLLECTION_ADAPTER_ID: &str = "collection-source";
 pub const COLLECTION_ADAPTER_VERSION: &str = "collection-source-v2";
+pub const LVM_ADAPTER_ID: &str = "lvm-volume";
+pub const RBD_ADAPTER_ID: &str = "ceph-rbd-head";
+pub const CEPHFS_ADAPTER_ID: &str = "cephfs-file";
+pub const REGISTERED_SOURCE_ADAPTER_ID: &str = "registered-source";
 
 pub struct AdapterRegistry {
     adapters: BTreeMap<String, StructureAdapterDescriptor>,
@@ -24,6 +28,47 @@ impl AdapterRegistry {
         registry.register(mdraid_descriptor())?;
         registry.register(filesystem_adapter())?;
         registry.register(collection_descriptor())?;
+        for (id, version, formats, space) in [
+            (
+                LVM_ADAPTER_ID,
+                evidence_access::lvm::LVM_ADAPTER_VERSION,
+                vec!["lvm2"],
+                AddressSpace::LogicalBlock,
+            ),
+            (
+                RBD_ADAPTER_ID,
+                "ceph-reconstruction/1",
+                vec!["rbd-head"],
+                AddressSpace::LogicalBlock,
+            ),
+            (
+                CEPHFS_ADAPTER_ID,
+                "ceph-reconstruction/1",
+                vec!["cephfs"],
+                AddressSpace::File,
+            ),
+            (
+                REGISTERED_SOURCE_ADAPTER_ID,
+                "registered-source/1",
+                vec!["raw", "e01"],
+                AddressSpace::PhysicalByte,
+            ),
+        ] {
+            registry.register(StructureAdapterDescriptor {
+                id: id.into(),
+                version: version.into(),
+                formats: formats.into_iter().map(str::to_owned).collect(),
+                features: ["metadata", "range-read"]
+                    .into_iter()
+                    .map(str::to_owned)
+                    .collect(),
+                input_spaces: vec![space],
+                output_spaces: vec![space],
+                operations: operations(),
+                max_workers: 1,
+                requires_independent_readers: true,
+            })?;
+        }
         Ok(registry)
     }
 

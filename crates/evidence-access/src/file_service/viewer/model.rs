@@ -90,6 +90,15 @@ pub struct PreviewLvmPhysicalVolumeSource {
 }
 
 pub trait PreviewReadContext {
+    fn wrap_content_reader(
+        &mut self,
+        reader: Box<dyn Read>,
+    ) -> Result<Box<dyn Read>, crate::file_service::FileServiceError> {
+        Ok(reader)
+    }
+    fn validate_read_scope(&mut self) -> Result<(), crate::file_service::FileServiceError> {
+        Ok(())
+    }
     fn requires_bound_reads(&self) -> bool {
         false
     }
@@ -168,6 +177,15 @@ impl<T> PreviewReadContext for &mut T
 where
     T: PreviewReadContext + ?Sized,
 {
+    fn wrap_content_reader(
+        &mut self,
+        reader: Box<dyn Read>,
+    ) -> Result<Box<dyn Read>, crate::file_service::FileServiceError> {
+        (**self).wrap_content_reader(reader)
+    }
+    fn validate_read_scope(&mut self) -> Result<(), crate::file_service::FileServiceError> {
+        (**self).validate_read_scope()
+    }
     fn requires_bound_reads(&self) -> bool {
         (**self).requires_bound_reads()
     }

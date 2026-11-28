@@ -81,6 +81,10 @@ fn prepare_files(count: usize) -> (tempfile::TempDir, NativeSourceFixture) {
         started.elapsed(),
     );
     fixture.seal();
+    drop(crate::tests::support::publish_source(
+        &fixture.connection,
+        count as u64 * 8,
+    ));
     let seal_elapsed = seal_started.elapsed();
     log_phase(
         "seal-complete",

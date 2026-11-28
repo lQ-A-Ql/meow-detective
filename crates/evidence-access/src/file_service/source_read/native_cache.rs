@@ -14,6 +14,17 @@ impl SourceReadContext<'_> {
         descriptor: &PreviewDescriptor,
         maximum: usize,
     ) -> Result<Option<Vec<u8>>, FileServiceError> {
+        self.validate_scope()?;
+        let bytes = self.read_native_header_inner(descriptor, maximum)?;
+        self.validate_scope()?;
+        Ok(bytes)
+    }
+
+    fn read_native_header_inner(
+        &mut self,
+        descriptor: &PreviewDescriptor,
+        maximum: usize,
+    ) -> Result<Option<Vec<u8>>, FileServiceError> {
         if !matches!(descriptor.source_kind.as_str(), "e01" | "raw") {
             return Ok(None);
         }

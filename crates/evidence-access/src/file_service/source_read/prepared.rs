@@ -44,6 +44,9 @@ struct PreparedSourceReadContext<'a> {
 }
 
 impl PreviewReadContext for PreparedSourceReadContext<'_> {
+    fn validate_read_scope(&mut self) -> Result<(), FileServiceError> {
+        self.state.derived_runtime.validate().map_err(Into::into)
+    }
     fn conn(&self) -> &rusqlite::Connection {
         self.source_conn
     }
@@ -77,7 +80,6 @@ impl PreviewReadContext for PreparedSourceReadContext<'_> {
         self.state
             .derived_runtime
             .open_reader()
-            .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
             .map_err(|error| FileServiceError::other(error.to_string()))
     }
 }

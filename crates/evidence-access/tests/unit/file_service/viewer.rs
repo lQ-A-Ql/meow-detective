@@ -1382,6 +1382,7 @@ fn header_read_cache_reuses_preview_descriptor_across_chunks() {
     fixture.seal();
     let conn = &fixture.connection;
 
+    let case = crate::tests::support::publish_source(conn, bytes.len() as u64);
     let cache = FileHeaderReadCache::new("case-header-cache");
     let read = cache
         .read_file_header_by_id(
@@ -1397,6 +1398,17 @@ fn header_read_cache_reuses_preview_descriptor_across_chunks() {
         .read_file_header_by_id(conn, &FileEntryId("file-header-cache".to_string()), 8)
         .unwrap();
     assert_eq!(again, bytes[..8].to_vec());
+
+    let revisions =
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&case);
+    let (_, mut revision) = revisions.current("case-header-cache", &ds_id.0).unwrap();
+    revision.metadata_identity = Some(uuid::Uuid::new_v4().to_string());
+    revisions
+        .bind("case-header-cache", &ds_id.0, &revision, true)
+        .unwrap();
+    assert!(cache
+        .read_file_header_by_id(conn, &FileEntryId("file-header-cache".to_string()), 8)
+        .is_err());
 }
 
 #[test]

@@ -6,9 +6,8 @@ use sha2::{Digest, Sha256};
 
 use super::{
     derived_reader::{build_replica_bindings, descriptor_from_lineage, load_lineage},
-    open_rbd_head_image, BluestoreDeviceOpener, DerivedRbdReaderError, RbdEvidenceReader,
-    RbdImageDescriptor, RbdReplicaPolicy, SharedRadosObjectProvider, SourceBoundLvmError,
-    SourceDbRadosObjectProvider,
+    open_rbd_head_image, BluestoreDeviceOpener, DerivedRbdReaderError, RbdImageDescriptor,
+    RbdReplicaPolicy, SharedRadosObjectProvider, SourceBoundLvmError, SourceDbRadosObjectProvider,
 };
 
 #[derive(Clone)]
@@ -18,6 +17,7 @@ pub struct DerivedRbdRuntime {
     descriptor: RbdImageDescriptor,
     provider: SharedRadosObjectProvider,
     cache_capacity_bytes: usize,
+    scope: source_kernel::source_runtime::read_scope::SourceReadScope,
 }
 
 struct PreviewBluestoreDeviceOpener {
@@ -41,6 +41,9 @@ impl BluestoreDeviceOpener for PreviewBluestoreDeviceOpener {
 }
 
 impl DerivedRbdRuntime {
+    pub fn validate(&self) -> std::io::Result<()> {
+        self.scope.validate()
+    }
     pub fn data_source_id(&self) -> &DataSourceId {
         &self.data_source_id
     }
@@ -61,8 +64,13 @@ impl DerivedRbdRuntime {
         self.provider.read_metrics()
     }
 
-    pub fn open_reader(&self) -> Result<RbdEvidenceReader, DerivedRbdReaderError> {
-        open_rbd_head_image(&self.descriptor, Box::new(self.provider.clone()))
+    pub fn open_reader(
+        &self,
+    ) -> Result<Box<dyn evidence_core::EvidenceReader>, DerivedRbdReaderError> {
+        let reader = open_rbd_head_image(&self.descriptor, Box::new(self.provider.clone()))
+            .map_err(|error| DerivedRbdReaderError::Open(error.to_string()))?;
+        self.scope
+            .wrap(Box::new(reader))
             .map_err(|error| DerivedRbdReaderError::Open(error.to_string()))
     }
 }
@@ -73,7 +81,24 @@ pub fn build_derived_rbd_runtime(
     case_id: &CaseId,
     derived_data_source_id: &DataSourceId,
 ) -> Result<DerivedRbdRuntime, DerivedRbdReaderError> {
+    let (reference, _) =
+        persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(case_conn)
+            .current(&case_id.0, &derived_data_source_id.0)?;
+    let scope =
+        source_kernel::source_runtime::read_scope::SourceReadScope::acquire(case_root, &reference)
+            .map_err(|error| DerivedRbdReaderError::Open(error.to_string()))?;
     let aggregate = load_lineage(case_conn, derived_data_source_id)?;
+    let version =
+        persistence_sqlite::repositories::storage_object_repo::StorageObjectRepo::new(case_conn)
+            .version_for_source(&case_id.0, &derived_data_source_id.0)?
+            .ok_or_else(|| {
+                DerivedRbdReaderError::Provider("RBD public object version is missing".into())
+            })?;
+    if version.mapping_sha256 != lineage_fingerprint(&aggregate) {
+        return Err(DerivedRbdReaderError::Provider(
+            "RBD public object version differs from lineage".into(),
+        ));
+    }
     let policy = load_proven_rbd_policy(
         case_root,
         &domain::CephScopeId(aggregate.lineage.parent_ceph_scope_id.clone()),
@@ -114,6 +139,7 @@ pub fn build_derived_rbd_runtime(
         descriptor,
         provider: SharedRadosObjectProvider::new(provider),
         cache_capacity_bytes,
+        scope,
     })
 }
 

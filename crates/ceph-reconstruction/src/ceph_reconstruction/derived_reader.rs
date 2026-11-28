@@ -7,10 +7,7 @@ use persistence_sqlite::repositories::{
 };
 use thiserror::Error;
 
-use super::{
-    build_derived_rbd_runtime, RadosReplicaSource, RbdEvidenceReader, RbdImageDescriptor,
-    ReplicaIdentity,
-};
+use super::{build_derived_rbd_runtime, RadosReplicaSource, RbdImageDescriptor, ReplicaIdentity};
 
 #[derive(Debug, Error)]
 pub enum DerivedRbdReaderError {
@@ -38,7 +35,7 @@ pub fn open_derived_rbd_reader(
     case_root: &Path,
     case_id: &CaseId,
     derived_data_source_id: &DataSourceId,
-) -> Result<RbdEvidenceReader, DerivedRbdReaderError> {
+) -> Result<Box<dyn evidence_core::EvidenceReader>, DerivedRbdReaderError> {
     build_derived_rbd_runtime(case_conn, case_root, case_id, derived_data_source_id)?.open_reader()
 }
 

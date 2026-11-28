@@ -243,6 +243,33 @@ fn exercise_native_catalog(fixture: &str, member_prefix: &str) {
     .unwrap();
     assert_eq!(run.work_results.len(), run.plan.work_items.len());
     assert!(run.work_results.iter().all(|result| result.bytes_read > 0));
+    let mut deep_request = analysis_request.clone();
+    deep_request.intent = domain::structure::ReadIntent::ContentRead;
+    let deep = app_services::structure_analysis::run_structure_analysis(
+        &connection,
+        &case.case_root,
+        &deep_request,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    let input_bytes = plans[0]
+        .source_content
+        .iter()
+        .map(|content| content.logical_size)
+        .sum::<u64>();
+    let output_bytes = deep
+        .work_results
+        .iter()
+        .map(|result| result.bytes_read)
+        .sum::<u64>();
+    assert_eq!(
+        deep.verification_stats.verified_bytes,
+        input_bytes + output_bytes
+    );
+    assert!(deep
+        .work_results
+        .iter()
+        .all(|result| result.bytes_read == result.receipt.ranges.covered_bytes()));
     let import = registered_collection(&connection, &case.meta.id, &plans[0], "physical", &inputs);
     let from_collection = cluster_service::materialize_linux_evidence_set_mdraid(
         &connection,

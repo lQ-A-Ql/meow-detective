@@ -6,6 +6,12 @@ mod plan;
 mod range;
 mod read_demand;
 mod relation;
+mod revocation;
+mod verification;
+pub use revocation::{
+    revoke_case_revisions, revoke_source_generation, revoke_source_revision, RevisionReadLease,
+};
+pub use verification::VerificationReceipt;
 
 pub use identity::{
     AcquisitionId, CollectionMemberVerification, DigestVerification, NativeObjectId,

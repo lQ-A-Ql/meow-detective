@@ -1,6 +1,15 @@
 //! preview context support for source-bound reads.
 use super::*;
 impl PreviewReadContext for SourceReadContext<'_> {
+    fn wrap_content_reader(
+        &mut self,
+        reader: Box<dyn std::io::Read>,
+    ) -> Result<Box<dyn std::io::Read>, FileServiceError> {
+        self.wrap_content(reader)
+    }
+    fn validate_read_scope(&mut self) -> Result<(), FileServiceError> {
+        self.validate_scope()
+    }
     fn conn(&self) -> &rusqlite::Connection {
         self.source_conn
     }
@@ -21,6 +30,7 @@ impl PreviewReadContext for SourceReadContext<'_> {
         &mut self,
         descriptor: &PreviewDescriptor,
     ) -> Result<Box<dyn evidence_core::EvidenceReader>, FileServiceError> {
+        self.validate_scope()?;
         if descriptor.data_source_id != self.data_source_id.0 {
             return Err(FileServiceError::security(
                 "Evidence descriptor does not belong to the bound data source",
@@ -30,7 +40,6 @@ impl PreviewReadContext for SourceReadContext<'_> {
             return self
                 .derived_runtime()?
                 .open_reader()
-                .map(|reader| Box::new(reader) as Box<dyn evidence_core::EvidenceReader>)
                 .map_err(|error| FileServiceError::other(error.to_string()));
         }
         if descriptor.source_kind == "nested_range" {
@@ -44,11 +53,15 @@ impl PreviewReadContext for SourceReadContext<'_> {
             .open_reader()
             .map_err(FileServiceError::Io);
         }
-        open_host_evidence_reader(
+        let reader = open_host_evidence_reader(
             &descriptor.source_kind,
             Path::new(&descriptor.source_path),
             &self.case_id.0,
-        )
+        )?;
+        match &self.read_scope {
+            Some(scope) => scope.wrap(reader).map_err(Into::into),
+            None => Ok(reader),
+        }
     }
 
     fn open_candidate_block_reader(
@@ -56,7 +69,14 @@ impl PreviewReadContext for SourceReadContext<'_> {
         descriptor: &PreviewDescriptor,
         candidate: &crate::file_service::viewer::PreviewPartitionCandidate,
     ) -> Result<(Box<dyn evidence_core::EvidenceReader>, u64, String), FileServiceError> {
-        bitlocker::open_candidate_block_reader(self, descriptor, candidate)
+        self.validate_scope()?;
+        let (reader, offset, kind) =
+            bitlocker::open_candidate_block_reader(self, descriptor, candidate)?;
+        let reader = match &self.read_scope {
+            Some(scope) => scope.wrap(reader)?,
+            None => reader,
+        };
+        Ok((reader, offset, kind))
     }
 
     fn is_bitlocker_candidate(

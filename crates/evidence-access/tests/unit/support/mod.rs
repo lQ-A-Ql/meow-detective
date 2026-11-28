@@ -1,3 +1,6 @@
+mod published_source;
+pub(crate) use published_source::publish_source;
+
 /// Minimal case bootstrap shared by unit tests whose legacy helper lived in the
 /// application-service `case_service` before the evidence layer moved out.
 pub(crate) fn create_case(root: &std::path::Path, name: &str) -> crate::active_case::ActiveCase {

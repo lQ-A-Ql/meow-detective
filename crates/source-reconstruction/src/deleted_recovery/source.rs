@@ -91,7 +91,7 @@ pub(super) fn open_target_reader(
             context.data_source_id,
         )
         .map_err(|error| DeletedRecoveryError::Unsupported(error.to_string()))?;
-        return Ok((Box::new(reader), target.partition.offset));
+        return Ok((reader, target.partition.offset));
     }
     let (reader, offset) = import_core::import_pipeline::partition::open_candidate_reader(
         &source.path,

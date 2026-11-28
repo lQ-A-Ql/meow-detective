@@ -7,13 +7,14 @@ mod request;
 mod scheduler;
 
 pub use adapter::{
-    AdapterRegistry, COLLECTION_ADAPTER_ID, COLLECTION_ADAPTER_VERSION, FILESYSTEM_ADAPTER_ID,
-    FILESYSTEM_ADAPTER_VERSION, MAX_ADAPTERS, MDRAID_ADAPTER_ID, MDRAID_ADAPTER_VERSION,
+    AdapterRegistry, CEPHFS_ADAPTER_ID, COLLECTION_ADAPTER_ID, COLLECTION_ADAPTER_VERSION,
+    FILESYSTEM_ADAPTER_ID, FILESYSTEM_ADAPTER_VERSION, LVM_ADAPTER_ID, MAX_ADAPTERS,
+    MDRAID_ADAPTER_ID, MDRAID_ADAPTER_VERSION, RBD_ADAPTER_ID, REGISTERED_SOURCE_ADAPTER_ID,
 };
 pub use evidence_access::structure_access::{
-    open_verified_view, plan_registered_mdraid_access, plan_target_access, verify_derived_view,
-    AccessTarget, RegisteredMdRaidAccessRequest, TargetAccessError, TargetAccessPlan,
-    TargetAccessRequest, VerifiedView,
+    open_verified_view, plan_registered_access, plan_target_access, verify_derived_view,
+    verify_registered_access, AccessTarget, RegisteredAccessRequest, TargetAccessError,
+    TargetAccessPlan, TargetAccessRequest, VerifiedView,
 };
 pub use execution::run_structure_analysis;
 pub use planner::plan_structure_analysis;

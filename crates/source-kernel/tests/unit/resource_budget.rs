@@ -7,6 +7,7 @@ fn vector_admission_never_overcommits_and_drop_releases_every_dimension() {
         readers: 2,
         handles: 4,
         workers: 2,
+        cpu: 2,
         catalogs: 1,
     });
     let request = Resources {
@@ -15,6 +16,7 @@ fn vector_admission_never_overcommits_and_drop_releases_every_dimension() {
         readers: 1,
         handles: 3,
         workers: 1,
+        cpu: 1,
         catalogs: 1,
     };
     let permit = pool.acquire(request, None).unwrap();

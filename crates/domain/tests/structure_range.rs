@@ -76,9 +76,43 @@ fn read_demand_binds_revision_priority_consumers_and_attempt() {
         owner: "worker".into(),
     })
     .unwrap();
-    assert!(demand.id.starts_with("read-demand-v1-"));
+    assert!(demand.id.starts_with("read-demand-v2-"));
     assert_eq!(demand.source_revision.revision, 3);
     assert_eq!(demand.priority, ReadPriority::Interactive);
     assert_eq!(demand.consumers.len(), 2);
     assert_eq!(demand.attempt.unwrap().attempt_id, "attempt");
+}
+
+#[test]
+fn read_demand_identity_changes_with_verification_owner_and_deadline() {
+    let source = SourceRevisionRef {
+        case_id: "case".into(),
+        source_id: "source".into(),
+        revision: 1,
+    };
+    let build = |verification, deadline| {
+        ReadDemand::new(
+            source.clone(),
+            "target".into(),
+            ReadIntent::ContentRead,
+            ByteRangeSet::full(4096).unwrap(),
+            ReadPriority::Normal,
+            deadline,
+            true,
+            vec!["reader".into()],
+            verification,
+        )
+        .unwrap()
+    };
+    let first = build(ReadVerification::ContentDigest, None);
+    assert_ne!(first.id, build(ReadVerification::RangeCoverage, None).id);
+    assert_ne!(first.id, build(ReadVerification::ContentDigest, Some(1)).id);
+    let owner = |name: &str| domain::structure::StructureAttemptRef {
+        attempt_id: "attempt".into(),
+        owner: name.into(),
+    };
+    assert_ne!(
+        first.clone().with_attempt(owner("a")).unwrap().id,
+        first.with_attempt(owner("b")).unwrap().id
+    );
 }

@@ -5,7 +5,7 @@ mod bound_header;
 pub use bound_header::BoundEvidenceReaderResolver;
 mod browse;
 mod catalog_browse;
-mod cephfs_adapter;
+pub(crate) mod cephfs_adapter;
 mod checkpointed_enumeration;
 mod data_sources;
 mod derived_filesystem;

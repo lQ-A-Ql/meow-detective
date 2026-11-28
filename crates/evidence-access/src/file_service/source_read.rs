@@ -26,6 +26,7 @@ mod native_cache;
 mod parallel;
 mod prepared;
 mod preview_context;
+mod scope;
 mod stream;
 
 use cache::{cache_partition_candidates, cache_preview_descriptor};
@@ -66,6 +67,7 @@ pub struct SourceReadContext<'a> {
     native_filesystems: HashMap<String, Box<dyn evidence_core::FileSystemReader + Send>>,
     cephfs_readers: HashMap<String, PreparedCephFsFileReader>,
     bitlocker_runtime: Option<Arc<crate::bitlocker_runtime::BitLockerUnlockRegistry>>,
+    read_scope: Option<source_kernel::source_runtime::read_scope::SourceReadScope>,
 }
 
 /// Per-worker state for reading a derived source through one shared runtime.

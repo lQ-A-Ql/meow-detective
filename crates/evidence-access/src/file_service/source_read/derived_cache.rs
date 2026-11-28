@@ -80,6 +80,28 @@ impl DerivedSourceReadCache {
         offset: u64,
         length: usize,
     ) -> Result<Vec<u8>, FileServiceError> {
+        runtime.validate()?;
+        let bytes = self.read_file_range_inner(
+            source_conn,
+            data_source_id,
+            runtime,
+            descriptor,
+            offset,
+            length,
+        )?;
+        runtime.validate()?;
+        Ok(bytes)
+    }
+
+    fn read_file_range_inner(
+        &mut self,
+        source_conn: &rusqlite::Connection,
+        data_source_id: &domain::DataSourceId,
+        runtime: &Arc<DerivedRbdRuntime>,
+        descriptor: &PreviewDescriptor,
+        offset: u64,
+        length: usize,
+    ) -> Result<Vec<u8>, FileServiceError> {
         if let Some(resolved) = self.resolved_paths.get(&descriptor.file_id).cloned() {
             if let Some(filesystem) = self.filesystems.get(&resolved.filesystem_key) {
                 match filesystem.read_file_range(&resolved.path, offset, length) {

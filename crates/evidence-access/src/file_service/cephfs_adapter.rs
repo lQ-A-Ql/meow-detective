@@ -30,3 +30,40 @@ pub(super) fn file_read_request(
         projection_sha256: file.projection_sha256.clone(),
     })
 }
+
+pub(crate) fn open_evidence_file(
+    case_conn: &rusqlite::Connection,
+    case_root: &std::path::Path,
+    source: &domain::structure::SourceRevisionRef,
+    file_id: &domain::FileEntryId,
+) -> Result<Box<dyn evidence_core::EvidenceReader>, FileServiceError> {
+    let case_id = domain::CaseId(source.case_id.clone());
+    let source_id = domain::DataSourceId(source.source_id.clone());
+    let ready = source_kernel::source_db::open_ready_source_read_only_by_id(
+        case_conn, case_root, &case_id, &source_id,
+    )
+    .map_err(|error| FileServiceError::other(error.to_string()))?;
+    let mut context = super::SourceReadContext::new(
+        &ready.connection,
+        case_conn,
+        case_root,
+        &case_id,
+        &source_id,
+    );
+    let descriptor = super::viewer::descriptor_for_file_with_cache(&mut context, file_id)?;
+    if descriptor.data_source_id != source.source_id {
+        return Err(FileServiceError::security(
+            "file target belongs to another source",
+        ));
+    }
+    let request = file_read_request(&descriptor)?;
+    let reader = ceph_reconstruction::ceph_reconstruction::open_cephfs_file_reader(
+        case_conn, case_root, &case_id, &source_id, &request,
+    )?;
+    Ok(Box::new(
+        ceph_reconstruction::ceph_reconstruction::CephFsEvidenceReader::new(
+            reader,
+            descriptor.size,
+        ),
+    ))
+}

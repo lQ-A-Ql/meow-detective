@@ -1,6 +1,6 @@
 use persistence_fjall::{DatabaseConfig, SourceStore};
 use persistence_sqlite::{DbError, DbResult};
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use std::sync::Arc;
 
 const FJALL_ROOT_KEY: &str = "fjall_root";
@@ -40,6 +40,7 @@ pub fn configure_source_identity(conn: &Connection, source_id: &str) -> DbResult
 
 pub fn bind_generation(conn: &Connection, name: &str) -> DbResult<()> {
     crate::control::generation::validate_generation_name(name)?;
+    let previous = generation_name(conn)?;
     let changed = conn.execute(
         "UPDATE source_meta SET value = ?1 WHERE key = ?2",
         rusqlite::params![name, FJALL_ROOT_KEY],
@@ -48,6 +49,9 @@ pub fn bind_generation(conn: &Connection, name: &str) -> DbResult<()> {
         return Err(DbError::System(
             "source generation binding is missing".into(),
         ));
+    }
+    if previous != name {
+        revoke_generation(conn)?;
     }
     Ok(())
 }
@@ -63,6 +67,26 @@ pub fn bind_generation_if_current(conn: &Connection, expected: &str, name: &str)
         return Err(DbError::System(
             "source generation changed before publication".into(),
         ));
+    }
+    if expected != name {
+        revoke_generation(conn)?;
+    }
+    Ok(())
+}
+
+fn revoke_generation(conn: &Connection) -> DbResult<()> {
+    let Some(source) = source_id(conn)? else {
+        return Ok(());
+    };
+    let case_id = conn
+        .query_row(
+            "SELECT case_id FROM data_sources WHERE id=?1",
+            [&source],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    if let Some(case_id) = case_id {
+        domain::structure::revoke_source_generation(&case_id, &source);
     }
     Ok(())
 }

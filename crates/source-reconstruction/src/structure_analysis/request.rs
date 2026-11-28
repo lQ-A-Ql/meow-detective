@@ -26,6 +26,7 @@ pub struct StructureGraphRequest {
 pub struct StructureAnalysisRun {
     pub plan: StructureAnalysisPlan,
     pub work_results: Vec<StructureWorkResult>,
+    pub verification_stats: source_kernel::source_runtime::verification::VerificationBatchStats,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -33,6 +34,7 @@ pub struct StructureWorkResult {
     pub work_item_id: String,
     pub bytes_read: u64,
     pub status: StructureWorkStatus,
+    pub receipt: domain::structure::VerificationReceipt,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

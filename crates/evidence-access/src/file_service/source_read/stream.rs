@@ -26,7 +26,8 @@ impl SourceReadContext<'_> {
         file_id: &FileEntryId,
     ) -> Result<RangeContentReader, FileServiceError> {
         let descriptor = descriptor_for_file_with_cache(&mut *self, file_id)?;
-        open_range_content_for_descriptor_with_context(self, &descriptor)
+        let reader = open_range_content_for_descriptor_with_context(self, &descriptor)?;
+        self.wrap_range(reader)
     }
 
     pub fn open_file_range_with_metadata(
@@ -44,7 +45,8 @@ impl SourceReadContext<'_> {
         let (source_kind, source_path) = self.source_location()?.clone();
         let descriptor =
             self.descriptor_for_hint(&hint, partition_index, source_kind, source_path)?;
-        open_range_content_for_descriptor_with_context(self, &descriptor)
+        let reader = open_range_content_for_descriptor_with_context(self, &descriptor)?;
+        self.wrap_range(reader)
     }
 
     pub fn extraction_plan_by_id(
@@ -57,10 +59,8 @@ impl SourceReadContext<'_> {
         } else if let Some(readers) = self.parallel_extraction_readers(&descriptor)? {
             SourceExtractionMode::Parallel(readers)
         } else {
-            SourceExtractionMode::Reader(open_range_content_for_descriptor_with_context(
-                self,
-                &descriptor,
-            )?)
+            let reader = open_range_content_for_descriptor_with_context(self, &descriptor)?;
+            SourceExtractionMode::Reader(self.wrap_range(reader)?)
         };
         Ok(SourceExtractionPlan {
             size: descriptor.entry_size,
@@ -74,7 +74,10 @@ impl SourceReadContext<'_> {
         offset: u64,
         length: u32,
     ) -> Result<Vec<u8>, FileServiceError> {
+        self.validate_scope()?;
         let descriptor = descriptor_for_file_with_cache(&mut *self, file_id)?;
-        read_file_bytes_for_descriptor_with_context(self, &descriptor, offset, length)
+        let bytes = read_file_bytes_for_descriptor_with_context(self, &descriptor, offset, length)?;
+        self.validate_scope()?;
+        Ok(bytes)
     }
 }

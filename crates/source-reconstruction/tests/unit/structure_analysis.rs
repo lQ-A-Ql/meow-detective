@@ -54,6 +54,113 @@ fn recovery_capacity_separates_linear_mirror_and_parity_layouts() {
     assert_eq!(required_helpers(99, 4), None);
 }
 
+#[test]
+fn scheduler_keeps_dependency_order_and_rejects_missing_or_cyclic_inputs() {
+    let source = SourceRevisionRef {
+        case_id: "case".into(),
+        source_id: "source".into(),
+        revision: 1,
+    };
+    let parent = work_item(
+        "parent",
+        source.clone(),
+        ReadPriority::Deferred,
+        [0, 100],
+        "metadata",
+    );
+    let mut child = work_item(
+        "child",
+        source,
+        ReadPriority::Interactive,
+        [100, 100],
+        "preview",
+    );
+    child.dependencies.push(parent.id.clone());
+    let scheduled = schedule_work_items(vec![child.clone(), parent.clone()]).unwrap();
+    assert_eq!(
+        scheduled
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>(),
+        ["parent", "child"]
+    );
+    assert!(schedule_work_items(vec![child.clone()]).is_err());
+    let mut cyclic = parent;
+    cyclic.dependencies.push(child.id.clone());
+    assert!(schedule_work_items(vec![child, cyclic]).is_err());
+}
+
+#[test]
+fn scheduler_preserves_verification_owner_deadline_and_read_order() {
+    let source = SourceRevisionRef {
+        case_id: "case".into(),
+        source_id: "source".into(),
+        revision: 1,
+    };
+    let mut original = work_item(
+        "original",
+        source.clone(),
+        ReadPriority::Deferred,
+        [0, 100],
+        "catalog",
+    );
+    let mut duplicate = work_item(
+        "duplicate",
+        source.clone(),
+        ReadPriority::Interactive,
+        [0, 100],
+        "preview",
+    );
+    for (item, deadline, reorderable) in [(&mut original, 20, true), (&mut duplicate, 10, false)] {
+        item.demand = Some(
+            domain::structure::ReadDemand::new(
+                source.clone(),
+                "target".into(),
+                item.intent,
+                item.ranges.clone(),
+                item.priority,
+                Some(deadline),
+                reorderable,
+                item.consumers.clone(),
+                domain::structure::ReadVerification::ContentDigest,
+            )
+            .unwrap()
+            .with_attempt(domain::structure::StructureAttemptRef {
+                attempt_id: "attempt".into(),
+                owner: "owner".into(),
+            })
+            .unwrap(),
+        );
+    }
+    let scheduled = schedule_work_items(vec![original, duplicate]).unwrap();
+    assert_eq!(scheduled.len(), 1);
+    let demand = scheduled[0].demand.as_ref().unwrap();
+    assert_eq!(demand.deadline_unix_ms, Some(10));
+    assert!(!demand.reorderable);
+    assert_eq!(
+        demand.verification,
+        domain::structure::ReadVerification::ContentDigest
+    );
+    assert_eq!(demand.attempt.as_ref().unwrap().owner, "owner");
+    let mut another_owner = scheduled[0].clone();
+    another_owner.id = "another-owner".into();
+    another_owner.demand = Some(
+        demand
+            .clone()
+            .with_attempt(domain::structure::StructureAttemptRef {
+                attempt_id: "attempt".into(),
+                owner: "new-owner".into(),
+            })
+            .unwrap(),
+    );
+    assert_eq!(
+        schedule_work_items(vec![scheduled[0].clone(), another_owner])
+            .unwrap()
+            .len(),
+        2
+    );
+}
+
 fn work_item(
     id: &str,
     revision: SourceRevisionRef,

@@ -345,6 +345,30 @@ fn native_collection_publishes_independent_lvm_source_with_preview_and_lifecycle
         },
     )
     .unwrap();
+    let request = app_services::structure_analysis::StructureAnalysisRequest {
+        case_id: case.meta.id.clone(),
+        source_ids: vec![logical.id.0.clone()],
+        intent: domain::structure::ReadIntent::MetadataInspection,
+        priority: domain::structure::ReadPriority::Interactive,
+        consumers: vec!["lvm-range-test".into()],
+        required_features: Default::default(),
+        attempt: None,
+    };
+    let run = app_services::structure_analysis::run_structure_analysis(
+        &connection,
+        &case.case_root,
+        &request,
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert!(run
+        .plan
+        .work_items
+        .iter()
+        .any(|item| item.adapter_id == app_services::structure_analysis::LVM_ADAPTER_ID));
+    assert!(run.work_results.iter().all(|result| result.bytes_read
+        == result.receipt.ranges.covered_bytes()
+        && result.receipt.output_sha256.len() == 64));
     assert!(graph
         .mappings
         .iter()

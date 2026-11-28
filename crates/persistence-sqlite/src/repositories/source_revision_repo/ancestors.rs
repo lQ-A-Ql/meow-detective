@@ -14,6 +14,31 @@ pub(super) fn validate(
     proposed_inputs: Option<&[SourceRevisionRef]>,
     require_inputs: bool,
 ) -> DbResult<()> {
+    validated_graph(repo, case_id, root, proposed_inputs, require_inputs).map(|_| ())
+}
+
+pub(super) fn snapshot(
+    repo: &SourceRevisionRepo<'_>,
+    reference: &SourceRevisionRef,
+) -> DbResult<Vec<SourceRevisionRef>> {
+    repo.require_current_revision(reference)?;
+    let graph = validated_graph(repo, &reference.case_id, &reference.source_id, None, false)?;
+    graph
+        .keys()
+        .map(|source| {
+            repo.current(&reference.case_id, source)
+                .map(|(reference, _)| reference)
+        })
+        .collect()
+}
+
+fn validated_graph(
+    repo: &SourceRevisionRepo<'_>,
+    case_id: &str,
+    root: &str,
+    proposed_inputs: Option<&[SourceRevisionRef]>,
+    require_inputs: bool,
+) -> DbResult<Graph> {
     require_case(repo.conn, case_id, root)?;
     let mut graph = Graph::new();
     let mut pending = VecDeque::from([root.to_owned()]);
@@ -47,7 +72,8 @@ pub(super) fn validate(
         }
         graph.insert(source, parents);
     }
-    validate_topology(&graph, root)
+    validate_topology(&graph, root)?;
+    Ok(graph)
 }
 
 fn bounded_inputs(

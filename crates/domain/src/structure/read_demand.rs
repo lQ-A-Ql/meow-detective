@@ -71,16 +71,8 @@ impl ReadDemand {
         {
             return Err(ReadDemandError::InvalidIdentity);
         }
-        let id = demand_id(
-            &source_revision,
-            &target_fingerprint,
-            intent,
-            &ranges,
-            priority,
-            &consumers,
-        );
-        Ok(Self {
-            id,
+        let mut demand = Self {
+            id: String::new(),
             source_revision,
             target_fingerprint,
             intent,
@@ -91,7 +83,9 @@ impl ReadDemand {
             consumers,
             verification,
             attempt: None,
-        })
+        };
+        demand.id = demand_id(&demand);
+        Ok(demand)
     }
 
     pub fn with_attempt(mut self, attempt: StructureAttemptRef) -> Result<Self, ReadDemandError> {
@@ -99,6 +93,7 @@ impl ReadDemand {
             return Err(ReadDemandError::InvalidIdentity);
         }
         self.attempt = Some(attempt);
+        self.id = demand_id(&self);
         Ok(self)
     }
 }
@@ -111,37 +106,18 @@ pub enum ReadDemandError {
     InvalidIdentity,
 }
 
-fn demand_id(
-    source: &SourceRevisionRef,
-    target_fingerprint: &str,
-    intent: ReadIntent,
-    ranges: &ByteRangeSet,
-    priority: ReadPriority,
-    consumers: &[String],
-) -> String {
-    let mut digest = Sha256::new();
-    digest.update(b"read-demand-v1");
-    for value in [
-        source.case_id.as_bytes(),
-        source.source_id.as_bytes(),
-        target_fingerprint.as_bytes(),
-    ] {
-        digest.update((value.len() as u64).to_le_bytes());
-        digest.update(value);
-    }
-    digest.update(source.revision.to_le_bytes());
-    digest.update([intent as u8, priority as u8]);
-    digest.update(ranges.target_size().to_le_bytes());
-    digest.update((ranges.ranges().len() as u64).to_le_bytes());
-    for range in ranges.ranges() {
-        digest.update(range.start().to_le_bytes());
-        digest.update(range.length().to_le_bytes());
-    }
-    let mut consumers = consumers.to_vec();
+fn demand_id(demand: &ReadDemand) -> String {
+    let mut consumers = demand.consumers.clone();
     consumers.sort();
-    for consumer in consumers {
-        digest.update((consumer.len() as u64).to_le_bytes());
-        digest.update(consumer.as_bytes());
-    }
-    format!("read-demand-v1-{}", hex::encode(digest.finalize()))
+    consumers.dedup();
+    let identity = serde_json::json!({
+        "source": demand.source_revision, "target": demand.target_fingerprint,
+        "intent": demand.intent, "ranges": demand.ranges, "priority": demand.priority,
+        "deadline": demand.deadline_unix_ms, "reorderable": demand.reorderable,
+        "consumers": consumers, "verification": demand.verification, "attempt": demand.attempt,
+    });
+    format!(
+        "read-demand-v2-{}",
+        hex::encode(Sha256::digest(identity.to_string().as_bytes()))
+    )
 }

@@ -53,6 +53,7 @@ pub struct FileHeaderReadCache {
         crate::file_service::BoundEvidenceReaderResolver,
     )>,
     pub(crate) descriptors: RefCell<HashMap<String, Value>>,
+    scopes: RefCell<HashMap<String, source_kernel::source_runtime::read_scope::SourceReadScope>>,
 }
 
 impl FileHeaderReadCache {
@@ -61,6 +62,7 @@ impl FileHeaderReadCache {
             case_id: case_id.into(),
             bound: None,
             descriptors: RefCell::new(HashMap::new()),
+            scopes: RefCell::new(HashMap::new()),
         }
     }
 
@@ -73,6 +75,7 @@ impl FileHeaderReadCache {
             case_id: case_id.into(),
             bound: Some((source_id, resolver)),
             descriptors: RefCell::new(HashMap::new()),
+            scopes: RefCell::new(HashMap::new()),
         }
     }
 
@@ -96,16 +99,53 @@ impl FileHeaderReadCache {
         if self.case_id.is_empty() {
             return read_file_header_by_id(conn, file_id, max_bytes);
         }
+        let scope = self.source_scope(conn)?;
         read_header_chunks(max_bytes, |offset, length| {
+            scope.validate()?;
             let get_cache = |key: &str| self.descriptors.borrow().get(key).cloned();
             let set_cache = |key: &str, value: &Value| self.cache_descriptor(key, value);
-            read_file_bytes_for_case(
+            let mut bytes = read_file_bytes_for_case(
                 (conn, self.case_id.as_str(), get_cache, set_cache),
                 file_id,
                 offset,
                 length,
-            )
+            )?;
+            if let Err(error) = scope.validate() {
+                bytes.fill(0);
+                return Err(error.into());
+            }
+            Ok(bytes)
         })
+    }
+
+    fn source_scope(
+        &self,
+        conn: &Connection,
+    ) -> Result<source_kernel::source_runtime::read_scope::SourceReadScope, FileServiceError> {
+        let source = persistence_source::detail::source_id(conn)?.ok_or_else(|| {
+            FileServiceError::security("source-bound header read requires a source database")
+        })?;
+        if let Some(scope) = self.scopes.borrow().get(&source) {
+            scope.validate()?;
+            return Ok(scope.clone());
+        }
+        let root =
+            persistence_sqlite::connection::case_root_from_connection(conn)?.ok_or_else(|| {
+                FileServiceError::security("source-bound header read requires a case workspace")
+            })?;
+        let case = persistence_sqlite::open_existing_case_read_only(&root.join("app.db"))?;
+        let (reference, _) =
+            persistence_sqlite::repositories::source_revision_repo::SourceRevisionRepo::new(&case)
+                .current(&self.case_id, &source)?;
+        let scope =
+            source_kernel::source_runtime::read_scope::SourceReadScope::acquire(&root, &reference)?;
+        if self.scopes.borrow().len() >= 64 {
+            return Err(FileServiceError::other(
+                "source-bound header scope limit exceeded",
+            ));
+        }
+        self.scopes.borrow_mut().insert(source, scope.clone());
+        Ok(scope)
     }
 
     /// Stores one descriptor while keeping the map bounded per worker.

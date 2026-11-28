@@ -25,6 +25,9 @@ pub struct ReaderInfo {
 
 pub trait EvidenceReader: Read + Seek + Send {
     fn info(&self) -> &ReaderInfo;
+    fn validate_read_scope(&self) -> std::io::Result<()> {
+        Ok(())
+    }
 
     fn read_metrics(&self) -> EvidenceReadMetrics {
         EvidenceReadMetrics::default()
