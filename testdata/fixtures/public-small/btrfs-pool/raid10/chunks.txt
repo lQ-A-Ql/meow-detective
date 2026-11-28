@@ -1,0 +1,70 @@
+btrfs-progs v7.1
+chunk tree
+leaf 22036480 items 7 free space 15188 generation 8 owner CHUNK_TREE
+leaf 22036480 flags 0x1(WRITTEN) backref revision 1
+fs uuid 83a343e8-b79f-466a-9326-00f754a79bc5
+chunk uuid 90e83589-0cab-45c3-9402-dc0ca820c6a7
+	item 0 key (DEV_ITEMS DEV_ITEM 1) itemoff 16185 itemsize 98
+		devid 1 total_bytes 268435456 bytes_used 109051904
+		io_align 4096 io_width 4096 sector_size 4096 type 0
+		generation 0 start_offset 0 dev_group 0
+		seek_speed 0 bandwidth 0
+		uuid 71fe52e5-854f-4ea5-9e51-a4a0db880041
+		fsid 83a343e8-b79f-466a-9326-00f754a79bc5
+	item 1 key (DEV_ITEMS DEV_ITEM 2) itemoff 16087 itemsize 98
+		devid 2 total_bytes 268435456 bytes_used 109051904
+		io_align 4096 io_width 4096 sector_size 4096 type 0
+		generation 0 start_offset 0 dev_group 0
+		seek_speed 0 bandwidth 0
+		uuid e024d739-2caf-47bf-9421-61f6fa90a2cc
+		fsid 83a343e8-b79f-466a-9326-00f754a79bc5
+	item 2 key (DEV_ITEMS DEV_ITEM 3) itemoff 15989 itemsize 98
+		devid 3 total_bytes 268435456 bytes_used 109051904
+		io_align 4096 io_width 4096 sector_size 4096 type 0
+		generation 0 start_offset 0 dev_group 0
+		seek_speed 0 bandwidth 0
+		uuid 51427d2d-e360-452e-928b-e15303bc81d6
+		fsid 83a343e8-b79f-466a-9326-00f754a79bc5
+	item 3 key (DEV_ITEMS DEV_ITEM 4) itemoff 15891 itemsize 98
+		devid 4 total_bytes 268435456 bytes_used 109051904
+		io_align 4096 io_width 4096 sector_size 4096 type 0
+		generation 0 start_offset 0 dev_group 0
+		seek_speed 0 bandwidth 0
+		uuid a58a8d90-94b7-499c-a9e6-75a4382aa1cf
+		fsid 83a343e8-b79f-466a-9326-00f754a79bc5
+	item 4 key (FIRST_CHUNK_TREE CHUNK_ITEM 22020096) itemoff 15715 itemsize 176
+		length 16777216 owner 2 stripe_len 65536 type SYSTEM|RAID10
+		io_align 65536 io_width 65536 sector_size 4096
+		num_stripes 4 sub_stripes 2
+			stripe 0 devid 1 offset 22020096
+			dev_uuid 71fe52e5-854f-4ea5-9e51-a4a0db880041
+			stripe 1 devid 2 offset 1048576
+			dev_uuid e024d739-2caf-47bf-9421-61f6fa90a2cc
+			stripe 2 devid 3 offset 1048576
+			dev_uuid 51427d2d-e360-452e-928b-e15303bc81d6
+			stripe 3 devid 4 offset 1048576
+			dev_uuid a58a8d90-94b7-499c-a9e6-75a4382aa1cf
+	item 5 key (FIRST_CHUNK_TREE CHUNK_ITEM 38797312) itemoff 15539 itemsize 176
+		length 67108864 owner 2 stripe_len 65536 type METADATA|RAID10
+		io_align 65536 io_width 65536 sector_size 4096
+		num_stripes 4 sub_stripes 2
+			stripe 0 devid 1 offset 30408704
+			dev_uuid 71fe52e5-854f-4ea5-9e51-a4a0db880041
+			stripe 1 devid 2 offset 9437184
+			dev_uuid e024d739-2caf-47bf-9421-61f6fa90a2cc
+			stripe 2 devid 3 offset 9437184
+			dev_uuid 51427d2d-e360-452e-928b-e15303bc81d6
+			stripe 3 devid 4 offset 9437184
+			dev_uuid a58a8d90-94b7-499c-a9e6-75a4382aa1cf
+	item 6 key (FIRST_CHUNK_TREE CHUNK_ITEM 105906176) itemoff 15363 itemsize 176
+		length 134217728 owner 2 stripe_len 65536 type DATA|RAID10
+		io_align 65536 io_width 65536 sector_size 4096
+		num_stripes 4 sub_stripes 2
+			stripe 0 devid 1 offset 63963136
+			dev_uuid 71fe52e5-854f-4ea5-9e51-a4a0db880041
+			stripe 1 devid 2 offset 42991616
+			dev_uuid e024d739-2caf-47bf-9421-61f6fa90a2cc
+			stripe 2 devid 3 offset 42991616
+			dev_uuid 51427d2d-e360-452e-928b-e15303bc81d6
+			stripe 3 devid 4 offset 42991616
+			dev_uuid a58a8d90-94b7-499c-a9e6-75a4382aa1cf

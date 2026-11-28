@@ -6,10 +6,12 @@
 //! interface and projects its filesystem model onto `FileSystemReader`.
 
 mod filesystem;
+mod pool;
 mod reader;
 pub mod snapshot;
 mod types_reader;
 
+pub use pool::{inspect_device, BtrfsDeviceIdentity, BtrfsPoolError, BtrfsPoolIdentity};
 pub use types_reader::BtrfsReader;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

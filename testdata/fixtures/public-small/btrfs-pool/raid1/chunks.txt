@@ -1,0 +1,44 @@
+btrfs-progs v7.1
+chunk tree
+leaf 22036480 items 5 free space 15626 generation 8 owner CHUNK_TREE
+leaf 22036480 flags 0x1(WRITTEN) backref revision 1
+fs uuid 379e5903-5d5f-4c67-86eb-bc0076627ebc
+chunk uuid f731fa8f-8376-42a6-ae57-1099538d29ee
+	item 0 key (DEV_ITEMS DEV_ITEM 1) itemoff 16185 itemsize 98
+		devid 1 total_bytes 268435456 bytes_used 109051904
+		io_align 4096 io_width 4096 sector_size 4096 type 0
+		generation 0 start_offset 0 dev_group 0
+		seek_speed 0 bandwidth 0
+		uuid d590f5b8-adf5-435c-ba55-0c2c21e82e4e
+		fsid 379e5903-5d5f-4c67-86eb-bc0076627ebc
+	item 1 key (DEV_ITEMS DEV_ITEM 2) itemoff 16087 itemsize 98
+		devid 2 total_bytes 268435456 bytes_used 109051904
+		io_align 4096 io_width 4096 sector_size 4096 type 0
+		generation 0 start_offset 0 dev_group 0
+		seek_speed 0 bandwidth 0
+		uuid 780819eb-b1ac-40da-aff9-61b7ce8fd6c5
+		fsid 379e5903-5d5f-4c67-86eb-bc0076627ebc
+	item 2 key (FIRST_CHUNK_TREE CHUNK_ITEM 22020096) itemoff 15975 itemsize 112
+		length 8388608 owner 2 stripe_len 65536 type SYSTEM|RAID1
+		io_align 65536 io_width 65536 sector_size 4096
+		num_stripes 2 sub_stripes 1
+			stripe 0 devid 1 offset 22020096
+			dev_uuid d590f5b8-adf5-435c-ba55-0c2c21e82e4e
+			stripe 1 devid 2 offset 1048576
+			dev_uuid 780819eb-b1ac-40da-aff9-61b7ce8fd6c5
+	item 3 key (FIRST_CHUNK_TREE CHUNK_ITEM 30408704) itemoff 15863 itemsize 112
+		length 33554432 owner 2 stripe_len 65536 type METADATA|RAID1
+		io_align 65536 io_width 65536 sector_size 4096
+		num_stripes 2 sub_stripes 1
+			stripe 0 devid 1 offset 30408704
+			dev_uuid d590f5b8-adf5-435c-ba55-0c2c21e82e4e
+			stripe 1 devid 2 offset 9437184
+			dev_uuid 780819eb-b1ac-40da-aff9-61b7ce8fd6c5
+	item 4 key (FIRST_CHUNK_TREE CHUNK_ITEM 63963136) itemoff 15751 itemsize 112
+		length 67108864 owner 2 stripe_len 65536 type DATA|RAID1
+		io_align 65536 io_width 65536 sector_size 4096
+		num_stripes 2 sub_stripes 1
+			stripe 0 devid 1 offset 63963136
+			dev_uuid d590f5b8-adf5-435c-ba55-0c2c21e82e4e
+			stripe 1 devid 2 offset 42991616
+			dev_uuid 780819eb-b1ac-40da-aff9-61b7ce8fd6c5

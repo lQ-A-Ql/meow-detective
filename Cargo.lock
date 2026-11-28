@@ -2507,8 +2507,14 @@ name = "fs-btrfs"
 version = "0.1.1"
 dependencies = [
  "evidence-core",
+ "flate2",
+ "hex",
  "rust-fs-btrfs",
  "rust-fs-core",
+ "serde",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
 ]
 
 [[package]]

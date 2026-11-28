@@ -42,14 +42,22 @@ impl BtrfsReader {
     }
 }
 
-struct EvidenceBlockDevice {
-    reader: Mutex<Box<dyn EvidenceReader>>,
-    offset: u64,
-    size: u64,
+pub(crate) struct EvidenceBlockDevice {
+    pub(crate) reader: Mutex<Box<dyn EvidenceReader>>,
+    pub(crate) offset: u64,
+    pub(crate) size: u64,
 }
 
 impl BlockRead for EvidenceBlockDevice {
     fn read_at(&self, offset: u64, buffer: &mut [u8]) -> BlockResult<()> {
+        if offset
+            .checked_add(buffer.len() as u64)
+            .is_none_or(|end| end > self.size)
+        {
+            return Err(BlockError::Custom(
+                "Btrfs read exceeds its device range".into(),
+            ));
+        }
         let offset = self.offset.checked_add(offset).ok_or_else(|| {
             BlockError::Custom("Btrfs device offset overflowed the evidence reader".into())
         })?;

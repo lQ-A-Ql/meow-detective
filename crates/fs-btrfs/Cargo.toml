@@ -7,5 +7,13 @@ license.workspace = true
 
 [dependencies]
 evidence-core.workspace = true
-btrfs-driver = { package = "rust-fs-btrfs", version = "=0.10.2", default-features = false }
-fs-core = { package = "rust-fs-core", version = "=0.3.14" }
+btrfs-driver.workspace = true
+fs-core.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+hex.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+flate2.workspace = true
